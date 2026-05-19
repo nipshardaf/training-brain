@@ -347,7 +347,7 @@ const MOBILITY=[
 ];
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'setup',pinConfirm:''};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:''};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -525,13 +525,26 @@ function unitBar(){
 /* ── LOCK SCREEN ── */
 function rLock(){
   const hasPIN=!!DB.get('pin',null);
-  const mode=hasPIN?'unlock':S.lockMode;
-  const titles={unlock:'Enter your PIN',setup:'Create a PIN',confirm:'Confirm PIN'};
-  const subs={unlock:'Your data is protected',setup:'Choose a 4-digit PIN',confirm:'Enter the same PIN again'};
-  return`<div class="lock-wrap">
+  // Show welcome/choose screen first, then PIN pad
+  if(S.lockMode==='choose'){
+    return`<div class="lock-wrap">
 <div class="lock-logo">🧠</div>
 <div class="lock-title">Training Brain</div>
-<div class="lock-sub">${titles[mode]}<br><span style="font-size:11px;color:var(--t2)">${subs[mode]}</span></div>
+<div class="lock-sub" style="margin-bottom:36px">Your personal gym &amp; cycling tracker</div>
+<div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:12px">
+  <button class="btn btn-p" onclick="goToPIN()" style="font-size:16px;padding:17px">🔐 Sign In</button>
+  <button class="btn btn-s" onclick="enterGuest()" style="font-size:15px;padding:15px">👁 Continue as Guest</button>
+</div>
+<div style="font-size:11px;color:var(--t2);margin-top:20px;text-align:center;line-height:1.7">Guest mode is read-only<br>Sign in to log workouts &amp; track progress</div>
+</div>`;}
+  // PIN entry / setup / confirm
+  const mode=hasPIN?'unlock':S.lockMode;
+  const titles={unlock:'Enter your PIN',setup:'Create a PIN',confirm:'Confirm PIN'};
+  const subs={unlock:'',setup:'Choose a 4-digit PIN to protect your data',confirm:'Enter the same PIN again'};
+  return`<div class="lock-wrap">
+<div class="lock-logo">🧠</div>
+<div class="lock-title" style="margin-bottom:6px">${titles[mode]}</div>
+${subs[mode]?`<div class="lock-sub" style="margin-bottom:22px">${subs[mode]}</div>`:'<div style="margin-bottom:22px"></div>'}
 <div class="pin-dots" id="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot" id="pd${i}"></div>`).join('')}</div>
 <div class="numpad">
   ${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="np-btn" onclick="pinKey('${n}')">${n}</button>`).join('')}
@@ -539,8 +552,14 @@ function rLock(){
   <button class="np-btn" onclick="pinKey('0')">0</button>
   <button class="np-btn np-del" onclick="pinKey('⌫')">⌫</button>
 </div>
-${mode==='unlock'?`<button class="lock-guest" onclick="enterGuest()">👁 Enter as guest</button>`:''}
+<button class="lock-guest" onclick="S.lockMode='choose';render()">← Back</button>
 </div>`;}
+
+function goToPIN(){
+  const hasPIN=!!DB.get('pin',null);
+  S.lockMode=hasPIN?'unlock':'setup';
+  render();
+}
 
 function pinKey(k){
   if(k==='⌫')_pinBuf=_pinBuf.slice(0,-1);
@@ -561,10 +580,10 @@ function checkPin(){
       S.pinConfirm=_pinBuf;_pinBuf='';S.lockMode='confirm';render();
     } else {
       if(_pinBuf===S.pinConfirm){
-        DB.set('pin',_pinBuf);S.authed=true;_pinBuf='';S.pinConfirm='';S.lockMode='setup';
+        DB.set('pin',_pinBuf);S.authed=true;_pinBuf='';S.pinConfirm='';S.lockMode='choose';
         syncFromGist().then(()=>render());render();
       } else {
-        errPin();_pinBuf='';S.pinConfirm='';S.lockMode='setup';setTimeout(()=>render(),600);
+        errPin();_pinBuf='';S.pinConfirm='';S.lockMode='setup';setTimeout(()=>{S.lockMode='setup';render();},600);
       }
     }
   }
@@ -575,7 +594,7 @@ function errPin(){
   if(dots){dots.style.animation='shake .4s ease';setTimeout(()=>{dots.style.animation='';document.querySelectorAll('.pin-dot').forEach(d=>d.classList.remove('err','filled'));},500);}
 }
 function enterGuest(){S.guest=true;S.authed=true;render();}
-function lockApp(){S.authed=false;S.guest=false;_pinBuf='';render();}
+function lockApp(){S.authed=false;S.guest=false;_pinBuf='';S.lockMode='choose';render();}
 
 function noGuest(){
   if(S.guest){alert('Guest mode is read-only. Tap "Exit" in the banner to sign in.');return true;}
