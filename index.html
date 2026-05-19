@@ -196,6 +196,8 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .swap-cancel{background:transparent;border:1px solid var(--bord);border-radius:13px;padding:13px;width:100%;color:var(--t2);font-size:15px;font-weight:600;cursor:pointer;-webkit-appearance:none;margin-top:3px}
 .ex-busy-btn{background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;padding:5px 9px;cursor:pointer;-webkit-appearance:none;margin-top:9px;display:inline-block}
 .ex-busy-btn:active{background:var(--s3)}
+.unit-toggle{background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;-webkit-appearance:none}
+.unit-toggle:active{background:var(--s3)}
 
 /* lock screen */
 .lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;background:var(--bg)}
@@ -494,6 +496,32 @@ function loadAllGifs(){
   });
 }
 
+/* ── UNIT HELPERS ── */
+function unit(){return DB.get('unit','lbs');}
+function toggleUnit(){
+  const cur=unit();
+  const next=cur==='lbs'?'kg':'lbs';
+  DB.set('unit',next);
+  // Convert all visible weight inputs
+  document.querySelectorAll('.w-inp').forEach(inp=>{
+    const v=parseFloat(inp.value);
+    if(!isNaN(v)&&v>0){
+      const c=next==='kg'
+        ?Math.round(v/2.2046*2)/2        // lbs→kg, round to 0.5
+        :Math.round(v*2.2046/2.5)*2.5;   // kg→lbs, round to 2.5
+      inp.value=c;
+    }
+  });
+  document.querySelectorAll('.unit-lbl').forEach(el=>el.textContent=next);
+  document.querySelectorAll('.unit-other').forEach(el=>el.textContent=next==='lbs'?'kg':'lbs');
+}
+function unitBar(){
+  const u=unit();
+  return`<div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+    <button class="unit-toggle" onclick="toggleUnit()"><span class="unit-lbl">${u}</span> → <span class="unit-other">${u==='lbs'?'kg':'lbs'}</span></button>
+  </div>`;
+}
+
 /* ── LOCK SCREEN ── */
 function rLock(){
   const hasPIN=!!DB.get('pin',null);
@@ -747,7 +775,7 @@ function rExList(dp,log){
   <div class="ex-mt">${ex.m}</div>
 </div>
 <div class="ex-body">
-  <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}kg×${pr.r}</span>`:''}</div>
+  <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
   <div class="ex-bdgs">
     <span class="bdg bs">${ex.sets} sets</span><span class="bdg br">${ex.reps} reps</span><span class="bdg bp">RPE ${ex.rpe}</span>
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
@@ -833,15 +861,16 @@ function rLogEx(le,ei){
   const isOpen=S.openLogEx===ei;
   return`<div class="log-ex${allDone?' done-ex':''}" id="lex${ei}">
 <div class="log-ex-hdr" onclick="togLogEx(${ei})">
-  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}kg×${pr.r}</span>`:''}</div>
+  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
   <span class="log-ex-prog${allDone?' done':''}" id="prog${ei}">${allDone?'✓ Done':doneSets+'/'+le.sets.length}</span>
   <span class="log-ex-chev${isOpen?' open':''}" id="chev${ei}">▾</span>
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
-  <div class="sets-hdr" style="margin-top:12px"><span>#</span><span>kg</span><span>Reps</span><span>✓</span></div>
+  ${unitBar()}
+  <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
     <span class="set-n">${si+1}</span>
-    <input class="set-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`).join('')}
@@ -909,7 +938,7 @@ function addSet(ei){
   const div=document.createElement('div');
   div.className='set-row';div.id=`sr${ei}_${si}`;
   div.innerHTML=`<span class="set-n">${si+1}</span>
-    <input class="set-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" onchange="updSet(${ei},${si},'w',this.value)">
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${last.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">○</button>`;
   body.insertBefore(div,addBtn);
@@ -1117,9 +1146,10 @@ function showExLogModal(le,ei,ds){
   modal.innerHTML=`<div class="swap-ov" onclick="closeExLog('${ds}')"></div>
 <div class="swap-sheet">
   <div class="swap-title">${ex.n}</div>
-  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${pr.w}kg×${pr.r}</span></div>`:''}
-  <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:14px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
-  <div class="sets-hdr"><span>#</span><span>kg</span><span>Reps</span><span>✓</span></div>
+  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${pr.w}${unit()}×${pr.r}</span></div>`:''}
+  <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
+  ${unitBar()}
+  <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
   <div id="exlog-rows">${le.sets.map((set,si)=>exLogRow(ei,si,set)).join('')}</div>
   <button class="add-set" style="margin-top:6px" onclick="exLogAdd(${ei})">+ Add set</button>
   <button class="btn btn-p" style="margin-top:14px" onclick="closeExLog('${ds}')">Done</button>
@@ -1131,7 +1161,7 @@ function showExLogModal(le,ei,ds){
 function exLogRow(ei,si,set){
   return`<div class="set-row${set.done?' s-done':''}" id="elr${ei}_${si}">
     <span class="set-n">${si+1}</span>
-    <input class="set-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="elk${ei}_${si}" onclick="exLogTog(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`;
