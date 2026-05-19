@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Hugo's Brain">
+  <meta name="apple-mobile-web-app-title" content="Training Brain">
   <meta name="theme-color" content="#09090f">
-  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Hugo%27s%20Training%20Brain%22%2C%22short_name%22%3A%22Hugo%27s%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%7D">
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Training%20Brain%22%2C%22short_name%22%3A%22Training%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%7D">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%2309090f'/%3E%3Ctext x='90' y='128' font-size='96' text-anchor='middle'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E">
-  <title>Hugo's Training Brain</title>
+  <title>Training Brain</title>
 <style>
 *,::before,::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -481,7 +481,7 @@ function rWeek(){
   const lbl=`${S.weekStart.getDate()} ${MNAMES[S.weekStart.getMonth()]} – ${sun.getDate()} ${MNAMES[sun.getMonth()]}`;
   const today=new Date();
   return`<div class="screen">
-<div class="hdr"><h1>Hugo's Training Brain</h1><div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div></div>
 <div class="week-nav">
   <button class="wnav-btn" onclick="shiftWeek(-1)">‹</button>
   <div class="week-label">${lbl}</div>
@@ -744,7 +744,7 @@ function rPRs(){
   const prs=DB.get('prs',{});
   const keys=Object.keys(prs);
   return`<div class="screen">
-<div class="hdr"><h1>Hugo's Training Brain</h1><div class="hdr-sub">Personal Records</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Personal Records</div></div>
 ${!keys.length?`<div class="empty-wrap"><div class="empty-icon">🏆</div><div class="empty-title">No PRs yet</div><div class="empty-sub">Log your first workout to start tracking personal records.</div></div>`:`
 <div class="prs-list">${keys.map(id=>{const ex=EX[id];if(!ex)return'';const pr=prs[id];return`<div class="pr-row"><div class="pr-row-name">${ex.n}</div><div class="pr-row-val">🏆 ${pr.w}kg × ${pr.r}</div><div class="pr-row-date">${pr.date}</div></div>`;}).join('')}</div>`}
 <div class="bnav">
