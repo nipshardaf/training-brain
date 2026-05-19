@@ -554,7 +554,7 @@ function rLock(){
 <div style="width:100%;max-width:340px;text-align:left">
   <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:12px;line-height:2;color:var(--t2)">
     <strong style="color:var(--txt);display:block;margin-bottom:4px">Step 1 — Create a Firebase project</strong>
-    1. Go to <strong style="color:var(--al)">console.firebase.google.com</strong><br>
+    1. Go to <strong style="color:var(--al)">console.firebase.google.com</strong> <button onclick="navigator.clipboard.writeText('https://console.firebase.google.com').then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='Copy',1500)})" style="background:var(--s3);border:none;color:var(--al);font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;cursor:pointer;-webkit-appearance:none">Copy</button><br>
     2. Click <strong style="color:var(--txt)">Add project</strong> → name it anything → Create<br>
     3. Click the <strong style="color:var(--txt)">&lt;/&gt;</strong> web icon → name it → <strong style="color:var(--txt)">Register app</strong><br>
     4. Copy the <strong style="color:var(--txt)">firebaseConfig = { ... }</strong> block shown
