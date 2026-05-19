@@ -143,7 +143,14 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .log-list{display:flex;flex-direction:column;gap:14px;margin-bottom:20px}
 .log-ex{background:var(--s1);border:1px solid var(--bord);border-radius:18px;padding:15px}
 .log-ex.done-ex{border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.04)}
-.log-ex-name{font-size:15px;font-weight:700;margin-bottom:12px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+.log-ex-hdr{display:flex;align-items:center;gap:6px;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.log-ex-name{font-size:15px;font-weight:700;display:flex;align-items:center;flex-wrap:wrap;gap:6px;flex:1}
+.log-ex-prog{font-size:12px;font-weight:700;color:var(--t2);flex-shrink:0}
+.log-ex-prog.done{color:var(--grn)}
+.log-ex-chev{font-size:18px;color:var(--t2);transition:transform .2s;flex-shrink:0;line-height:1}
+.log-ex-chev.open{transform:rotate(180deg)}
+.log-ex-body{overflow:hidden}
+.log-ex-body.collapsed{display:none}
 .sets-hdr{display:grid;grid-template-columns:30px 1fr 1fr 42px;gap:8px;margin-bottom:7px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;text-align:center}
 .set-row{display:grid;grid-template-columns:30px 1fr 1fr 42px;gap:8px;align-items:center;margin-bottom:7px}
 .set-row.s-done{opacity:.45}
@@ -305,7 +312,7 @@ const MOBILITY=[
 ];
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{}};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0};
 
 /* ── STORAGE ── */
 const DB = {
@@ -549,6 +556,7 @@ function rDay(){
 <div class="day-hdr">
   <button class="back-btn" onclick="go('week')">← Week</button>
   <div class="day-hdr-r">${shortD(S.viewDate)}</div>
+  <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">Swap ↕</button>
 </div>
 <div class="day-hero" style="border-color:${wi.c}33">
   <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${wi.l.toUpperCase()}</div>
@@ -628,7 +636,7 @@ function startLog(ds){
     }),completed:false};
     DB.set(DB.lk(S.viewDate),log);
   }
-  S.activeLog=log;go('log');
+  S.activeLog=log;S.openLogEx=0;go('log');
 }
 
 function getLastLog(exId){
@@ -662,17 +670,36 @@ function rLogEx(le,ei){
   const ex=EX[le.id];if(!ex)return'';
   const pr=DB.get('prs',{})[le.id];
   const allDone=le.sets.every(s=>s.done);
+  const doneSets=le.sets.filter(s=>s.done).length;
+  const isOpen=S.openLogEx===ei;
   return`<div class="log-ex${allDone?' done-ex':''}" id="lex${ei}">
-<div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 PR: ${pr.w}kg×${pr.r}</span>`:''}</div>
-<div class="sets-hdr"><span>#</span><span>kg</span><span>Reps</span><span>✓</span></div>
-${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
-  <span class="set-n">${si+1}</span>
-  <input class="set-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
-  <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
-  <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
-</div>`).join('')}
-<button class="add-set" onclick="addSet(${ei})">+ Add set</button>
+<div class="log-ex-hdr" onclick="togLogEx(${ei})">
+  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}kg×${pr.r}</span>`:''}</div>
+  <span class="log-ex-prog${allDone?' done':''}" id="prog${ei}">${allDone?'✓ Done':doneSets+'/'+le.sets.length}</span>
+  <span class="log-ex-chev${isOpen?' open':''}" id="chev${ei}">▾</span>
+</div>
+<div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
+  <div class="sets-hdr" style="margin-top:12px"><span>#</span><span>kg</span><span>Reps</span><span>✓</span></div>
+  ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
+    <span class="set-n">${si+1}</span>
+    <input class="set-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
+    <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
+  </div>`).join('')}
+  <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
+</div>
 </div>`;
+}
+
+function togLogEx(ei){
+  const wasOpen=S.openLogEx===ei;
+  S.openLogEx=wasOpen?null:ei;
+  document.querySelectorAll('[id^="lbody"]').forEach((body,i)=>{
+    const isOpen=S.openLogEx===i;
+    body.classList.toggle('collapsed',!isOpen);
+    const chev=document.getElementById('chev'+i);
+    if(chev)chev.classList.toggle('open',isOpen);
+  });
 }
 
 function updSet(ei,si,field,val){
@@ -696,17 +723,36 @@ function togSet(ei,si){
   if(row)row.className='set-row'+(set.done?' s-done':'');
   if(ck){ck.className='set-ck'+(set.done?' on':'');ck.textContent=set.done?'✓':'○';}
   const allDone=le.sets.every(s=>s.done);
+  const doneSets=le.sets.filter(s=>s.done).length;
   const exEl=document.getElementById(`lex${ei}`);
   if(exEl)exEl.className='log-ex'+(allDone?' done-ex':'');
+  const prog=document.getElementById('prog'+ei);
+  if(prog){prog.textContent=allDone?'✓ Done':doneSets+'/'+le.sets.length;prog.className='log-ex-prog'+(allDone?' done':'');}
+  if(allDone&&set.done){
+    setTimeout(()=>{
+      const nextEi=ei+1;
+      if(nextEi<S.activeLog.exercises.length&&!S.activeLog.exercises[nextEi].sets.every(s=>s.done))togLogEx(nextEi);
+    },350);
+  }
 }
 
 function addSet(ei){
   if(!S.activeLog)return;
   const le=S.activeLog.exercises[ei];if(!le)return;
   const last=le.sets[le.sets.length-1]||{};
+  const si=le.sets.length;
   le.sets.push({w:last.w||'',r:last.r||'',done:false});
   DB.set(DB.lk(S.viewDate),S.activeLog);
-  render();
+  const body=document.getElementById('lbody'+ei);
+  if(!body)return;
+  const addBtn=body.querySelector('.add-set');
+  const div=document.createElement('div');
+  div.className='set-row';div.id=`sr${ei}_${si}`;
+  div.innerHTML=`<span class="set-n">${si+1}</span>
+    <input class="set-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${last.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
+    <button class="set-ck" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">○</button>`;
+  body.insertBefore(div,addBtn);
 }
 
 function checkPR(id,weight,reps){
