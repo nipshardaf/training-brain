@@ -183,6 +183,8 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .swap-opt span{font-size:11px;font-weight:400;color:var(--t2)}
 .swap-opt:active{background:var(--s3)}
 .swap-cancel{background:transparent;border:1px solid var(--bord);border-radius:13px;padding:13px;width:100%;color:var(--t2);font-size:15px;font-weight:600;cursor:pointer;-webkit-appearance:none;margin-top:3px}
+.ex-busy-btn{background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;padding:5px 9px;cursor:pointer;-webkit-appearance:none;margin-top:9px;display:inline-block}
+.ex-busy-btn:active{background:var(--s3)}
 
 /* utils */
 .mt12{margin-top:12px}
@@ -597,6 +599,7 @@ function rExList(dp,log){
 <div class="ex-body">
   <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}kg×${pr.r}</span>`:''}</div>
   <div class="ex-bdgs"><span class="bdg bs">${ex.sets} sets</span><span class="bdg br">${ex.reps} reps</span><span class="bdg bp">RPE ${ex.rpe}</span></div>
+  <button class="ex-busy-btn" onclick="event.stopPropagation();openExSwap('${id}',${i},'${dp.date}','${dp.type}')">🔄 Machine busy?</button>
 </div>
 </div>`;
   }).join('')}</div>`;
@@ -687,6 +690,7 @@ function rLogEx(le,ei){
     <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`).join('')}
   <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
+  <button class="ex-busy-btn" style="margin-top:10px;width:100%;text-align:center" onclick="openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄 Machine busy? Swap exercise</button>
 </div>
 </div>`;
 }
@@ -824,6 +828,64 @@ function doSwap(ds,newType){
   plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(newType)?genSession(newType):null;
   DB.set(pk,plan);
   closeSwap();render();
+}
+
+/* ── EXERCISE SWAP (busy machine) ── */
+function getAlternatives(exId,type){
+  // 1. Other exercises in the same slot
+  const slots=SLOTS[type]||[];
+  let slotAlts=[];
+  for(const slot of slots){
+    if(slot.includes(exId)){slotAlts=slot.filter(id=>id!==exId);break;}
+  }
+  // 2. Same muscle group from full library, excluding what's already in today's session
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  const ds=S.viewDate?fd(S.viewDate):null;
+  const currentExs=plan?.find(d=>d.date===ds)?.exercises||[];
+  const ex=EX[exId];
+  const sameGroup=Object.entries(EX)
+    .filter(([id,e])=>id!==exId&&e.g===ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id))
+    .map(([id])=>id);
+  return[...slotAlts,...sameGroup].slice(0,5);
+}
+
+function openExSwap(exId,exIdx,ds,type){
+  const alts=getAlternatives(exId,type);
+  const modal=document.createElement('div');
+  modal.className='swap-modal';
+  modal.id='ex-swap-modal';
+  modal.innerHTML=`<div class="swap-ov" onclick="closeExSwap()"></div>
+<div class="swap-sheet">
+  <div class="swap-title">Swap: ${EX[exId]?.n||exId}</div>
+  ${alts.length?alts.map(id=>{const e=EX[id];if(!e)return'';
+    return`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.sets} sets · ${e.reps} reps · RPE ${e.rpe}</span></button>`;
+  }).join(''):'<p style="color:var(--t2);font-size:13px;padding:10px 0">No alternatives found.</p>'}
+  <button class="swap-cancel" onclick="closeExSwap()">Cancel</button>
+</div>`;
+  document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('on'));
+}
+
+function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.remove();}
+
+function doExSwap(oldId,exIdx,ds,type,newId){
+  // Update plan
+  const mon=getMon(new Date(ds+'T12:00:00'));
+  const pk=DB.pk(mon);
+  const plan=DB.get(pk,null);
+  if(plan){
+    const di=plan.findIndex(d=>d.date===ds);
+    if(di!==-1&&plan[di].exercises){plan[di].exercises[exIdx]=newId;DB.set(pk,plan);}
+  }
+  // Update active log if we're currently logging this day
+  if(S.activeLog&&S.activeLog.date===ds){
+    const ex=EX[newId];
+    const last=getLastLog(newId);
+    S.activeLog.exercises[exIdx]={id:newId,sets:Array.from({length:ex.sets},(_,si)=>({w:last?last[si]?.w||'':'',r:last?last[si]?.r||'':'',done:false}))};
+    DB.set(DB.lk(S.viewDate),S.activeLog);
+  }
+  closeExSwap();render();
 }
 
 /* ── ENERGY ── */
