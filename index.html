@@ -197,6 +197,26 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .ex-busy-btn{background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;padding:5px 9px;cursor:pointer;-webkit-appearance:none;margin-top:9px;display:inline-block}
 .ex-busy-btn:active{background:var(--s3)}
 
+/* lock screen */
+.lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;background:var(--bg)}
+.lock-logo{font-size:64px;margin-bottom:12px}
+.lock-title{font-size:24px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,#a78bfa,#f472b6 55%,#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px}
+.lock-sub{font-size:13px;color:var(--t2);margin-bottom:28px}
+.pin-dots{display:flex;gap:14px;margin-bottom:28px;align-items:center}
+.pin-dot{width:14px;height:14px;border-radius:50%;background:var(--s3);border:2px solid var(--bord);transition:all .15s}
+.pin-dot.filled{background:var(--acc);border-color:var(--acc);transform:scale(1.2)}
+.pin-dot.err{background:var(--red)!important;border-color:var(--red)!important}
+@keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.numpad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:264px;margin-bottom:16px}
+.np-btn{background:var(--s1);border:1px solid var(--bord);border-radius:16px;color:var(--txt);font-size:22px;font-weight:600;height:66px;cursor:pointer;-webkit-appearance:none;transition:transform .1s}
+.np-btn:active{transform:scale(.91);background:var(--s2)}
+.np-del{font-size:18px;color:var(--t2)}
+.np-empty{background:transparent!important;border-color:transparent!important;pointer-events:none}
+.lock-guest{background:transparent;border:none;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;padding:10px 20px;-webkit-appearance:none}
+/* guest + sync bars */
+.guest-bar{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:9px 13px;font-size:12px;color:#f59e0b;font-weight:600;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sync-bar{background:var(--s1);border-radius:10px;padding:7px 12px;font-size:11px;color:var(--t2);display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sync-dot{width:7px;height:7px;border-radius:50%;background:var(--grn);display:inline-block;margin-right:5px}
 /* utils */
 .mt12{margin-top:12px}
 .mt16{margin-top:16px}
@@ -325,7 +345,8 @@ const MOBILITY=[
 ];
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'setup',pinConfirm:''};
+let _pinBuf='';
 
 /* ── STORAGE ── */
 const DB = {
@@ -473,6 +494,110 @@ function loadAllGifs(){
   });
 }
 
+/* ── LOCK SCREEN ── */
+function rLock(){
+  const hasPIN=!!DB.get('pin',null);
+  const mode=hasPIN?'unlock':S.lockMode;
+  const titles={unlock:'Enter your PIN',setup:'Create a PIN',confirm:'Confirm PIN'};
+  const subs={unlock:'Your data is protected',setup:'Choose a 4-digit PIN',confirm:'Enter the same PIN again'};
+  return`<div class="lock-wrap">
+<div class="lock-logo">🧠</div>
+<div class="lock-title">Training Brain</div>
+<div class="lock-sub">${titles[mode]}<br><span style="font-size:11px;color:var(--t2)">${subs[mode]}</span></div>
+<div class="pin-dots" id="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot" id="pd${i}"></div>`).join('')}</div>
+<div class="numpad">
+  ${[1,2,3,4,5,6,7,8,9].map(n=>`<button class="np-btn" onclick="pinKey('${n}')">${n}</button>`).join('')}
+  <div class="np-btn np-empty"></div>
+  <button class="np-btn" onclick="pinKey('0')">0</button>
+  <button class="np-btn np-del" onclick="pinKey('⌫')">⌫</button>
+</div>
+${mode==='unlock'?`<button class="lock-guest" onclick="enterGuest()">👁 Enter as guest</button>`:''}
+</div>`;}
+
+function pinKey(k){
+  if(k==='⌫')_pinBuf=_pinBuf.slice(0,-1);
+  else if(_pinBuf.length<4)_pinBuf+=k;
+  updatePinDots();
+  if(_pinBuf.length===4)setTimeout(checkPin,130);
+}
+function updatePinDots(){
+  for(let i=0;i<4;i++){const d=document.getElementById('pd'+i);if(d)d.classList.toggle('filled',i<_pinBuf.length);}
+}
+function checkPin(){
+  const saved=DB.get('pin',null);
+  if(saved){
+    if(_pinBuf===saved){S.authed=true;_pinBuf='';syncFromGist().then(()=>render());render();}
+    else{errPin();_pinBuf='';}
+  } else {
+    if(S.lockMode==='setup'){
+      S.pinConfirm=_pinBuf;_pinBuf='';S.lockMode='confirm';render();
+    } else {
+      if(_pinBuf===S.pinConfirm){
+        DB.set('pin',_pinBuf);S.authed=true;_pinBuf='';S.pinConfirm='';S.lockMode='setup';
+        syncFromGist().then(()=>render());render();
+      } else {
+        errPin();_pinBuf='';S.pinConfirm='';S.lockMode='setup';setTimeout(()=>render(),600);
+      }
+    }
+  }
+}
+function errPin(){
+  document.querySelectorAll('.pin-dot').forEach(d=>d.classList.add('err'));
+  const dots=document.getElementById('pin-dots');
+  if(dots){dots.style.animation='shake .4s ease';setTimeout(()=>{dots.style.animation='';document.querySelectorAll('.pin-dot').forEach(d=>d.classList.remove('err','filled'));},500);}
+}
+function enterGuest(){S.guest=true;S.authed=true;render();}
+function lockApp(){S.authed=false;S.guest=false;_pinBuf='';render();}
+
+function noGuest(){
+  if(S.guest){alert('Guest mode is read-only. Tap "Exit" in the banner to sign in.');return true;}
+  return false;
+}
+
+/* ── GITHUB GIST SYNC ── */
+async function syncToGist(manual=false){
+  const pat=DB.get('gh_pat',null);if(!pat||S.guest)return;
+  let gistId=DB.get('gh_gist',null);
+  const data={_updated:new Date().toISOString()};
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k.startsWith('log_')||k.startsWith('plan_')||k==='prs'||k==='recent_ex')data[k]=DB.get(k);
+  }
+  const fileBody={files:{'training-brain-data.json':{content:JSON.stringify(data)}}};
+  try{
+    if(!gistId){
+      const r=await fetch('https://api.github.com/gists',{method:'POST',headers:{Authorization:`token ${pat}`,'Content-Type':'application/json'},body:JSON.stringify({...fileBody,description:'Training Brain Data',public:false})});
+      if(!r.ok)return;const g=await r.json();gistId=g.id;DB.set('gh_gist',gistId);
+    } else {
+      await fetch(`https://api.github.com/gists/${gistId}`,{method:'PATCH',headers:{Authorization:`token ${pat}`,'Content-Type':'application/json'},body:JSON.stringify(fileBody)});
+    }
+    DB.set('gh_last_sync',new Date().toISOString());
+    if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>Synced just now</span><button onclick="syncToGist(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button>`;}
+  }catch(_){}
+}
+async function syncFromGist(){
+  const pat=DB.get('gh_pat',null);const gistId=DB.get('gh_gist',null);if(!pat||!gistId)return;
+  try{
+    const r=await fetch(`https://api.github.com/gists/${gistId}`,{headers:{Authorization:`token ${pat}`}});
+    if(!r.ok)return;
+    const g=await r.json();
+    const content=g.files['training-brain-data.json']?.content;
+    if(content){const data=JSON.parse(content);Object.entries(data).forEach(([k,v])=>{if(!k.startsWith('_'))DB.set(k,v);});}
+  }catch(_){}
+}
+async function connectGist(){
+  const pat=prompt('Paste your GitHub Personal Access Token\n(Needs "gist" scope — create at github.com → Settings → Developer settings → Tokens)');
+  if(!pat||!pat.trim()){return;}
+  DB.set('gh_pat',pat.trim());localStorage.removeItem('gh_gist');
+  await syncToGist();render();
+  alert('✅ Connected! Data will now auto-sync to your GitHub account.');
+}
+function changePIN(){
+  if(!confirm('Reset your PIN? You\'ll need to create a new one on next launch.'))return;
+  localStorage.removeItem('pin');
+  lockApp();
+}
+
 /* ── NAVIGATION ── */
 function go(screen,opts={}){S.screen=screen;Object.assign(S,opts);render();}
 function openDay(dateStr){
@@ -485,6 +610,7 @@ function openDay(dateStr){
 /* ── RENDER ROOT ── */
 function render(){
   const el=document.getElementById('app');
+  if(!S.authed){el.innerHTML=rLock();return;}
   if(S.screen==='week')el.innerHTML=rWeek();
   else if(S.screen==='day')el.innerHTML=rDay();
   else if(S.screen==='log')el.innerHTML=rLog();
@@ -500,8 +626,18 @@ function rWeek(){
   const sun=addDays(S.weekStart,6);
   const lbl=`${S.weekStart.getDate()} ${MNAMES[S.weekStart.getMonth()]} – ${sun.getDate()} ${MNAMES[sun.getMonth()]}`;
   const today=new Date();
+  const lastSync=DB.get('gh_last_sync',null);
+  const pat=DB.get('gh_pat',null);
+  const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div></div>
+<div class="hdr" style="position:relative">
+  <h1>Training Brain</h1>
+  <div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div>
+  <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">🔒</button>
+</div>
+${S.guest?`<div class="guest-bar"><span>👁 Guest mode — read only</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit</button></div>`:''}
+${pat?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'Not synced yet':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:'Synced '+lastSync.slice(0,10)}</span><button onclick="syncToGist(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button></div>`:''}
+
 <div class="week-nav">
   <button class="wnav-btn" onclick="shiftWeek(-1)">‹</button>
   <div class="week-label">${lbl}</div>
@@ -645,7 +781,7 @@ function rRestCard(){
 }
 
 /* ── LOG SCREEN ── */
-function startLog(ds){
+function startLog(ds){if(noGuest())return;
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   const dp=plan?.find(d=>d.date===ds);
@@ -806,6 +942,7 @@ function completeWk(){
   const ids=S.activeLog.exercises.map(e=>e.id);
   const recent=DB.get('recent_ex',[]);
   DB.set('recent_ex',[...new Set([...ids,...recent])].slice(0,40));
+  syncToGist();
   go('day',{viewDate:S.viewDate});
 }
 
@@ -823,10 +960,30 @@ function rPRs(){
   return`<div class="screen">
 <div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Personal Records · History</div></div>
 
-<div class="sec-hdr">💾 Backup your data</div>
+<div class="sec-hdr">☁️ Cloud sync</div>
+${DB.get('gh_pat',null)
+  ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
+      <span style="color:var(--grn);font-weight:700">✓ Connected to GitHub</span><br>
+      <span style="color:var(--t2)">Last sync: ${DB.get('gh_last_sync','Never')?.slice(0,16).replace('T',' ')}</span>
+    </div>
+    <div class="data-btns">
+      <button class="btn btn-s" onclick="syncToGist(true)">🔄 Sync now</button>
+      <button class="btn btn-s" onclick="if(confirm('Disconnect GitHub sync?')){localStorage.removeItem('gh_pat');localStorage.removeItem('gh_gist');render();}">Disconnect</button>
+    </div>`
+  :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Auto-save to GitHub</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Connect your GitHub account so your data is always safe — never lost if you clear Safari.</div>
+      <button class="btn btn-p" onclick="connectGist()">🔗 Connect GitHub account</button>
+    </div>`}
+
+<div class="sec-hdr">💾 Manual backup</div>
 <div class="data-btns">
-  <button class="btn btn-s" onclick="exportData()">⬇️ Export backup</button>
-  <button class="btn btn-s" onclick="importData()">⬆️ Import backup</button>
+  <button class="btn btn-s" onclick="exportData()">⬇️ Export</button>
+  <button class="btn btn-s" onclick="importData()">⬆️ Import</button>
+</div>
+<div class="data-btns">
+  <button class="btn btn-s" onclick="changePIN()">🔑 Change PIN</button>
+  <button class="btn btn-s" onclick="lockApp()">🔒 Lock app</button>
 </div>
 
 <div class="sec-hdr">🏆 Personal Records</div>
@@ -889,7 +1046,7 @@ function doSwap(ds,newType){
   plan[di].type=newType;
   plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(newType)?genSession(newType):null;
   DB.set(pk,plan);
-  closeSwap();render();
+  closeSwap();syncToGist();render();
 }
 
 /* ── EXERCISE SWAP (busy machine) ── */
@@ -912,7 +1069,7 @@ function getAlternatives(exId,type){
   return[...slotAlts,...sameGroup].slice(0,5);
 }
 
-function openExSwap(exId,exIdx,ds,type){
+function openExSwap(exId,exIdx,ds,type){if(noGuest())return;
   const alts=getAlternatives(exId,type);
   const modal=document.createElement('div');
   modal.className='swap-modal';
@@ -932,7 +1089,7 @@ function openExSwap(exId,exIdx,ds,type){
 function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.remove();}
 
 /* ── PER-EXERCISE LOG MODAL ── */
-function openExLog(exId,exIdx,ds){
+function openExLog(exId,exIdx,ds){if(noGuest())return;
   const date=new Date(ds+'T12:00:00');
   S.viewDate=date;S.weekStart=getMon(date);
   const pk=DB.pk(S.weekStart);
@@ -1089,6 +1246,7 @@ function importData(){
 
 /* ── GENERATE PLAN ── */
 function genPlan(){
+  if(noGuest())return;
   const btn=document.querySelector('.btn-p,.btn-s');
   if(btn){btn.textContent='📡 Fetching weather…';btn.disabled=true;}
   navigator.geolocation.getCurrentPosition(async pos=>{
