@@ -457,9 +457,17 @@ const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null
 let _pinBuf='';
 
 /* ── STORAGE ── */
+// Guest mode uses an in-memory store — full app works, data vanishes on exit
+const _guestStore={};
 const DB = {
-  get:(k,d=null)=>{try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}},
-  set:(k,v)=>{try{localStorage.setItem(k,JSON.stringify(v));}catch{}},
+  get:(k,d=null)=>{
+    if(S.guest){const v=_guestStore[k];return v!==undefined?v:d;}
+    try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}
+  },
+  set:(k,v)=>{
+    if(S.guest){_guestStore[k]=v;return;}
+    try{localStorage.setItem(k,JSON.stringify(v));}catch{}
+  },
   pk:(mon)=>'plan_'+fd(mon),
   lk:(d)=>'log_'+fd(d),
 };
@@ -869,12 +877,24 @@ function errPin(){
   const dots=document.getElementById('pin-dots');
   if(dots){dots.style.animation='shake .4s ease';setTimeout(()=>{dots.style.animation='';document.querySelectorAll('.pin-dot').forEach(d=>d.classList.remove('err','filled'));},500);}
 }
-function enterGuest(){S.guest=true;S.authed=true;render();}
+function enterGuest(){
+  // Fresh guest session — wipe any previous in-memory data
+  Object.keys(_guestStore).forEach(k=>delete _guestStore[k]);
+  S.guest=true;S.authed=true;render();
+}
 function lockApp(){S.authed=false;S.guest=false;_pinBuf='';S.lockMode='choose';render();}
 
+// Only blocks cloud-specific actions (export/import/sync), not regular app use
 function noGuest(){
-  if(S.guest){alert('Guest mode is read-only. Tap "Exit" in the banner to sign in.');return true;}
+  if(S.guest){alert('Sign in to use this feature. Tap "Exit Guest" in the banner.');return true;}
   return false;
+}
+
+async function signOut(){
+  try{if(_fbAuth)await _fbAuth.signOut();}catch(e){}
+  DB.set('fb_user',null);
+  S.fbUser=null;
+  render();
 }
 
 /* ── DEBOUNCED SYNC ── */
@@ -1048,7 +1068,7 @@ function rWeek(){
   <div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div>
   <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">🔒</button>
 </div>
-${S.guest?`<div class="guest-bar"><span>👁 Guest mode — read only</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit</button></div>`:''}
+${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit Guest →</button></div>`:''}
 ${pat
   ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'Not synced yet':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:'Synced '+lastSync.slice(0,10)}</span><button onclick="syncToGist(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button></div>`
   :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">⚠️ Saving locally only — data lost if Safari is cleared</span><button onclick="go('prs')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
@@ -1205,7 +1225,7 @@ function rRestCard(){
 }
 
 /* ── LOG SCREEN ── */
-function startLog(ds){if(noGuest())return;
+function startLog(ds){
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   const dp=plan?.find(d=>d.date===ds);
@@ -1455,7 +1475,7 @@ ${S.fbUser
     </div>
     <div class="data-btns">
       <button class="btn btn-s" onclick="saveToCloud(true)">🔄 Sync now</button>
-      <button class="btn btn-s" onclick="if(confirm('Disconnect cloud sync?')){localStorage.removeItem('fb_config');localStorage.removeItem('fb_user');S.fbUser=null;render();}">Disconnect</button>
+      <button class="btn btn-s" onclick="signOut()">🚪 Sign Out</button>
     </div>`
   :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
       <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
@@ -1577,7 +1597,7 @@ function getAlternatives(exId,type){
   return{slotAlts,sameGroup,broader};
 }
 
-function openExSwap(exId,exIdx,ds,type){if(noGuest())return;
+function openExSwap(exId,exIdx,ds,type){
   const {slotAlts,sameGroup,broader}=getAlternatives(exId,type);
   const ex=EX[exId];
   function altBtn(id){const e=EX[id];if(!e)return'';
@@ -1624,7 +1644,7 @@ function filterSwap(exId,exIdx,ds,type,query){
 function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.remove();}
 
 /* ── PER-EXERCISE LOG MODAL ── */
-function openExLog(exId,exIdx,ds){if(noGuest())return;
+function openExLog(exId,exIdx,ds){
   const date=new Date(ds+'T12:00:00');
   S.viewDate=date;S.weekStart=getMon(date);
   const pk=DB.pk(S.weekStart);
@@ -1789,7 +1809,6 @@ function importData(){
 
 /* ── GENERATE PLAN ── */
 function genPlan(){
-  if(noGuest())return;
   const bikePref=DB.get('bike_pref','weather');
   if(bikePref!=='weather'){
     // No location needed — build plan directly with placeholder weather data
