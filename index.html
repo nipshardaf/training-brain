@@ -362,6 +362,190 @@ const SLOTS = {
   ],
 };
 
+/* ── EQUIPMENT TAGS ── */
+const EX_EQUIP={
+  bb_bench:['barbell','bench','rack'],db_bench:['dumbbell','bench'],incline_bb:['barbell','incline_bench','rack'],incline_db:['dumbbell','incline_bench'],
+  cable_fly:['cable','bench'],pec_deck:['machine'],ohp:['barbell','rack'],db_spress:['dumbbell'],arnold:['dumbbell'],
+  lat_raise:['dumbbell'],cable_lat:['cable'],tri_push:['cable'],skull:['ez_bar','bench'],tri_oh:['cable'],dips:['dip_bar'],
+  pullup:['pullup_bar'],lat_pull:['machine'],bb_row:['barbell'],tbar_row:['barbell'],db_row:['dumbbell','bench'],
+  cable_row:['cable'],face_pull:['cable'],rear_fly:['dumbbell'],bb_curl:['barbell'],db_curl:['dumbbell'],
+  hammer:['dumbbell'],preacher:['ez_bar'],incline_curl:['dumbbell','incline_bench'],cable_curl:['cable'],
+  bb_squat:['barbell','rack'],front_squat:['barbell','rack'],leg_press:['machine'],bss:['dumbbell'],
+  lunge:['dumbbell'],step_up:['dumbbell'],goblet_squat:['dumbbell'],hack_squat:['machine'],leg_ext:['machine'],
+  adductor_mach:['machine'],abductor_mach:['machine'],rdl:['barbell'],deadlift:['barbell'],
+  hip_thrust:['barbell','bench'],glute_bridge:['barbell'],glute_kick:['cable'],nordic_curl:['bodyweight'],
+  leg_curl:['machine'],seated_leg_curl:['machine'],calf_raise:['machine'],seated_calf:['machine'],
+  single_calf:['bodyweight'],plank:['bodyweight'],hang_raise:['pullup_bar'],ab_wheel:['ab_wheel'],
+  cable_crunch:['cable'],mach_crunch:['machine'],short_foot:['bodyweight'],towel_scrunch:['bodyweight'],
+  arch_raise:['bodyweight'],toe_spread:['bodyweight'],heel_raise:['bodyweight'],
+};
+
+/* ── COACHING CUES ── */
+const EX_CUES={
+  bb_bench:'Retract shoulder blades, feet flat. Press in a slight arc — elbows at ~75°, not flared.',
+  db_bench:'Feel both pecs stretch at the bottom. Control descent, explode up. Squeeze at the top.',
+  incline_bb:'30–45° incline. Chest tall, drive through heels. Focus on upper chest stretch.',
+  incline_db:'Let elbows drop wide at the bottom. Drive up and in — feel upper chest doing the work.',
+  cable_fly:'Soft elbow bend throughout. Squeeze chest at top like hugging a tree.',
+  pec_deck:'Sit tall, lead with elbows. Full stretch at open position, squeeze hard at contact.',
+  ohp:'Brace core, squeeze glutes. Bar grazes face on the way up — keep it vertical overhead.',
+  db_spress:'Neutral spine, slight forward lean. Drive up overhead — don\'t fully lock out.',
+  arnold:'Rotate palms from facing you at the bottom to facing forward at the top. Full range.',
+  lat_raise:'Lead with your pinky, stop at shoulder height. Control the descent slowly.',
+  cable_lat:'Lean slightly away, raise in a wide arc to shoulder height. Full range of motion.',
+  tri_push:'Pin elbows to your sides — they don\'t move. Squeeze triceps hard at full extension.',
+  skull:'Lower to forehead slowly. Keep elbows vertical — don\'t let them flare. Squeeze up.',
+  tri_oh:'Brace core. Feel full stretch at the bottom, then drive up explosively.',
+  dips:'Lean forward for chest, stay upright for triceps. Go below parallel for full range.',
+  pullup:'Dead hang at bottom, full extension. Drive elbows down to pockets as you pull.',
+  lat_pull:'Lean back slightly, chest up. Drive elbows down and back — think "chest to bar".',
+  bb_row:'Hip hinge, bar close. Pull to lower chest, squeeze lats hard, lower with control.',
+  tbar_row:'Chest on pad. Pull with your elbows, not your hands. Squeeze hard at the top.',
+  db_row:'Support on bench. Pull elbow straight back to hip — not up to shoulder.',
+  cable_row:'Sit tall. Pull to belly button, squeeze shoulder blades together, hold 1s.',
+  face_pull:'Cable at face height. Pull to forehead, elbows high and wide. Externally rotate at the end.',
+  rear_fly:'Chest on bench, soft elbow bend. Lift arms to shoulder level — feel rear delts.',
+  bb_curl:'Elbows pinned to sides. Full extension at the bottom, squeeze hard at the top.',
+  db_curl:'Supinate (rotate) wrists as you curl. Keep elbows still — only forearm moves.',
+  hammer:'Neutral grip throughout. Builds brachialis thickness. Keep strict, no swinging.',
+  preacher:'Chest on pad the whole time. Lower to full extension slowly — growth is in the stretch.',
+  incline_curl:'Arms hang behind body — stretches the long head. Keep elbows back throughout.',
+  cable_curl:'Constant tension. Keep elbows forward at the top to hold peak contraction.',
+  bb_squat:'Big breath and brace. Drive knees out, chest stays tall. Sit to parallel or below.',
+  front_squat:'Elbows high, bar on front delts. Upright torso is key — drive knees out.',
+  leg_press:'Feet hip-width, mid-plate. Don\'t lock knees. Press through heels, not toes.',
+  bss:'Back foot on bench, front knee tracks over foot. Lower rear knee toward floor, stay tall.',
+  lunge:'Long stride. Front knee over ankle. Push off front heel to return.',
+  step_up:'Drive through the heel of your lead foot. Don\'t push off back foot. Control descent.',
+  goblet_squat:'Bell at chest, elbows track knees. Great for building an upright torso.',
+  hack_squat:'Chest up, drive through heels. Full range — don\'t short-range this one.',
+  leg_ext:'Sit tall, flex quads hard at the top. Lower slowly — control the weight.',
+  adductor_mach:'Slow and controlled. Feel inner thigh stretch at full open. Squeeze on the way in.',
+  abductor_mach:'Drive out with control. Hold briefly at max range. Great for hip stability.',
+  rdl:'Soft knees, bar close to legs. Hinge until you feel hamstring stretch, then drive hips forward.',
+  deadlift:'Bar over mid-foot, neutral spine. Push the floor away — don\'t think "pull".',
+  hip_thrust:'Drive through heels, squeeze glutes at the top. Chin tucked — don\'t hyperextend back.',
+  glute_bridge:'Feet flat, drive hips up. Squeeze glutes hard at the top. Neutral neck.',
+  glute_kick:'Keep hip square, kick straight back — all glute, not lower back.',
+  nordic_curl:'Anchor feet, lower as slow as possible. The eccentric is the exercise. Use hands to get up.',
+  leg_curl:'Don\'t let hips rise. Curl all the way up, lower slowly. Feel the hamstring stretch.',
+  seated_leg_curl:'Sit tall, lean slightly forward. Full extension at the bottom. Squeeze at top.',
+  calf_raise:'Full range of motion. Pause in the stretch at the bottom. Squeeze hard at the top.',
+  seated_calf:'Targets soleus. Slow, full range — feel the stretch at the bottom.',
+  single_calf:'Hold for balance. Full ROM. Feel the stretch at the bottom on each rep.',
+  plank:'Neutral spine — no sagging hips. Squeeze everything: core, glutes, quads.',
+  hang_raise:'Start from dead hang. Raise legs with control — don\'t swing. Lower slowly.',
+  ab_wheel:'Keep core braced throughout. Don\'t let hips sag at full extension.',
+  cable_crunch:'Round your spine — this is not a hip flexor exercise. Crunch down, feel abs shorten.',
+  mach_crunch:'Slow and deliberate. Hold at max contraction. Breathe out on the way down.',
+};
+
+/* ── GYM PROFILES ── */
+const EQUIP_ALL=[
+  {id:'barbell',label:'Barbell + Plates'},{id:'dumbbell',label:'Dumbbells'},
+  {id:'ez_bar',label:'EZ Bar'},{id:'bench',label:'Flat Bench'},
+  {id:'incline_bench',label:'Incline / Adjustable Bench'},{id:'rack',label:'Power Rack / Squat Stand'},
+  {id:'cable',label:'Cable Machine / Functional Trainer'},{id:'machine',label:'Weight Machines (leg press, lat pulldown, etc.)'},
+  {id:'pullup_bar',label:'Pull-Up Bar'},{id:'dip_bar',label:'Dip Bars / Assisted Machine'},
+  {id:'kettlebell',label:'Kettlebells'},{id:'ab_wheel',label:'Ab Wheel'},
+  {id:'bodyweight',label:'Bodyweight (no equipment)'},
+];
+// Equipment tier presets
+// FULL  — Barbell + rack, DBs, EZ bar, flat/incline bench, cables, full machine stack, pull-up bar, dip bar, KB, ab wheel
+// BUDGET — No free barbell rack (Smith machine only); has DBs, EZ bar, benches, cables, machines, KB, ab wheel
+// PLANET — DBs only (no barbell/rack/EZ), limited cables, machines, ab wheel (Planet Fitness lunk-alarm policy)
+// YMCA   — DBs, benches, cables, machines, pull-up bar (most branches); no barbell rack at most GTA YMCAs
+const _F=new Set(['barbell','dumbbell','ez_bar','bench','incline_bench','rack','cable','machine','pullup_bar','dip_bar','kettlebell','ab_wheel','bodyweight']);
+const _B=new Set(['dumbbell','ez_bar','bench','incline_bench','cable','machine','kettlebell','ab_wheel','bodyweight']);
+const _P=new Set(['dumbbell','bench','incline_bench','machine','ab_wheel','bodyweight']);
+const _Y=new Set(['dumbbell','bench','incline_bench','cable','machine','pullup_bar','ab_wheel','bodyweight']);
+// Each gym: chain = brand name, area = location identifier, city, equip tier
+// Displayed as: area (bold) + chain (sub)
+const GYMS_BUILTIN={
+  // ── Toronto ────────────────────────────────────────────────────────────────
+  goodlife_bloor_bay:      {chain:'GoodLife Fitness', area:'Bloor & Bay',         city:'Toronto',       equip:_F},
+  goodlife_dundas_sq:      {chain:'GoodLife Fitness', area:'Dundas Square',       city:'Toronto',       equip:_F},
+  goodlife_king_west:      {chain:'GoodLife Fitness', area:'King West',           city:'Toronto',       equip:_F},
+  goodlife_scarborough:    {chain:'GoodLife Fitness', area:'Scarborough Town',    city:'Toronto',       equip:_F},
+  la_fitness_north_york:   {chain:'LA Fitness',       area:'North York',          city:'Toronto',       equip:_F},
+  world_gym_toronto:       {chain:'World Gym',        area:'North York – Finch',  city:'Toronto',       equip:_F},
+  fit4less_etobicoke:      {chain:'Fit4Less',         area:'Etobicoke',           city:'Toronto',       equip:_B},
+  fit4less_east_york:      {chain:'Fit4Less',         area:'East York',           city:'Toronto',       equip:_B},
+  planet_toronto_north:    {chain:'Planet Fitness',   area:'North York – Yonge',  city:'Toronto',       equip:_P},
+  ymca_central_toronto:    {chain:'YMCA',             area:'Central Toronto',     city:'Toronto',       equip:_Y},
+  ymca_scarborough:        {chain:'YMCA',             area:'Scarborough',         city:'Toronto',       equip:_Y},
+  // ── Mississauga ───────────────────────────────────────────────────────────
+  goodlife_sq1:            {chain:'GoodLife Fitness', area:'Square One Mall',        city:'Mississauga',   equip:_F},
+  goodlife_erin_mills:     {chain:'GoodLife Fitness', area:'Erin Mills Town Centre', city:'Mississauga',   equip:_F},
+  la_fitness_mississauga:  {chain:'LA Fitness',       area:'Dixie & Dundas',         city:'Mississauga',   equip:_F},
+  fit4less_mississauga:    {chain:'Fit4Less',         area:'Meadowvale – Mississauga',city:'Mississauga',  equip:_B},
+  planet_mississauga:      {chain:'Planet Fitness',   area:'Ridgeway – Mississauga', city:'Mississauga',   equip:_P},
+  ymca_mississauga:        {chain:'YMCA',             area:'Central Mississauga',    city:'Mississauga',   equip:_Y},
+  // ── Brampton ──────────────────────────────────────────────────────────────
+  goodlife_brampton_gway:  {chain:'GoodLife Fitness', area:'Brampton Gateway',    city:'Brampton',      equip:_F},
+  goodlife_brampton_queen: {chain:'GoodLife Fitness', area:'Brampton – Queen',    city:'Brampton',      equip:_F},
+  fit4less_brampton:       {chain:'Fit4Less',         area:'Bovaird – Brampton',   city:'Brampton',      equip:_B},
+  planet_brampton:         {chain:'Planet Fitness',   area:'Rutherford – Brampton',city:'Brampton',      equip:_P},
+  ymca_brampton:           {chain:'YMCA',             area:'Central Brampton',    city:'Brampton',      equip:_Y},
+  // ── Markham ───────────────────────────────────────────────────────────────
+  goodlife_markham:        {chain:'GoodLife Fitness', area:'Markham – Hwy 7',     city:'Markham',       equip:_F},
+  goodlife_unionville:     {chain:'GoodLife Fitness', area:'Unionville',          city:'Markham',       equip:_F},
+  la_fitness_markham:      {chain:'LA Fitness',       area:'Cornell – Markham',   city:'Markham',       equip:_F},
+  fit4less_markham:        {chain:'Fit4Less',         area:'Woodbine – Markham',  city:'Markham',       equip:_B},
+  // ── Richmond Hill ─────────────────────────────────────────────────────────
+  goodlife_richmond_hill:  {chain:'GoodLife Fitness', area:'Richmond Hill – Yonge',city:'Richmond Hill',equip:_F},
+  goodlife_hillcrest:      {chain:'GoodLife Fitness', area:'Hillcrest Mall – Richmond Hill', city:'Richmond Hill', equip:_F},
+  fit4less_richmond_hill:  {chain:'Fit4Less',         area:'Richmond Hill – Hwy 7',city:'Richmond Hill',equip:_B},
+  // ── Vaughan ───────────────────────────────────────────────────────────────
+  goodlife_vaughan_mills:  {chain:'GoodLife Fitness', area:'Vaughan Mills',       city:'Vaughan',       equip:_F},
+  goodlife_woodbridge:     {chain:'GoodLife Fitness', area:'Woodbridge',          city:'Vaughan',       equip:_F},
+  la_fitness_vaughan:      {chain:'LA Fitness',       area:'Vaughan – Rutherford',city:'Vaughan',       equip:_F},
+  fit4less_vaughan:        {chain:'Fit4Less',         area:'Vaughan – Rutherford',city:'Vaughan',       equip:_B},
+  // ── Newmarket ─────────────────────────────────────────────────────────────
+  goodlife_newmarket:      {chain:'GoodLife Fitness', area:'York Town Square – Newmarket', city:'Newmarket', equip:_F},
+  fit4less_newmarket:      {chain:'Fit4Less',         area:'Yonge St – Newmarket',         city:'Newmarket', equip:_B},
+  // ── Aurora ────────────────────────────────────────────────────────────────
+  goodlife_aurora:         {chain:'GoodLife Fitness', area:'Aurora – Bayview',    city:'Aurora',        equip:_F},
+  fit4less_aurora:         {chain:'Fit4Less',         area:'Aurora – Yonge',      city:'Aurora',        equip:_B},
+  // ── Oakville ──────────────────────────────────────────────────────────────
+  goodlife_oakville:       {chain:'GoodLife Fitness', area:'Oakville – Leighland',city:'Oakville',      equip:_F},
+  la_fitness_oakville:     {chain:'LA Fitness',       area:'Oakville',            city:'Oakville',      equip:_F},
+  fit4less_oakville:       {chain:'Fit4Less',         area:'Oakville – Dundas',   city:'Oakville',      equip:_B},
+  // ── Burlington ────────────────────────────────────────────────────────────
+  goodlife_burlington:     {chain:'GoodLife Fitness', area:'Burlington – Guelph Line',city:'Burlington', equip:_F},
+  la_fitness_burlington:   {chain:'LA Fitness',       area:'Burlington – Walkers',city:'Burlington',    equip:_F},
+  fit4less_burlington:     {chain:'Fit4Less',         area:'Appleby – Burlington', city:'Burlington',   equip:_B},
+  // ── Hamilton ──────────────────────────────────────────────────────────────
+  goodlife_hamilton:       {chain:'GoodLife Fitness', area:'Hamilton – Dundurn',  city:'Hamilton',      equip:_F},
+  goodlife_stoney_creek:   {chain:'GoodLife Fitness', area:'Stoney Creek',        city:'Hamilton',      equip:_F},
+  fit4less_hamilton:       {chain:'Fit4Less',         area:'Hamilton – Upper James',city:'Hamilton',    equip:_B},
+  // ── Pickering · Ajax ──────────────────────────────────────────────────────
+  goodlife_pickering:      {chain:'GoodLife Fitness', area:'Pickering – Kingston Rd', city:'Pickering / Ajax',equip:_F},
+  goodlife_ajax:           {chain:'GoodLife Fitness', area:'Ajax – Kingston Rd',     city:'Pickering / Ajax',equip:_F},
+  fit4less_pickering:      {chain:'Fit4Less',         area:'Pickering – Brock Rd',   city:'Pickering / Ajax',equip:_B},
+  // ── Whitby · Oshawa ───────────────────────────────────────────────────────
+  goodlife_whitby:         {chain:'GoodLife Fitness', area:'Whitby – Consumers Dr', city:'Whitby / Oshawa',equip:_F},
+  goodlife_oshawa:         {chain:'GoodLife Fitness', area:'Oshawa – King',       city:'Whitby / Oshawa',equip:_F},
+  fit4less_whitby:         {chain:'Fit4Less',         area:'Whitby – Dundas',     city:'Whitby / Oshawa',equip:_B},
+};
+// backward-compat: expose .name and .sub from chain/area
+Object.values(GYMS_BUILTIN).forEach(g=>{g.name=g.chain;g.sub=g.area;});
+function getActiveEquip(){
+  const gid=DB.get('gym_profile',null);
+  if(!gid)return _F; // no gym set — show all exercises
+  if(gid==='home'){const h=DB.get('home_equip',[]);return new Set(h);}
+  return GYMS_BUILTIN[gid]?.equip||_F;
+}
+function exAvail(id){
+  const eq=getActiveEquip();
+  const needed=EX_EQUIP[id]||[];
+  return needed.every(e=>eq.has(e));
+}
+function filterSlot(slot){
+  const filtered=slot.filter(id=>exAvail(id));
+  return filtered.length>0?filtered:slot;
+}
+
 /* ── WORKOUT METADATA ── */
 const WI = {
   PUSH:         {l:'Push',         i:'🏋️',c:'#7c3aed',d:'Chest · Shoulders · Triceps'},
@@ -383,14 +567,21 @@ const COACH = {
 };
 
 /* ── AI COACH ── */
-const GEMINI_KEY_DEFAULT='AIzaSyA8zS2USxJ7PXVvG9dCNSXCZABkY9CgCCU';
+const GEMINI_PROXY='https://training-brain-ai.ht9323.workers.dev';
+const STRAVA_CLIENT_ID='119406';
+const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
 async function getAICoach(energy,ct,dp){
-  const key=DB.get('gemini_key','')||GEMINI_KEY_DEFAULT;
-  if(!key)return COACH[energy][ct];
-  // Cache per energy+date so it doesn't re-call on every tap
-  const cacheKey=energy+'_'+(dp?.date||'');
+  // Cache per energy+date — check localStorage first so refreshes don't re-call
+  const cacheKey='coach_'+energy+'_'+(dp?.date||'');
   if(_coachCache[cacheKey])return _coachCache[cacheKey];
+  const stored=DB.get(cacheKey,null);
+  if(stored){_coachCache[cacheKey]=stored;return stored;}
+  // Rate limit — max 1 AI call per 12 seconds across refreshes
+  const lastCall=DB.get('coach_last_call',0);
+  const now=Date.now();
+  if(now-lastCall<12000)return COACH[energy][ct];
+  DB.set('coach_last_call',now);
   // Build rich context
   const prs=DB.get('prs',{});
   const u=unit();
@@ -427,25 +618,322 @@ Athlete status:
 
 Give specific advice: mention exercises by name, reference their PR weights if relevant, adjust expectations based on energy. Sound like a real coach, not an app.`;
   try{
-    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,{
+    const r=await fetch(GEMINI_PROXY,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:120,temperature:0.75}})
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:200,temperature:0.75,thinkingConfig:{thinkingBudget:0}}})
     });
-    if(!r.ok)throw new Error('API '+r.status);
-    const data=await r.json();
+    const raw=await r.text();
+    if(!r.ok){
+      console.warn('AI coach API '+r.status+':',raw.slice(0,400));
+      throw new Error('API '+r.status);
+    }
+    const data=JSON.parse(raw);
     const msg=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if(msg){_coachCache[cacheKey]=msg;return msg;}
+    if(msg){_coachCache[cacheKey]=msg;DB.set(cacheKey,msg);return msg;}
   }catch(e){console.warn('AI coach failed:',e);}
   return COACH[energy][ct]; // fallback
 }
 
-const RIDE_TIPS = {
-  LONG_OUTDOOR:['HR 120–140 BPM — conversational pace','Cadence 80–95 RPM','Refuel every 45 min: banana, dates, or rice cakes','1 bottle per 30 min','If HR creeps above Zone 2, ease off immediately'],
-  SHORT_OUTDOOR:['HR 115–130 BPM','Cadence 80–90 RPM','Short and sweet — flush the legs, don\'t strain them','Stay disciplined in Zone 2 even if you feel good','Use it to build aerobic base'],
-  LONG_INDOOR:['Trainer endurance mode or self-regulate with HR','Target 120–135 BPM for 60–90 min','Cadence 80–95 RPM','Fan on — indoor riding sweats more','Stay hydrated, slightly more conservative than outdoors'],
-  SHORT_INDOOR:['25–35 min easy spinning, Zone 1 to Zone 2','120–130 BPM target','Good active recovery or warm-up option','Legs should feel better when done, not worse'],
-};
+/* ── PER-EXERCISE AI COACH ── */
+const _exCoachCache={};
+async function openExCoach(id){
+  const ex=EX[id];if(!ex)return;
+  // Show bottom sheet immediately with loading state
+  let sheet=document.getElementById('ex-coach-sheet');
+  if(!sheet){sheet=document.createElement('div');sheet.id='ex-coach-sheet';
+    sheet.style.cssText='position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bord);border-radius:24px 24px 0 0;padding:20px 20px 40px;z-index:800;transform:translateY(100%);transition:transform .3s;max-height:80vh;overflow-y:auto;max-width:430px;margin:0 auto';
+    document.body.appendChild(sheet);}
+  const prs=DB.get('prs',{})[id];
+  const u=unit();
+  const prTxt=prs?`Their PR is ${prs.w}${u}×${prs.r}.`:'No PR recorded yet.';
+  sheet.innerHTML=`<div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 16px"></div>
+<div style="font-size:16px;font-weight:800;margin-bottom:4px">🤖 Coach on ${ex.n}</div>
+<div style="font-size:12px;color:var(--t2);margin-bottom:16px">${ex.m}</div>
+<div id="ex-coach-body" style="font-size:14px;color:var(--t2);line-height:1.7">Loading AI tips…</div>`;
+  sheet.style.transform='translateY(0)';
+  // Overlay
+  let ov=document.getElementById('ex-coach-ov');
+  if(!ov){ov=document.createElement('div');ov.id='ex-coach-ov';
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:799';
+    ov.onclick=()=>{sheet.style.transform='translateY(100%)';ov.style.display='none';};
+    document.body.appendChild(ov);}
+  ov.style.display='block';
+  // Use cache or call AI
+  if(_exCoachCache[id]){document.getElementById('ex-coach-body').innerHTML=_exCoachCache[id];return;}
+  try{
+    const prompt=`You are an expert personal trainer. Give 3 practical tips for "${ex.n}" targeting ${ex.m}. Cover: (1) form cue, (2) common mistake to avoid, (3) a progression or variation idea. ${prTxt} Be direct and specific. Use numbered list format. Max 120 words total.`;
+    const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:260,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
+    if(!r.ok)throw new Error('API '+r.status);
+    const data=await r.json();
+    const msg=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(msg){
+      const html=msg.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
+      _exCoachCache[id]=html;
+      const el=document.getElementById('ex-coach-body');
+      if(el)el.innerHTML=html;
+    }
+  }catch(e){
+    const el=document.getElementById('ex-coach-body');
+    const cue=EX_CUES[id]||'Focus on full range of motion and controlled tempo.';
+    if(el)el.innerHTML=`<em>${cue}</em>`;
+  }
+}
+
+/* ── STRAVA INTEGRATION ── */
+function stravaConnect(){
+  const url=`https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT)}&response_type=code&scope=activity:read_all&approval_prompt=auto`;
+  window.location.href=url;
+}
+
+async function stravaExchangeCode(code){
+  try{
+    const r=await fetch(GEMINI_PROXY+'/strava/token',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'authorization_code',code})
+    });
+    if(!r.ok)throw new Error('exchange '+r.status);
+    const data=await r.json();
+    if(!data.access_token)throw new Error('no token');
+    DB.set('strava_token',{
+      access:data.access_token,refresh:data.refresh_token,
+      expires:data.expires_at,
+      athlete:{name:data.athlete?.firstname,id:data.athlete?.id}
+    });
+    // Clean the ?code= from the URL
+    window.history.replaceState({},'',window.location.pathname);
+    await stravaFetchActivities();
+  }catch(e){console.warn('Strava exchange failed:',e);}
+}
+
+async function _stravaAccessToken(){
+  const tok=DB.get('strava_token',null);
+  if(!tok)return null;
+  // Refresh if expiring within 5 minutes
+  if(Date.now()/1000<tok.expires-300)return tok.access;
+  try{
+    const r=await fetch(GEMINI_PROXY+'/strava/token',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({grant_type:'refresh_token',refresh_token:tok.refresh})
+    });
+    if(!r.ok)throw new Error('refresh '+r.status);
+    const data=await r.json();
+    DB.set('strava_token',{...tok,access:data.access_token,refresh:data.refresh_token,expires:data.expires_at});
+    return data.access_token;
+  }catch(e){console.warn('Strava refresh failed:',e);return tok.access;}
+}
+
+async function stravaFetchActivities(){
+  const token=await _stravaAccessToken();
+  if(!token)return;
+  try{
+    const after=Math.floor(Date.now()/1000)-30*86400;
+    const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=50`,{
+      headers:{Authorization:'Bearer '+token}
+    });
+    if(!r.ok)throw new Error('activities '+r.status);
+    const acts=await r.json();
+    const rides=acts.filter(a=>a.type==='Ride'||a.type==='VirtualRide');
+    DB.set('strava_activities',rides);
+    DB.set('strava_last_sync',new Date().toISOString());
+    analyzeStravaAdapt(rides); // C: auto-adapt plan based on completion
+    render();
+  }catch(e){console.warn('Strava activities failed:',e);}
+}
+
+/* ── C: STRAVA AUTO-ADAPT ── */
+function analyzeStravaAdapt(rides){
+  // Look at last 2 completed weeks and measure ride completion vs plan
+  let totalPlanned=0,totalCompleted=0,durationMatch=0;
+  for(let w=1;w<=2;w++){
+    const mon=getMon(addDays(new Date(),-w*7));
+    const plan=DB.get(DB.pk(mon),null);
+    if(!plan)continue;
+    const rideDays=plan.filter(d=>['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(d.type));
+    totalPlanned+=rideDays.length;
+    rideDays.forEach(dp=>{
+      const actual=rides.find(a=>(a.start_date_local||'').slice(0,10)===dp.date);
+      if(actual){
+        totalCompleted++;
+        // Check if they hit ≥80% of planned duration
+        const setup=DB.get('bike_setup',{dur:45});
+        const plannedMin=dp.type.includes('LONG')?getRideDuration('LONG'):getRideDuration('SHORT');
+        if(actual.moving_time/60>=plannedMin*0.8)durationMatch++;
+      }
+    });
+  }
+  if(totalPlanned===0)return;
+  const compRate=totalCompleted/totalPlanned; // 0–1
+  const durRate=totalCompleted>0?durationMatch/totalCompleted:0;
+  let cur=DB.get('bike_adapt_factor',1.0);
+  if(compRate>=0.9&&durRate>=0.8){cur=Math.min(1.3,cur+0.08);} // crushed it
+  else if(compRate>=0.6){/* on track — hold */}
+  else{cur=Math.max(0.7,cur-0.1);} // struggling — back off
+  DB.set('bike_adapt_factor',Math.round(cur*100)/100);
+  DB.set('bike_adapt_check',fd(new Date()));
+}
+
+function getRideDuration(which){
+  const{wk,block}=getRideWeek();
+  const setup=DB.get('bike_setup',{dur:45,goal:'base'});
+  const goalRate={base:15,event:20,active:10}[setup.goal]||15;
+  if(which==='LONG'){
+    let d=setup.dur+(wk<3?wk*goalRate+block*10:0);
+    return Math.min(d,150);
+  }
+  return[55,60,55,35][wk]||50; // short ride durations by phase week
+}
+
+function stravaRideOnDate(dateStr){
+  const acts=DB.get('strava_activities',[]);
+  return acts.find(a=>(a.start_date_local||'').slice(0,10)===dateStr)||null;
+}
+
+function stravaDisconnect(){
+  DB.set('strava_token',null);DB.set('strava_activities',null);DB.set('strava_last_sync',null);
+  render();
+}
+
+function openBikeSetup(){
+  const cur=DB.get('bike_setup',{dur:45,goal:'base'});
+  const durOpts=[20,30,45,60,90];
+  const goalOpts=[{v:'base',l:'🏗 Build base',d:'Long steady rides, build aerobic engine'},
+                  {v:'event',l:'🎯 Train for event',d:'Progressive overload toward a target'},
+                  {v:'active',l:'🏃 Stay active',d:'Shorter rides, low stress, keep moving'}];
+  let selDur=cur.dur;
+  let selGoal=cur.goal||'base';
+
+  const sheet=document.createElement('div');
+  sheet.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end';
+  sheet.innerHTML=`
+<div onclick="this.parentElement.remove()" style="flex:1;background:rgba(0,0,0,.5)"></div>
+<div style="background:var(--s1);border-radius:22px 22px 0 0;padding:22px 18px calc(env(safe-area-inset-bottom,0px) + 24px);max-height:88vh;overflow-y:auto">
+  <div style="width:36px;height:4px;background:var(--bord);border-radius:2px;margin:0 auto 18px"></div>
+  <div style="font-size:17px;font-weight:800;margin-bottom:4px">Cycling setup</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:20px">Personalises your ride durations and weekly progression</div>
+
+  <div style="font-size:13px;font-weight:700;margin-bottom:10px">How long can you comfortably ride right now?</div>
+  <div id="bs-dur" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px">
+    ${durOpts.map(d=>`<button onclick="bsDurSel(${d})" id="bsd-${d}" style="padding:9px 16px;border-radius:20px;border:2px solid ${d===selDur?'var(--acc)':'var(--bord)'};background:${d===selDur?'var(--acc)':'var(--s2)'};color:${d===selDur?'#fff':'var(--txt)'};font-size:13px;font-weight:700;cursor:pointer">${d===90?'90+ min':d+' min'}</button>`).join('')}
+  </div>
+
+  <div style="font-size:13px;font-weight:700;margin-bottom:10px">What's your main cycling goal?</div>
+  <div id="bs-goal" style="display:flex;flex-direction:column;gap:8px;margin-bottom:26px">
+    ${goalOpts.map(g=>`
+    <div onclick="bsGoalSel('${g.v}')" id="bsg-${g.v}" style="padding:12px 14px;border-radius:14px;border:2px solid ${g.v===selGoal?'var(--acc)':'var(--bord)'};background:${g.v===selGoal?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer">
+      <div style="font-size:14px;font-weight:700;color:${g.v===selGoal?'var(--al)':'var(--txt)'}">${g.l}</div>
+      <div style="font-size:12px;color:var(--t2);margin-top:2px">${g.d}</div>
+    </div>`).join('')}
+  </div>
+
+  <button onclick="bsSave()" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:800;padding:15px;cursor:pointer">Save & start plan</button>
+</div>`;
+
+  document.body.appendChild(sheet);
+
+  window.bsDurSel=function(d){
+    selDur=d;
+    durOpts.forEach(x=>{
+      const b=document.getElementById('bsd-'+x);
+      if(!b)return;
+      b.style.borderColor=x===d?'var(--acc)':'var(--bord)';
+      b.style.background=x===d?'var(--acc)':'var(--s2)';
+      b.style.color=x===d?'#fff':'var(--txt)';
+    });
+  };
+  window.bsGoalSel=function(g){
+    selGoal=g;
+    goalOpts.forEach(x=>{
+      const el=document.getElementById('bsg-'+x.v);
+      if(!el)return;
+      el.style.borderColor=x.v===g?'var(--acc)':'var(--bord)';
+      el.style.background=x.v===g?'rgba(124,58,237,.12)':'var(--s2)';
+      el.querySelector('div').style.color=x.v===g?'var(--al)':'var(--txt)';
+    });
+  };
+  window.bsSave=function(){
+    DB.set('bike_setup',{dur:selDur,goal:selGoal});
+    DB.set('bike_adapt_factor',1.0);
+    DB.set('bike_block_start',fd(S.weekStart));
+    sheet.remove();
+    render();
+  };
+}
+
+/* ── CYCLING PLANNER — aerobic base block ── */
+// 4-week repeating block: weeks 0-2 progressive build, week 3 recovery.
+// Long ride = endurance anchor (duration progresses). Short ride = quality session that rotates.
+const RIDE_PHASE=['Build week 1','Build week 2','Peak week','Recovery week'];
+const RIDE_LONG_DUR=[60,75,90,50];
+const RIDE_QUALITY_SEQ=['tempo','sweetspot','hills','recovery'];
+
+function getRideWeek(){
+  let start=DB.get('bike_block_start',null);
+  if(!start){start=fd(S.weekStart);DB.set('bike_block_start',start);}
+  const startMon=new Date(start+'T12:00:00');
+  const weeks=Math.round((S.weekStart-startMon)/6048e5); // 6048e5 ms = 7 days
+  return{wk:((weeks%4)+4)%4,block:Math.max(0,Math.floor(weeks/4))};
+}
+
+function getRideSession(type){
+  const{wk,block}=getRideWeek();
+  const indoor=type.includes('INDOOR');
+  // A: use onboarding starting duration + goal progression rate
+  const setup=DB.get('bike_setup',{dur:45,goal:'base'});
+  const goalRate={base:15,event:20,active:10}[setup.goal]||15;
+  // C: apply Strava adapt factor
+  const adaptFactor=DB.get('bike_adapt_factor',1.0);
+  if(type.includes('LONG')){
+    let dur=setup.dur+(wk<3?wk*goalRate+block*10:Math.round(setup.dur*0.6));
+    dur=Math.min(Math.round(dur*adaptFactor/5)*5,150); // round to 5min, cap 150
+    return{
+      name:'Endurance Ride',phase:RIDE_PHASE[wk],total:dur,
+      blocks:[
+        {t:'10 min',d:'Easy warm-up — spin up gradually, cadence 85-95 RPM'},
+        {t:(dur-15)+' min',d:'Steady Zone 2 — HR 120-140, fully conversational pace'},
+        {t:'5 min',d:'Easy cool-down spin'},
+      ],
+      focus:wk===3?'Recovery week — keep it genuinely easy. Lower volume lets your body absorb the last 3 weeks of work.':'Your aerobic engine builder. The discipline is staying in Zone 2 even when the legs feel great.',
+    };
+  }
+  // Quality (shorter) ride — rotates each phase week
+  const q=RIDE_QUALITY_SEQ[wk];
+  if(q==='tempo')return{
+    name:'Tempo Intervals',phase:RIDE_PHASE[wk],total:55,
+    blocks:[
+      {t:'15 min',d:'Warm-up — build from easy to low Zone 2'},
+      {t:'2 × 12 min',d:'Tempo — Zone 3, HR 140-155, steady & strong. 5 min easy spin between'},
+      {t:'10 min',d:'Easy cool-down'},
+    ],
+    focus:'Tempo teaches your body to clear lactate efficiently — the bridge between easy riding and hard efforts.',
+  };
+  if(q==='sweetspot')return{
+    name:'Sweet Spot',phase:RIDE_PHASE[wk],total:60,
+    blocks:[
+      {t:'15 min',d:'Warm-up with 2-3 short 30s pickups near the end'},
+      {t:'3 × 10 min',d:'Sweet Spot — strong but controlled (~88-93% of threshold). 5 min recovery between'},
+      {t:'10 min',d:'Easy cool-down'},
+    ],
+    focus:'The best return-on-time interval for raising sustainable power. Hard, but you should finish each block — not bury yourself.',
+  };
+  if(q==='hills')return{
+    name:'Hill Repeats',phase:RIDE_PHASE[wk],total:55,
+    blocks:[
+      {t:'15 min',d:'Warm-up — easy spinning to the climb'},
+      {t:'5 × 4 min',d:indoor?'High resistance, low cadence 60-70 RPM, strong & seated. Easy 3 min spin between':'Hill climbs — strong seated effort, low cadence. Easy descent to recover'},
+      {t:'10 min',d:'Easy cool-down'},
+    ],
+    focus:'Hills build leg strength and force production — power that carries over to every other ride.',
+  };
+  return{
+    name:'Recovery Spin',phase:RIDE_PHASE[wk],total:35,
+    blocks:[
+      {t:'35 min',d:'Very easy — Zone 1, light pressure on the pedals, high cadence 90+ RPM, flat route'},
+    ],
+    focus:'This is not training — it\'s active recovery. If you feel any strain, you\'re going too hard.',
+  };
+}
 
 const MOBILITY=[
   {i:'🧘',t:'Hip flexor stretch — 60s each side'},
@@ -519,7 +1007,7 @@ function energyTargets(exId,energy){
 }
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set()};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -543,7 +1031,7 @@ const DNAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 const MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function getMon(d=new Date()){const r=new Date(d);const dw=r.getDay();r.setDate(r.getDate()-(dw===0?6:dw-1));r.setHours(0,0,0,0);return r;}
 function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
-function fd(d){return d.toISOString().slice(0,10);}
+function fd(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 function sameDay(a,b){return fd(a)===fd(b);}
 function shortD(d){return `${DNAMES[d.getDay()]} ${d.getDate()} ${MNAMES[d.getMonth()]}`;}
 
@@ -584,50 +1072,107 @@ function verdict(score){
 }
 
 /* ── WEEK GENERATION ── */
+const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP'];
+
+function getLastGymType(){
+  // Scan back up to 28 days for the last completed gym workout type
+  for(let i=1;i<=28;i++){
+    const d=addDays(new Date(),-i);
+    const log=DB.get(DB.lk(d),null);
+    if(log?.exercises?.some(e=>e.sets.some(s=>s.done))){
+      const plan=DB.get(DB.pk(getMon(d)),null);
+      const dp=plan?.find(x=>x.date===fd(d));
+      if(dp&&GYM_SEQ.includes(dp.type))return dp.type;
+    }
+  }
+  return'UPPER_PUMP'; // default so PUSH comes next
+}
+
 function buildWeek(wdays){
   const bikePref=DB.get('bike_pref','weather');
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
-  const mk=(w,type)=>{const exs=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(type)?genSession(type):null;return{date:w.date,type,exercises:exs,weather:w};};
 
-  if(bikePref==='none'){
-    // No riding at all — fill week with gym + rest
-    const restIdx=ranked[ranked.length-1].i;
-    const gymCandidates=[0,1,2,3,4,5,6].filter(i=>i!==restIdx);
-    const legsDay=gymCandidates[Math.floor(gymCandidates.length/2)];
-    const others=gymCandidates.filter(i=>i!==legsDay);
-    const asgn={[legsDay]:'LEGS'};
-    ['PUSH','PULL','UPPER_PUMP','PUSH'].forEach((t,idx)=>{if(others[idx]!==undefined)asgn[others[idx]]=t;});
-    return wdays.map((w,i)=>mk(w,i===restIdx?'REST':asgn[i]||'REST'));
+  // Lock days that already have completed sets — preserve them on refresh
+  const existingPlan=DB.get(DB.pk(S.weekStart),null);
+  const locked={}; // dayIndex → type
+  if(existingPlan){
+    existingPlan.forEach((dp,i)=>{
+      const log=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null);
+      if(log?.exercises?.some(e=>e.sets.some(s=>s.done))&&GYM_SEQ.includes(dp.type))locked[i]=dp.type;
+    });
   }
 
-  const r1=ranked[0],r2=ranked[1];
+  // mk: preserves exercises for locked days, generates fresh for new days
+  const mk=(w,type,idx)=>{
+    if(locked[idx]&&existingPlan?.[idx])return{...existingPlan[idx],weather:w};
+    const exs=GYM_SEQ.includes(type)?genSession(type):null;
+    return{date:w.date,type,exercises:exs,weather:w};
+  };
+
+  // Assign gym types in PPL sequence, respecting locked days
+  function assignGym(gymDays,asgn){
+    const sorted=[...gymDays].sort((a,b)=>a-b);
+    // Find last completed type (locked days this week first, then history)
+    let lastType=null;
+    for(const i of sorted){if(locked[i])lastType=locked[i];}
+    if(!lastType)lastType=getLastGymType();
+    let si=(GYM_SEQ.indexOf(lastType)+1)%GYM_SEQ.length;
+    for(const i of sorted){
+      if(locked[i]){asgn[i]=locked[i];}
+      else{asgn[i]=GYM_SEQ[si];si=(si+1)%GYM_SEQ.length;}
+    }
+  }
+
+  if(bikePref==='none'){
+    const restIdx=ranked[ranked.length-1].i;
+    const gymDays=[0,1,2,3,4,5,6].filter(i=>i!==restIdx);
+    const asgn={};
+    assignGym(gymDays,asgn);
+    return wdays.map((w,i)=>mk(w,i===restIdx?'REST':asgn[i]||'REST',i));
+  }
+
+  // D: gym-aware — find tentative LEGS day to avoid placing hard ride after it
+  // We do a quick pre-pass to figure out which gym day would get LEGS
   const OT=45;
+  const tentativeRideSet=new Set([ranked[0].i,ranked[1].i]);
+  const tentativeRest5=[0,1,2,3,4,5,6].filter(i=>!tentativeRideSet.has(i));
+  let tentativeRestIdx=(ranked[0].i+1)%7;
+  if(!tentativeRest5.includes(tentativeRestIdx))tentativeRestIdx=tentativeRest5[tentativeRest5.length-1];
+  const tentativeGymDays=tentativeRest5.filter(i=>i!==tentativeRestIdx).sort((a,b)=>a-b);
+  let legsIdx=-1;
+  {
+    let lastType=getLastGymType();
+    let si=(GYM_SEQ.indexOf(lastType)+1)%GYM_SEQ.length;
+    for(const i of tentativeGymDays){
+      if(locked[i]){if(locked[i]==='LEGS')legsIdx=i;}
+      else{if(GYM_SEQ[si]==='LEGS')legsIdx=i;si=(si+1)%GYM_SEQ.length;}
+    }
+  }
+  const postLegsIdx=legsIdx>=0?(legsIdx+1)%7:-1;
+
+  // Pick long ride day: best weather overall
+  // Pick short (quality) ride day: best weather that is NOT the day after LEGS
+  const longCandidates=[...ranked];
+  const shortCandidates=[...ranked].map(r=>({...r,s:r.i===postLegsIdx?r.s-40:r.s})).sort((a,b)=>b.s-a.s);
+  const r1=longCandidates[0];
+  const r2=shortCandidates.find(r=>r.i!==r1.i)||shortCandidates[1];
+
   const t1=bikePref==='indoor'?'LONG_INDOOR':r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR';
   const t2=bikePref==='indoor'?'SHORT_INDOOR':r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR';
   const rideSet=new Set([r1.i,r2.i]);
   const rest5=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i));
-  // Rest day: day after long ride if available, else lowest-score non-ride day
   let restIdx=(r1.i+1)%7;
-  if(!rest5.includes(restIdx)){restIdx=rest5[rest5.length-1];}
+  if(!rest5.includes(restIdx))restIdx=rest5[rest5.length-1];
   const gymDays=rest5.filter(i=>i!==restIdx);
-  // LEGS: pick day farthest from rides
-  const rideArr=[r1.i,r2.i];
-  const legsDay=gymDays.reduce((best,i)=>{
-    const dist=Math.min(...rideArr.map(r=>Math.min(Math.abs(i-r),(7-Math.abs(i-r)))));
-    const bdist=Math.min(...rideArr.map(r=>Math.min(Math.abs(best-r),(7-Math.abs(best-r)))));
-    return dist>bdist?i:best;
-  },gymDays[0]);
-  const others=gymDays.filter(i=>i!==legsDay);
   const asgn={};
-  asgn[legsDay]='LEGS';
-  ['PUSH','PULL','UPPER_PUMP'].forEach((t,i)=>{if(others[i]!==undefined)asgn[others[i]]=t;});
+  assignGym(gymDays,asgn);
   return wdays.map((w,i)=>{
     let type;
     if(i===r1.i)type=t1;
     else if(i===r2.i)type=t2;
     else if(i===restIdx)type='REST';
     else type=asgn[i]||'REST';
-    return mk(w,type);
+    return mk(w,type,i);
   });
 }
 
@@ -637,7 +1182,7 @@ function genSession(type,energy='okay'){
   const recent=DB.get('recent_ex',[]);
   const picked=[];
   for(const candidates of slots){
-    let avail=candidates.filter(id=>!picked.includes(id));
+    let avail=filterSlot(candidates).filter(id=>!picked.includes(id));
     if(!avail.length)continue;
     // Filter by energy level — prefer compound when fresh, isolation when tired/sore
     if(energy==='fresh'){
@@ -806,17 +1351,25 @@ function rLock(){
   const hasPIN=!!DB.get('pin',null);
   // Show welcome/choose screen first, then PIN pad
   if(S.lockMode==='choose'){
-    const fbUser=DB.get('fb_user',null);
+    const isNew=S._authNew||false;
     return`<div class="lock-wrap">
 <div class="lock-logo">🧠</div>
 <div class="lock-title">Training Brain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
 <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px">
-  <input id="auth-email" type="email" placeholder="Email" autocomplete="email" value="${fbUser?.email||''}" style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
-  <input id="auth-pass" type="password" placeholder="Password" autocomplete="current-password" style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+  <input id="auth-user" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false"
+    style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+  <input id="auth-pass" type="password" placeholder="Password" autocomplete="${isNew?'new-password':'current-password'}"
+    style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+  ${isNew?`<input id="auth-recovery" type="email" placeholder="Recovery email (optional)" autocomplete="email"
+    style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">`:''}
   <div id="auth-err" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;line-height:1.4"></div>
-  <button class="btn btn-p" onclick="doAuth(false)" style="padding:16px;font-size:16px">Sign In</button>
-  <button class="btn btn-s" onclick="doAuth(true)" style="padding:14px;font-size:14px">Create Account</button>
+  ${isNew
+    ?`<button class="btn btn-p" onclick="doAuth(true)" style="padding:16px;font-size:16px">Create Account</button>
+       <button class="btn btn-s" onclick="S._authNew=false;render()" style="padding:14px;font-size:14px">← Back to Sign In</button>`
+    :`<button class="btn btn-p" onclick="doAuth(false)" style="padding:16px;font-size:16px">Sign In</button>
+       <button class="btn btn-s" onclick="S._authNew=true;render()" style="padding:14px;font-size:14px">Create Account</button>`
+  }
   <div style="text-align:center;margin-top:2px">
     <button onclick="enterGuest()" style="background:none;border:none;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;padding:8px 20px">👁 Continue as Guest</button>
   </div>
@@ -898,15 +1451,6 @@ function goToPIN(){
   S.lockMode=hasPIN?'unlock':'setup';
   render();
 }
-async function connectAndEnter(){
-  const pat=prompt('Paste your GitHub Personal Access Token\n\nGet one at:\ngithub.com → Settings → Developer settings\n→ Personal access tokens (classic)\n→ Generate new token → tick "gist" scope');
-  if(!pat||!pat.trim()){alert('No token entered. You can connect later in the PRs tab.');skipGistSetup();return;}
-  DB.set('gh_pat',pat.trim());localStorage.removeItem('gh_gist');
-  S.authed=true;S.lockMode='choose';
-  await syncToGist();
-  render();
-  alert('✅ Connected! All your data now saves to GitHub automatically.');
-}
 function skipGistSetup(){
   S.authed=true;S.lockMode='choose';render();
 }
@@ -923,7 +1467,7 @@ function updatePinDots(){
 function checkPin(){
   const saved=DB.get('pin',null);
   if(saved){
-    if(_pinBuf===saved){S.authed=true;_pinBuf='';syncFromGist().then(()=>render());render();}
+    if(_pinBuf===saved){S.authed=true;_pinBuf='';syncDown().then(()=>render());render();}
     else{errPin();_pinBuf='';}
   } else {
     if(S.lockMode==='setup'){
@@ -950,10 +1494,21 @@ function enterGuest(){
 }
 function lockApp(){S.authed=false;S.guest=false;_pinBuf='';S.lockMode='choose';render();}
 
-// Only blocks cloud-specific actions (export/import/sync), not regular app use
-function noGuest(){
-  if(S.guest){alert('Sign in to use this feature. Tap "Exit Guest" in the banner.');return true;}
-  return false;
+function guestLogBlock(){
+  if(!S.guest)return false;
+  showToast('Sign in to save your workouts 👆','#f59e0b');
+  return true;
+}
+
+function showToast(msg,color='var(--acc)'){
+  let t=document.getElementById('_toast');
+  if(!t){t=document.createElement('div');t.id='_toast';
+    t.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 20px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;transition:all .25s;opacity:0;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+    document.body.appendChild(t);}
+  t.style.color=color;t.textContent=msg;
+  t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';
+  clearTimeout(t._tid);
+  t._tid=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(10px)';},2400);
 }
 
 function toggleExCollapse(i,isDone){
@@ -995,9 +1550,12 @@ function initFirebase(){
     _fbAuth=firebase.auth(_fb);
     _fbDb=firebase.database(_fb);
     // When Firebase resolves its own session (handles PWA re-open on iOS)
-    _fbAuth.onAuthStateChanged(user=>{
+    _fbAuth.onAuthStateChanged(async user=>{
       if(user){
-        S.fbUser={uid:user.uid,name:user.displayName||user.email.split('@')[0],email:user.email};
+        // Derive username from internal email (username@training-brain.app) or cached
+        const cached=DB.get('fb_user',null);
+        const username=cached?.username||(user.email.endsWith('@training-brain.app')?user.email.split('@')[0]:null)||user.displayName||user.email.split('@')[0];
+        S.fbUser={uid:user.uid,name:username,email:user.email,username};
         DB.set('fb_user',S.fbUser);
         // Auto-unlock if no PIN set — user already authenticated
         if(!S.authed&&!DB.get('pin',null)){S.authed=true;render();}
@@ -1023,40 +1581,57 @@ async function signInGoogle(){
 }
 
 async function doAuth(isNew){
-  const emailEl=document.getElementById('auth-email');
+  const userEl=document.getElementById('auth-user');
   const passEl=document.getElementById('auth-pass');
+  const recoveryEl=document.getElementById('auth-recovery');
   const errEl=document.getElementById('auth-err');
-  const email=(emailEl?.value||'').trim();
+  const username=(userEl?.value||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
   const pass=passEl?.value||'';
+  const recovery=(recoveryEl?.value||'').trim()||null;
   if(errEl)errEl.textContent='';
-  if(!email||!pass){if(errEl)errEl.textContent='Please enter your email and password.';return;}
+  if(!username){if(errEl)errEl.textContent='Enter a username.';return;}
+  if(username.length<3){if(errEl)errEl.textContent='Username must be at least 3 characters.';return;}
+  if(!pass){if(errEl)errEl.textContent='Enter a password.';return;}
   if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your internet connection.';return;}
-  // Show loading state
   const btn=document.querySelector('.btn-p');if(btn){btn.textContent='…';btn.disabled=true;}
+  // Internal Firebase email derived from username
+  const internalEmail=username+'@training-brain.app';
   try{
     let result;
     if(isNew){
-      result=await _fbAuth.createUserWithEmailAndPassword(email,pass);
+      // Check username not taken
+      const snap=await _fbDb.ref('usernames/'+username).once('value');
+      if(snap.exists()){
+        if(errEl)errEl.textContent='Username already taken — choose another.';
+        if(btn){btn.textContent='Create Account';btn.disabled=false;}
+        return;
+      }
+      result=await _fbAuth.createUserWithEmailAndPassword(internalEmail,pass);
+      // Store username → uid mapping and optional recovery email
+      await _fbDb.ref('usernames/'+username).set({uid:result.user.uid,created:new Date().toISOString()});
+      if(recovery)await _fbDb.ref('users/'+result.user.uid+'/profile').set({username,recovery});
+      else await _fbDb.ref('users/'+result.user.uid+'/profile').set({username});
     }else{
-      result=await _fbAuth.signInWithEmailAndPassword(email,pass);
+      // Sign in: look up username → internal email
+      result=await _fbAuth.signInWithEmailAndPassword(internalEmail,pass);
     }
-    S.fbUser={uid:result.user.uid,name:result.user.displayName||email.split('@')[0],email:result.user.email};
+    S.fbUser={uid:result.user.uid,name:username,email:internalEmail,username};
     DB.set('fb_user',S.fbUser);
+    S._authNew=false;
     S.authed=true;S.lockMode='choose';
     await loadFromCloud();
     render();
   }catch(e){
     const msgs={
-      'auth/user-not-found':'No account with this email — try "Create Account".',
+      'auth/user-not-found':'No account with that username — try "Create Account".',
       'auth/wrong-password':'Wrong password. Try again.',
-      'auth/invalid-credential':'Wrong email or password.',
-      'auth/email-already-in-use':'Email already registered — use "Sign In".',
+      'auth/invalid-credential':'Wrong username or password.',
+      'auth/email-already-in-use':'Username already taken — choose another.',
       'auth/weak-password':'Password must be at least 6 characters.',
-      'auth/invalid-email':'Enter a valid email address.',
       'auth/too-many-requests':'Too many attempts. Try again later.',
     };
     if(errEl)errEl.textContent=msgs[e.code]||('Error: '+e.message);
-    if(btn){btn.textContent='Sign In';btn.disabled=false;}
+    if(btn){btn.textContent=isNew?'Create Account':'Sign In';btn.disabled=false;}
   }
 }
 
@@ -1106,8 +1681,9 @@ function changePIN(){
   lockApp();
 }
 // Legacy stubs so old references don't break
-const syncToGist=saveToCloud;
-const syncFromGist=loadFromCloud;
+// Legacy names kept as clear aliases — sync is Firebase, not GitHub Gist
+const syncUp=saveToCloud;
+const syncDown=loadFromCloud;
 
 /* ── NAVIGATION ── */
 function go(screen,opts={}){
@@ -1155,7 +1731,7 @@ function rWeek(){
 </div>
 ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit Guest →</button></div>`:''}
 ${pat
-  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'Not synced yet':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:'Synced '+lastSync.slice(0,10)}</span><button onclick="syncToGist(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button></div>`
+  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'Not synced yet':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:'Synced '+lastSync.slice(0,10)}</span><button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button></div>`
   :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">⚠️ Saving locally only — data lost if Safari is cleared</span><button onclick="go('prs')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
 }
 
@@ -1285,7 +1861,7 @@ function rExList(dp,log){
   <div class="ex-banner" onclick="event.stopPropagation();toggleExCollapse(${i},${isDone})">
     <span class="ex-num-i">${i+1}</span>
     <span class="ex-num-n">${ex.n}</span>
-    <span class="ex-banner-chev">▾</span>
+    <span class="ex-banner-chev" style="background:rgba(0,0,0,.4);border-radius:100px;padding:2px 7px;font-size:11px">▾ collapse</span>
   </div>
   <button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ Animate</button>
   <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 Tutorial</button>
@@ -1297,22 +1873,54 @@ function rExList(dp,log){
     ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
   </div>
+  ${EX_CUES[id]?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:7px;padding:7px 10px;background:var(--s2);border-radius:9px;border-left:2px solid var(--acc)">💡 ${EX_CUES[id]}</div>`:''}
   <div style="display:flex;gap:7px;margin-top:9px">
     <button class="ex-busy-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openExSwap('${id}',${i},'${dp.date}','${dp.type}')">🔄 Busy?</button>
     <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--al);border-color:rgba(167,139,250,.3)" onclick="event.stopPropagation();openExLog('${id}',${i},'${dp.date}')">📝 Log sets</button>
+    <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--grn);border-color:rgba(16,185,129,.3)" onclick="event.stopPropagation();openExCoach('${id}')">🤖 Coach</button>
   </div>
+  <button onclick="event.stopPropagation();toggleExCollapse(${i},${isDone})" style="width:100%;margin-top:10px;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:700;padding:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;-webkit-appearance:none">▲ Collapse</button>
 </div>
 </div>`;
   }).join('')}</div>`;
 }
 
 function rRideCard(dp){
-  const tips=RIDE_TIPS[dp.type]||RIDE_TIPS.SHORT_OUTDOOR;
   const indoor=dp.type.includes('INDOOR');
-  return`<div class="ride-card">
-<span class="ride-icon">${indoor?'🚲':'🚴'}</span>
-<div class="ride-lbl">${indoor?'Indoor Ride':'Outdoor Ride'}</div>
-<ul class="tips">${tips.map(t=>`<li><span class="ta">→</span><span>${t}</span></li>`).join('')}</ul>
+  const s=getRideSession(dp.type);
+  const isRec=s.phase==='Recovery week';
+  const actual=stravaRideOnDate(dp.date);
+  const actualHtml=actual?`
+<div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
+  <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
+  <div style="display:flex;gap:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${(actual.distance/1000).toFixed(1)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">km</div></div>
+    <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.moving_time/60)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">min</div></div>
+    ${actual.average_heartrate?`<div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_heartrate)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg bpm</div></div>`:''}
+    ${actual.average_watts?`<div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg W</div></div>`:''}
+    <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>
+  </div>
+  ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${actual.name}"</div>`:''}
+</div>`:'';
+  return`<div class="ride-card" style="text-align:left">
+<div style="text-align:center;margin-bottom:14px">
+  <span class="ride-icon">${indoor?'🚲':'🚴'}</span>
+  <div class="ride-lbl" style="margin-bottom:5px">${s.name}</div>
+  <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+    <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
+    <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">⏱ ${s.total} min</span>
+    <span class="bdg" style="background:${isRec?'rgba(16,185,129,.14)':'rgba(245,158,11,.14)'};color:${isRec?'var(--grn)':'var(--amb)'}">${s.phase}</span>
+  </div>
+</div>
+${actualHtml}
+${actual?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">📋 Today's plan</div>`:''}
+<div style="display:flex;flex-direction:column;gap:8px;margin-bottom:13px">
+  ${s.blocks.map(b=>`<div style="display:flex;gap:11px;align-items:flex-start;background:var(--s2);border-radius:12px;padding:11px 13px">
+    <span style="font-size:12px;font-weight:800;color:#60a5fa;background:rgba(59,130,246,.12);border-radius:8px;padding:5px 8px;flex-shrink:0;min-width:66px;text-align:center">${b.t}</span>
+    <span style="font-size:13px;line-height:1.5;color:var(--txt)">${b.d}</span>
+  </div>`).join('')}
+</div>
+<div style="font-size:12px;color:var(--t2);line-height:1.6;background:rgba(59,130,246,.06);border-left:2px solid var(--blu);border-radius:8px;padding:9px 12px">💡 ${s.focus}</div>
 </div>`;
 }
 
@@ -1452,6 +2060,7 @@ function updSet(ei,si,field,val){
 
 function togSet(ei,si){
   if(!S.activeLog)return;
+  if(guestLogBlock())return;
   const le=S.activeLog.exercises[ei];
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
@@ -1485,6 +2094,7 @@ function togSet(ei,si){
 
 function addSet(ei){
   if(!S.activeLog)return;
+  if(guestLogBlock())return;
   const le=S.activeLog.exercises[ei];if(!le)return;
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
@@ -1522,6 +2132,60 @@ function prToast(name){
   t._tid=setTimeout(()=>{t.classList.remove('on');},2800);
 }
 
+function deletePR(id){
+  const ex=EX[id];const prs=DB.get('prs',{});const pr=prs[id];if(!pr)return;
+  const u=unit();
+  // Confirmation sheet
+  const sheet=document.createElement('div');
+  sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end;';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+22px);max-width:430px;margin:0 auto;width:100%">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:6px">Delete PR?</div>
+  <div style="font-size:14px;color:var(--t2);margin-bottom:20px">${ex?.n||id} — 🏆 ${pr.w}${u} × ${pr.r} on ${pr.date}</div>
+  <button onclick="(()=>{const p=DB.get('prs',{});delete p['${id}'];DB.set('prs',p);this.closest('[style*=inset]').remove();render();})()" style="width:100%;background:var(--red);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Yes, delete it</button>
+  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
+</div>`;
+  document.body.appendChild(sheet);
+}
+
+function editPR(id){
+  const ex=EX[id];const prs=DB.get('prs',{});const pr=prs[id];if(!pr)return;
+  const u=unit();
+  const sheet=document.createElement('div');
+  sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end;';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+22px);max-width:430px;margin:0 auto;width:100%">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">Edit PR</div>
+  <div style="font-size:13px;color:var(--t2);margin-bottom:18px">${ex?.n||id}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">Weight (${u})</div>
+      <input id="pr-edit-w" type="number" value="${pr.w}" inputmode="decimal" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:22px;font-weight:700;padding:12px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">Reps</div>
+      <input id="pr-edit-r" type="number" value="${pr.r}" inputmode="numeric" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:22px;font-weight:700;padding:12px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--t2);margin-bottom:18px;text-align:center">Current: ${pr.w}${u} × ${pr.r} on ${pr.date}</div>
+  <button id="pr-edit-confirm" onclick="(()=>{
+    const w=parseFloat(document.getElementById('pr-edit-w').value);
+    const r=parseInt(document.getElementById('pr-edit-r').value);
+    if(!w||!r||w<=0||r<=0){document.getElementById('pr-edit-confirm').style.background='var(--red)';setTimeout(()=>document.getElementById('pr-edit-confirm').style.background='var(--acc)',800);return;}
+    const p=DB.get('prs',{});
+    p['${id}']={w,r,date:fd(new Date())};
+    DB.set('prs',p);
+    this.closest('[style*=inset]').remove();
+    render();
+  })()" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Save changes</button>
+  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
+</div>`;
+  document.body.appendChild(sheet);
+  setTimeout(()=>document.getElementById('pr-edit-w')?.focus(),300);
+}
+
 function adjW(ei,si,dir){
   if(!S.activeLog)return;
   const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
@@ -1550,7 +2214,7 @@ function completeWk(){
   const ids=S.activeLog.exercises.map(e=>e.id);
   const recent=DB.get('recent_ex',[]);
   DB.set('recent_ex',[...new Set([...ids,...recent])].slice(0,40));
-  syncToGist();
+  syncUp();
   go('day',{viewDate:S.viewDate});
 }
 
@@ -1571,7 +2235,7 @@ function rPRs(){
 <div class="sec-hdr">☁️ Cloud sync</div>
 ${S.fbUser
   ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
-      <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.email}</span><br>
+      <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span><br>
       <span style="color:var(--t2)">Last sync: ${(DB.get('fb_last_sync','Never')||'Never').slice(0,16).replace('T',' ')}</span>
     </div>
     <div class="data-btns">
@@ -1600,15 +2264,33 @@ ${S.fbUser
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
     <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
   </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">Coaching is personalised to your exercises, PRs and energy level.</div>
-  <div style="font-size:11px;color:var(--t2)">Optional: override with your own key</div>
-  <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
-    <input id="gemini-key-inp" type="password" placeholder="Paste custom key to override…" value="${DB.get('gemini_key','')}"
-      style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--txt);outline:none;-webkit-appearance:none">
-    <button onclick="(()=>{const v=document.getElementById('gemini-key-inp').value.trim();DB.set('gemini_key',v);Object.keys(_coachCache).forEach(k=>delete _coachCache[k]);const b=this;b.textContent='✓';setTimeout(()=>b.textContent='Save',1200);})()"
-      style="background:var(--s2);color:var(--txt);border:1px solid var(--bord);border-radius:10px;padding:9px 14px;font-size:12px;font-weight:700;cursor:pointer;-webkit-appearance:none;flex-shrink:0">Save</button>
-  </div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5">Coaching is personalised to your exercises, PRs and energy level. Powered by Gemini 1.5 Flash.</div>
 </div>
+
+<div class="sec-hdr">🏋️ Gym Profile</div>
+${(()=>{
+  const gid=DB.get('gym_profile',null);
+  const isHome=gid==='home';
+  const homeEquip=DB.get('home_equip',[]);
+  const curGym=gid!=='home'?GYMS_BUILTIN[gid]:null;
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${isHome?'12px':'0'}">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:${!gid?'var(--t2)':'var(--txt)'};margin-bottom:2px">${curGym?curGym.area:isHome?'🏠 Home Gym':'No gym selected'}</div>
+      <div style="font-size:11px;color:var(--t2)">${curGym?`${curGym.chain} · ${curGym.city}`:isHome?'Custom equipment':'Tap Change to set your gym'}</div>
+    </div>
+    <button onclick="openGymPicker()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;flex-shrink:0">Change</button>
+  </div>
+  ${isHome?`<div style="border-top:1px solid var(--bord);padding-top:12px">
+    <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:10px">Your equipment:</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${EQUIP_ALL.map(e=>`<label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" value="${e.id}" ${homeEquip.includes(e.id)?'checked':''} onchange="(()=>{const h=DB.get('home_equip',[]);const v='${e.id}';if(this.checked){if(!h.includes(v))h.push(v);}else{const i=h.indexOf(v);if(i>-1)h.splice(i,1);}DB.set('home_equip',h);})()" style="accent-color:var(--acc);width:16px;height:16px">
+        <span style="font-size:13px;color:var(--txt)">${e.label}</span>
+      </label>`).join('')}
+    </div>
+  </div>`:''}
+</div>`;})()}
 
 <div class="sec-hdr">🚴 Biking preference</div>
 ${(()=>{const p=DB.get('bike_pref','weather');return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
@@ -1630,10 +2312,61 @@ ${(()=>{const p=DB.get('bike_pref','weather');return`<div style="background:var(
   <div style="margin-top:12px;font-size:11px;color:var(--t2)">⚠️ Changing this will affect newly generated weeks, not existing plans.</div>
 </div>`})()}
 
+<div class="sec-hdr">🚴 Cycling Plan Setup</div>
+${(()=>{
+  const setup=DB.get('bike_setup',null);
+  const factor=DB.get('bike_adapt_factor',1.0);
+  const checked=DB.get('bike_adapt_check',null);
+  const goalLabel={base:'Build aerobic base',event:'Train for an event',active:'Stay active'}[setup?.goal]||'—';
+  if(setup)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:80px;background:var(--s2);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:20px;font-weight:800">${setup.dur}<span style="font-size:11px;font-weight:600;color:var(--t2)"> min</span></div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px">Starting ride</div>
+    </div>
+    <div style="flex:2;min-width:120px;background:var(--s2);border-radius:10px;padding:10px">
+      <div style="font-size:13px;font-weight:700">${goalLabel}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">Adapt factor: ${factor.toFixed(2)}${factor>1?'  📈':factor<1?'  📉':''}</div>
+      ${checked?`<div style="font-size:10px;color:var(--t2)">Last checked: ${checked}</div>`:''}
+    </div>
+  </div>
+  <button onclick="openBikeSetup()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--al);font-size:13px;font-weight:700;padding:10px;cursor:pointer">✏️ Edit cycling setup</button>
+</div>`;
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Set up your cycling plan</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Takes 30 seconds. Personalises your ride durations and progression to your current fitness.</div>
+  <button onclick="openBikeSetup()" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:13px;cursor:pointer">🚴 Set up my plan</button>
+</div>`;
+})()}
+
+<div class="sec-hdr">🟠 Strava · Garmin Sync</div>
+${(()=>{
+  const tok=DB.get('strava_token',null);
+  const acts=DB.get('strava_activities')||[];
+  const lastSync=DB.get('strava_last_sync',null);
+  if(tok)return`<div style="background:var(--s1);border:1px solid rgba(252,76,2,.25);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="font-size:28px;line-height:1">🟠</div>
+    <div><div style="font-size:14px;font-weight:700">Strava connected</div>
+    <div style="font-size:11px;color:var(--t2)">${tok.athlete?.name||'Athlete'} · ${acts.length} ride${acts.length!==1?'s':''} synced</div></div>
+  </div>
+  ${lastSync?`<div style="font-size:11px;color:var(--t2);margin-bottom:10px">Last sync: ${lastSync.slice(0,16).replace('T',' ')}</div>`:''}
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Ride data (distance, HR, power) appears automatically on your ride day cards. Garmin activities sync to Strava, then here.</div>
+  <div class="data-btns">
+    <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Sync rides</button>
+    <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
+  </div></div>`;
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Connect Strava</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Your Garmin auto-syncs to Strava. Once connected, actual ride data (distance, HR, power) shows up right on your ride day cards — no manual logging.</div>
+  <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">🟠 Connect Strava</button>
+</div>`;
+})()}
+
 <div class="sec-hdr">🏆 Personal Records</div>
 ${!prKeys.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:8px">No PRs yet — log a workout to start tracking</div>`
-  :`<div class="prs-list">${prKeys.map(id=>{const ex=EX[id];if(!ex)return'';const pr=prs[id];return`<div class="pr-row"><div class="pr-row-name">${ex.n}</div><div class="pr-row-val">🏆 ${pr.w}kg × ${pr.r}</div><div class="pr-row-date">${pr.date}</div></div>`;}).join('')}</div>`}
+  :`<div class="prs-list">${prKeys.map(id=>{const ex=EX[id];if(!ex)return'';const pr=prs[id];const u=unit();return`<div class="pr-row"><div class="pr-row-name">${ex.n}</div><div class="pr-row-val">🏆 ${pr.w}${u} × ${pr.r}</div><div class="pr-row-date">${pr.date}</div><div style="display:flex;gap:6px;margin-top:8px;width:100%"><button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button><button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">🗑 Delete</button></div></div>`;}).join('')}</div>`}
 
 <div class="sec-hdr">📋 Workout History</div>
 ${!history.length
@@ -1650,7 +2383,7 @@ ${!history.length
     ${exsDone.map(le=>{
       const ex=EX[le.id];if(!ex)return'';
       const doneSets=le.sets.filter(s=>s.done);
-      return`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:3px">${ex.n}</div>${doneSets.map((s,i)=>`<div class="hist-set">Set ${i+1}: ${s.w?s.w+'kg':'—'} × ${s.r||'—'} reps</div>`).join('')}</div>`;
+      return`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:3px">${ex.n}</div>${doneSets.map((s,i)=>`<div class="hist-set">Set ${i+1}: ${s.w?s.w+unit():'—'} × ${s.r||'—'} reps</div>`).join('')}</div>`;
     }).join('')}
   </div>
 </div>`;}).join('')}
@@ -1665,6 +2398,87 @@ ${!history.length
 function togHist(hi){
   const el=document.getElementById('hd'+hi);
   if(el)el.classList.toggle('open');
+}
+
+function openGymPicker(){
+  const gid=DB.get('gym_profile',null);
+  // Build city → brand → locations hierarchy
+  const tree={};
+  Object.entries(GYMS_BUILTIN).forEach(([k,g])=>{
+    if(!tree[g.city])tree[g.city]={};
+    if(!tree[g.city][g.chain])tree[g.city][g.chain]=[];
+    tree[g.city][g.chain].push([k,g]);
+  });
+  function dot(sel){
+    return`<div style="width:18px;height:18px;border-radius:50%;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'var(--acc)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s">
+      ${sel?'<div style="width:7px;height:7px;border-radius:50%;background:#fff"></div>':''}
+    </div>`;
+  }
+  function gymRow(k,g){
+    const sel=gid===k;
+    return`<div class="gp-row" data-gym="${k}" data-search="${g.area.toLowerCase()} ${g.chain.toLowerCase()} ${g.city.toLowerCase()}"
+      onclick="DB.set('gym_profile','${k}');document.getElementById('gym-picker').remove();render()"
+      style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;border:1px solid ${sel?'var(--acc)':'transparent'};background:${sel?'rgba(124,58,237,.08)':'transparent'};margin-bottom:2px;cursor:pointer">
+      ${dot(sel)}
+      <div style="font-size:13px;font-weight:${sel?'700':'500'};color:${sel?'var(--txt)':'var(--t2)'}">${g.area}</div>
+    </div>`;
+  }
+  const listHtml=Object.entries(tree).map(([city,brands])=>`
+    <div class="gym-city-hdr" style="font-size:12px;font-weight:800;color:var(--txt);margin:16px 0 8px;padding-left:2px;display:flex;align-items:center;gap:6px">
+      <span style="background:var(--s3);border-radius:7px;padding:4px 10px">📍 ${city}</span>
+    </div>
+    ${Object.entries(brands).map(([brand,locs])=>`
+      <div style="margin-bottom:8px">
+        <div style="font-size:11px;font-weight:700;color:var(--al);padding:3px 10px;margin-bottom:3px">${brand}</div>
+        <div style="border-left:2px solid var(--bord);margin-left:10px;padding-left:6px">
+          ${locs.map(([k,g])=>gymRow(k,g)).join('')}
+        </div>
+      </div>`).join('')}`).join('')+
+  `<div style="font-size:12px;font-weight:800;color:var(--txt);margin:16px 0 8px;padding-left:2px">
+    <span style="background:var(--s3);border-radius:7px;padding:4px 10px">🏠 Home / Custom</span>
+  </div>
+  <div class="gp-row" data-gym="home" data-search="home gym custom"
+    onclick="DB.set('gym_profile','home');document.getElementById('gym-picker').remove();render()"
+    style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;border:1px solid ${gid==='home'?'var(--acc)':'transparent'};background:${gid==='home'?'rgba(124,58,237,.08)':'transparent'};cursor:pointer">
+    ${dot(gid==='home')}
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--txt)">Home Gym</div>
+      <div style="font-size:11px;color:var(--t2)">Choose your own equipment</div>
+    </div>
+  </div>`;
+  const sheet=document.createElement('div');
+  sheet.id='gym-picker';
+  sheet.style.cssText='position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;justify-content:flex-end';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:18px 16px calc(var(--sb)+18px);max-width:430px;margin:0 auto;width:100%;max-height:88vh;display:flex;flex-direction:column">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 14px"></div>
+  <div style="font-size:17px;font-weight:800;margin-bottom:12px">Select Your Gym</div>
+  <input id="gps-input" type="text" placeholder="🔍  Search by gym, brand or city…" oninput="filterGymPicker(this.value)"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:14px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:4px;-webkit-appearance:none;flex-shrink:0">
+  <div id="gps-list" style="overflow-y:auto;flex:1;padding-top:2px">${listHtml}</div>
+</div>`;
+  document.body.appendChild(sheet);
+  setTimeout(()=>document.getElementById('gps-input')?.focus(),200);
+}
+
+function filterGymPicker(q){
+  const list=document.getElementById('gps-list');if(!list)return;
+  const term=q.trim().toLowerCase();
+  list.querySelectorAll('.gp-row').forEach(row=>{
+    const hay=row.dataset.search||row.textContent.toLowerCase();
+    row.style.display=(!term||hay.includes(term))?'':'none';
+  });
+  list.querySelectorAll('.gym-city-hdr').forEach(hdr=>{
+    let sib=hdr.nextElementSibling;let vis=false;
+    while(sib&&sib.classList?.contains('gp-row')){if(sib.style.display!=='none')vis=true;sib=sib.nextElementSibling;}
+    hdr.style.display=(vis||!term)?'':'none';
+  });
+}
+
+function filterGyms(q){
+  const list=document.getElementById('gym-list');if(!list)return;
+  const term=q.trim().toLowerCase();
+  list.querySelectorAll('label').forEach(lbl=>{lbl.style.display=(!term||lbl.textContent.toLowerCase().includes(term))?'':'none';});
 }
 
 /* ── SWAP MODAL ── */
@@ -1690,7 +2504,7 @@ function doSwap(ds,newType){
   plan[di].type=newType;
   plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(newType)?genSession(newType):null;
   DB.set(pk,plan);
-  closeSwap();syncToGist();render();
+  closeSwap();syncUp();render();
 }
 
 /* ── EXERCISE SWAP (busy machine / in-session) ── */
@@ -1874,15 +2688,22 @@ function bindEnergy(){
       const isRide=dp&&['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
       const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP'].includes(dp.type);
       const ct=isRide?'ride':isGym?'gym':'rest';
-      // Update coach message — async if AI key present
+      // Update coach message — show default immediately, upgrade to AI quietly
       const card=document.getElementById('coach-card');
       if(card){
         const p=card.querySelector('p');
-        p.innerHTML='<span style="opacity:.5;font-style:italic">✨ Coaching you…</span>';
+        const defaultMsg=COACH[b.dataset.e][ct];
+        p.style.transition='';p.style.opacity='1';
+        p.textContent=defaultMsg;
         card.classList.add('on');
         getAICoach(b.dataset.e,ct,dp).then(msg=>{
           const c2=document.getElementById('coach-card');
-          if(c2){c2.querySelector('p').textContent=msg;}
+          if(c2&&msg&&msg!==defaultMsg){
+            const p2=c2.querySelector('p');
+            p2.style.transition='opacity .35s ease';
+            p2.style.opacity='0';
+            setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
+          }
         });
       }
       // Swap exercises based on energy — gym days only
@@ -1973,6 +2794,13 @@ function init(){
   S.weekStart=getMon(today);
   const dow=today.getDay();
   if(dow===0||dow===6)S.weekStart=getMon(addDays(today,7));
+  // Handle Strava OAuth callback (?code=... in URL after redirect)
+  const _qp=new URLSearchParams(window.location.search);
+  const _stravaCode=_qp.get('code');
+  if(_stravaCode&&!_qp.get('error')){
+    S.authed=true; // auto-unlock so user lands on the app
+    stravaExchangeCode(_stravaCode);
+  }
   render();
   loadGifDb();
   // Unregister any old service workers to prevent stale caching
