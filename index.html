@@ -716,9 +716,13 @@ async function getAICoach(energy,ct,dp){
     if(dd&&DB.get(DB.lk(d),null)?.exercises?.some(e=>e.sets.some(s=>s.done))){lastDone=i===1?'yesterday':`${i} days ago`;break;}
   }
 
+  const profile=DB.get('user_profile',null);
+  const goalDesc={muscle:'build muscle and strength',lose_weight:'lose weight and recomp',fitness:'general fitness',endurance:'endurance and event prep',performance:'sport performance'}[profile?.goal]||'general fitness';
   const prompt=`You are a no-nonsense personal trainer. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences max — specific, direct, no fluff. You have real performance data — use it. Reference exercises, weights, and completion rates by name.
 
 Athlete data:
+- Main goal: ${goalDesc}
+- Experience: ${profile?.level||'intermediate'}
 - Workout: ${dp?.type||ct}
 - Sessions completed this week: ${weekSessions}
 - Last ${dp?.type||ct}: ${lastDone}
@@ -874,6 +878,118 @@ Rules: 1–2 sentences per section. Under 200 words total. Be precise and direct
     const cue=EX_CUES[id]||'Focus on full range of motion and controlled tempo.';
     if(el)el.innerHTML=`<div style="background:var(--s2);border-radius:12px;padding:14px;font-size:14px;color:var(--t2);line-height:1.7"><em>${cue}</em></div>`;
   }
+}
+
+/* ── GOALS ONBOARDING ── */
+function openGoalsSetup(isEdit=false){
+  const cur=DB.get('user_profile',{});
+  let step=1;
+  let selGoal=cur.goal||null;
+  let selActs=new Set(cur.activities||[]);
+  let selDays=cur.days||4;
+  let selLevel=cur.level||'intermediate';
+
+  const goals=[
+    {v:'muscle',  i:'💪', l:'Build muscle & strength', d:'Prioritise lifting, progressive overload'},
+    {v:'lose_weight',i:'🔥',l:'Lose weight',          d:'Cardio + weights, calorie-burning focus'},
+    {v:'fitness', i:'⚡', l:'General fitness',         d:'Stay active, balanced mix of everything'},
+    {v:'endurance',i:'🚴',l:'Endurance / event prep', d:'Build aerobic base, train for an event'},
+    {v:'performance',i:'🏆',l:'Sport performance',    d:'Power, speed, and sport-specific training'},
+  ];
+  const acts=[
+    {v:'gym',    i:'🏋️', l:'Gym / Weights'},
+    {v:'cycling',i:'🚴', l:'Cycling'},
+    {v:'running',i:'🏃', l:'Running'},
+    {v:'cardio', i:'🪜', l:'Other cardio'},
+  ];
+
+  const sheet=document.createElement('div');
+  sheet.id='goals-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end';
+
+  function render(){
+    const s1=step===1,s2=step===2,s3=step===3;
+    sheet.innerHTML=`
+<div onclick="${isEdit?'this.parentElement.remove()':''}" style="flex:1;background:rgba(0,0,0,.${isEdit?'5':'7'})"></div>
+<div style="background:var(--s1);border-radius:22px 22px 0 0;padding:22px 18px calc(env(safe-area-inset-bottom,0px)+28px);max-height:92vh;overflow-y:auto">
+  <div style="width:36px;height:4px;background:var(--bord);border-radius:2px;margin:0 auto 6px"></div>
+  <div style="display:flex;gap:6px;justify-content:center;margin-bottom:20px">
+    ${[1,2,3].map(n=>`<div style="height:3px;width:48px;border-radius:2px;background:${n<=step?'var(--acc)':'var(--s3)'}"></div>`).join('')}
+  </div>
+
+  ${s1?`
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">What's your main goal?</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">This shapes how your plan is built and what your coach focuses on</div>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">
+    ${goals.map(g=>`<div onclick="gsGoal('${g.v}')" id="gsg-${g.v}" style="padding:13px 14px;border-radius:14px;border:2px solid ${selGoal===g.v?'var(--acc)':'var(--bord)'};background:${selGoal===g.v?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;display:flex;align-items:center;gap:12px">
+      <span style="font-size:22px">${g.i}</span>
+      <div><div style="font-size:14px;font-weight:700;color:${selGoal===g.v?'var(--al)':'var(--txt)'}">${g.l}</div><div style="font-size:11px;color:var(--t2);margin-top:1px">${g.d}</div></div>
+    </div>`).join('')}
+  </div>
+  <button onclick="gsNext()" style="width:100%;background:${selGoal?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selGoal?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
+  `:''}
+
+  ${s2?`
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">What do you do?</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Select all that apply — your plan only includes what you actually do</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px">
+    ${acts.map(a=>{const on=selActs.has(a.v);return`<div onclick="gsAct('${a.v}')" id="gsa-${a.v}" style="padding:14px;border-radius:14px;border:2px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;text-align:center">
+      <div style="font-size:26px;margin-bottom:4px">${a.i}</div>
+      <div style="font-size:13px;font-weight:700;color:${on?'var(--al)':'var(--txt)'}">${a.l}</div>
+    </div>`}).join('')}
+  </div>
+  ${selActs.has('running')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🏃 Running tracking is coming soon — you can log runs manually for now</div>`:''}
+  ${selActs.has('cardio')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🪜 Other cardio can be logged as free notes — full planning coming soon</div>`:''}
+  <div style="display:flex;gap:8px">
+    <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
+    <button onclick="gsNext()" style="flex:2;background:${selActs.size>0?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selActs.size>0?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
+  </div>
+  `:''}
+
+  ${s3?`
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">Last few details</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Helps calibrate intensity and volume for your schedule</div>
+
+  <div style="font-size:13px;font-weight:700;margin-bottom:10px">Training days per week</div>
+  <div style="display:flex;gap:8px;margin-bottom:22px">
+    ${[3,4,5,6].map(n=>`<button onclick="gsDays(${n})" style="flex:1;padding:11px 0;border-radius:11px;border:2px solid ${selDays===n?'var(--acc)':'var(--bord)'};background:${selDays===n?'var(--acc)':'var(--s2)'};color:${selDays===n?'#fff':'var(--txt)'};font-size:14px;font-weight:800;cursor:pointer">${n}</button>`).join('')}
+  </div>
+
+  ${selActs.has('gym')?`
+  <div style="font-size:13px;font-weight:700;margin-bottom:10px">Gym experience level</div>
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:22px">
+    ${[{v:'beginner',l:'Beginner',d:'Less than 1 year of consistent training'},{v:'intermediate',l:'Intermediate',d:'1–3 years, comfortable with main lifts'},{v:'advanced',l:'Advanced',d:'3+ years, track PRs, run structured programs'}].map(lv=>`<div onclick="gsLevel('${lv.v}')" style="padding:11px 13px;border-radius:12px;border:2px solid ${selLevel===lv.v?'var(--acc)':'var(--bord)'};background:${selLevel===lv.v?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;display:flex;justify-content:space-between;align-items:center">
+      <div><div style="font-size:13px;font-weight:700;color:${selLevel===lv.v?'var(--al)':'var(--txt)'}">${lv.l}</div><div style="font-size:11px;color:var(--t2)">${lv.d}</div></div>
+      ${selLevel===lv.v?'<span style="color:var(--al);font-size:16px">✓</span>':''}
+    </div>`).join('')}
+  </div>`:''}
+
+  <div style="display:flex;gap:8px">
+    <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
+    <button onclick="gsSave()" style="flex:2;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:800;padding:15px;cursor:pointer">${isEdit?'Save changes':'Let\'s go 🚀'}</button>
+  </div>
+  `:''}
+</div>`;
+
+    window.gsGoal=v=>{selGoal=v;render();};
+    window.gsAct=v=>{selActs.has(v)?selActs.delete(v):selActs.add(v);render();};
+    window.gsDays=n=>{selDays=n;render();};
+    window.gsLevel=v=>{selLevel=v;render();};
+    window.gsNext=()=>{if(step===1&&!selGoal)return;if(step===2&&selActs.size===0)return;step++;render();};
+    window.gsBack=()=>{step--;render();};
+    window.gsSave=()=>{
+      const profile={goal:selGoal,activities:[...selActs],days:selDays,level:selLevel,onboarded:true};
+      DB.set('user_profile',profile);
+      // Apply activities to planner
+      if(!selActs.has('cycling'))DB.set('bike_pref','none');
+      else if(DB.get('bike_pref','none')==='none')DB.set('bike_pref','weather');
+      sheet.remove();
+      render();
+      if(!isEdit)setTimeout(()=>alert('Your plan is ready! Tap "Plan" to see your personalised week.'),300);
+    };
+  }
+  render();
+  document.body.appendChild(sheet);
 }
 
 /* ── STRAVA INTEGRATION ── */
@@ -2058,6 +2174,10 @@ function openDay(dateStr){
 function render(){
   const el=document.getElementById('app');
   if(!S.authed){el.innerHTML=rLock();return;}
+  // Show goals onboarding for new users (not guest — they get a simpler experience)
+  if(!S.guest&&!DB.get('user_profile',null)&&!document.getElementById('goals-sheet')){
+    setTimeout(()=>openGoalsSetup(false),400);
+  }
   if(S.screen==='week')el.innerHTML=rWeek();
   else if(S.screen==='day')el.innerHTML=rDay();
   else if(S.screen==='log')el.innerHTML=rLog();
@@ -2608,8 +2728,20 @@ function rPRs(){
     const log=DB.get(DB.lk(d),null);
     if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push(log);
   }
+  const profile=DB.get('user_profile',null);
+  const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
 <div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Progress · Records · History</div></div>
+
+<div class="sec-hdr">🎯 Your goals</div>
+${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">${goalLabels[profile.goal]||'Goal not set'}</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🪜 Other cardio'})[a]).filter(Boolean).join(' · ')} · ${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}</div>
+  <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
+</div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
+  <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
+</div>`}
 
 <div class="sec-hdr">☁️ Cloud sync</div>
 ${S.fbUser
