@@ -382,6 +382,63 @@ const COACH = {
   sore:{gym:'🤕 Body\'s talking. Warm up 10+ min, reduce weights. If something hurts beyond soreness, skip that movement.',ride:'🤕 If legs are sore, skip or do 10 min very easy spinning only.',rest:'🤕 Gentle mobility only. Prioritise protein and sleep tonight.'},
 };
 
+/* ── AI COACH ── */
+const _coachCache={};
+async function getAICoach(energy,ct,dp){
+  const key=DB.get('gemini_key','');
+  if(!key)return COACH[energy][ct];
+  // Cache per energy+date so it doesn't re-call on every tap
+  const cacheKey=energy+'_'+(dp?.date||'');
+  if(_coachCache[cacheKey])return _coachCache[cacheKey];
+  // Build rich context
+  const prs=DB.get('prs',{});
+  const u=unit();
+  const exList=(dp?.exercises||[]).map(id=>{
+    const ex=EX[id];if(!ex)return null;
+    const pr=prs[id];
+    const tgt=energyTargets(id,energy);
+    return pr
+      ?`${ex.n} (PR: ${pr.w}${u}×${pr.r}, today target ~${tgt.sugW||'?'}${u} × ${tgt.reps})`
+      :`${ex.n} (${tgt.sets}×${tgt.reps})`;
+  }).filter(Boolean).join('\n  ');
+  // Count sessions this week
+  let weekSessions=0;
+  for(let i=0;i<7;i++){const d=addDays(S.weekStart,i);const l=DB.get(DB.lk(d),null);if(l?.exercises?.some(e=>e.sets.some(s=>s.done)))weekSessions++;}
+  // Last time this workout type was done
+  let lastDone='unknown';
+  for(let i=1;i<=30;i++){
+    const d=addDays(new Date(),-i);
+    const pk2=DB.pk(getMon(d));
+    const pl=DB.get(pk2,null);
+    const dd=pl?.find(x=>x.date===fd(d)&&x.type===dp?.type);
+    if(dd&&DB.get(DB.lk(d),null)?.exercises?.some(e=>e.sets.some(s=>s.done))){lastDone=i===1?'yesterday':`${i} days ago`;break;}
+  }
+  const energyDesc={fresh:'feeling great, full energy, ready to push hard',okay:'feeling normal, decent energy',tired:'feeling tired, low energy',sore:'feeling sore or beat up, needs to be careful'};
+  const prompt=`You are a no-nonsense personal trainer giving a quick pre-workout coaching note. Be direct, specific, and practical. Max 3 sentences. No fluff, no generic motivational quotes.
+
+Athlete status:
+- Energy today: ${energy} (${energyDesc[energy]})
+- Workout: ${dp?.type||ct} session
+- Sessions completed this week: ${weekSessions}
+- Last time they did ${dp?.type}: ${lastDone}
+- Today's exercises:
+  ${exList||'General '+ct+' session'}
+
+Give specific advice: mention exercises by name, reference their PR weights if relevant, adjust expectations based on energy. Sound like a real coach, not an app.`;
+  try{
+    const r=await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:120,temperature:0.75}})
+    });
+    if(!r.ok)throw new Error('API '+r.status);
+    const data=await r.json();
+    const msg=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(msg){_coachCache[cacheKey]=msg;return msg;}
+  }catch(e){console.warn('AI coach failed:',e);}
+  return COACH[energy][ct]; // fallback
+}
+
 const RIDE_TIPS = {
   LONG_OUTDOOR:['HR 120–140 BPM — conversational pace','Cadence 80–95 RPM','Refuel every 45 min: banana, dates, or rice cakes','1 bottle per 30 min','If HR creeps above Zone 2, ease off immediately'],
   SHORT_OUTDOOR:['HR 115–130 BPM','Cadence 80–90 RPM','Short and sweet — flush the legs, don\'t strain them','Stay disciplined in Zone 2 even if you feel good','Use it to build aerobic base'],
@@ -1536,6 +1593,20 @@ ${S.fbUser
   <button class="btn btn-s" onclick="lockApp()">🔒 Lock app</button>
 </div>
 
+<div class="sec-hdr">🤖 AI Coach</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px">Gemini API Key</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:10px;line-height:1.5">Enables AI-powered coaching personalised to your exercises and PRs. Free at <span style="color:var(--al)">aistudio.google.com</span></div>
+  <div style="display:flex;gap:8px;align-items:center">
+    <input id="gemini-key-inp" type="password" placeholder="AIza…" value="${DB.get('gemini_key','')}"
+      style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--txt);outline:none;-webkit-appearance:none"
+      oninput="this.dataset.dirty='1'">
+    <button onclick="(()=>{const v=document.getElementById('gemini-key-inp').value.trim();DB.set('gemini_key',v);Object.keys(_coachCache).forEach(k=>delete _coachCache[k]);const b=this;b.textContent='✓';setTimeout(()=>b.textContent='Save',1200);})()"
+      style="background:var(--acc);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;-webkit-appearance:none;flex-shrink:0">Save</button>
+  </div>
+  ${DB.get('gemini_key','')?'<div style="font-size:11px;color:var(--grn);margin-top:8px">✓ AI coaching active</div>':'<div style="font-size:11px;color:var(--t2);margin-top:8px">No key — using built-in coach</div>'}
+</div>
+
 <div class="sec-hdr">🚴 Biking preference</div>
 ${(()=>{const p=DB.get('bike_pref','weather');return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Controls how outdoor rides are planned each week.</div>
@@ -1800,9 +1871,23 @@ function bindEnergy(){
       const isRide=dp&&['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
       const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP'].includes(dp.type);
       const ct=isRide?'ride':isGym?'gym':'rest';
-      // Update coach message
+      // Update coach message — async if AI key present
       const card=document.getElementById('coach-card');
-      if(card){card.querySelector('p').textContent=COACH[b.dataset.e][ct];card.classList.add('on');}
+      if(card){
+        const p=card.querySelector('p');
+        const hasKey=!!DB.get('gemini_key','');
+        if(hasKey){
+          p.innerHTML='<span style="opacity:.5;font-style:italic">✨ Coaching you…</span>';
+          card.classList.add('on');
+          getAICoach(b.dataset.e,ct,dp).then(msg=>{
+            const c2=document.getElementById('coach-card');
+            if(c2){c2.querySelector('p').textContent=msg;c2.style.animation='none';setTimeout(()=>{c2.style.animation='';},10);}
+          });
+        }else{
+          p.textContent=COACH[b.dataset.e][ct];
+          card.classList.add('on');
+        }
+      }
       // Swap exercises based on energy — gym days only
       if(isGym&&dp&&ds){
         if(!S.baseExercises)S.baseExercises=[...dp.exercises];
