@@ -133,9 +133,15 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .gif-sh{position:absolute;inset:0;background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 50%,var(--s2) 100%);background-size:200% 100%;animation:sh 1.6s infinite ease-in-out}
 .gif-ph-txt{position:relative;font-size:12px;color:var(--t2);text-align:center}
 @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
-.ex-banner{position:absolute;top:0;left:0;right:0;padding:10px 12px 28px;background:linear-gradient(to bottom,rgba(0,0,0,.72) 0%,transparent 100%);display:flex;align-items:center;gap:8px;z-index:2}
+.ex-banner{position:absolute;top:0;left:0;right:0;padding:10px 12px 28px;background:linear-gradient(to bottom,rgba(0,0,0,.72) 0%,transparent 100%);display:flex;align-items:center;gap:8px;z-index:2;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .ex-num-i{font-size:11px;font-weight:800;color:rgba(255,255,255,.5);flex-shrink:0;background:rgba(255,255,255,.15);border-radius:100px;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
-.ex-num-n{font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,.5)}
+.ex-num-n{font-size:13px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-shadow:0 1px 4px rgba(0,0,0,.5);flex:1}
+.ex-banner-chev{font-size:12px;color:rgba(255,255,255,.6);flex-shrink:0;transition:transform .2s}
+.ex-card-collapsed{cursor:pointer}
+.ex-card-collapsed .ex-collapse-row{display:flex;align-items:center;gap:10px;padding:13px 14px}
+.ex-collapse-num{font-size:11px;font-weight:800;color:var(--t2);background:var(--s2);border-radius:100px;width:22px;height:22px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ex-collapse-name{font-size:14px;font-weight:700;flex:1}
+.ex-collapse-chev{font-size:13px;color:var(--t2);flex-shrink:0}
 .ex-mt{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:100px;padding:3px 9px;font-size:11px;font-weight:600;color:rgba(255,255,255,.9);z-index:2}
 .ex-play{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:none;border-radius:100px;padding:4px 10px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;z-index:2;-webkit-appearance:none;display:flex;align-items:center;gap:5px}
 .ex-play:active{transform:scale(.9)}
@@ -455,7 +461,7 @@ function energyTargets(exId,energy){
 }
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set()};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -892,6 +898,14 @@ function noGuest(){
   return false;
 }
 
+function toggleExCollapse(i,isDone){
+  const col=S.exCollapsed,exp=S.exExpanded;
+  const isCol=col.has(i)||(isDone&&!exp.has(i));
+  if(isCol){col.delete(i);if(isDone)exp.add(i);}
+  else{if(isDone)exp.delete(i);else col.add(i);}
+  render();
+}
+
 async function signOut(){
   try{if(_fbAuth)await _fbAuth.signOut();}catch(e){}
   DB.set('fb_user',null);
@@ -1048,6 +1062,8 @@ function openDay(dateStr){
   S.weekStart=getMon(S.viewDate);
   S.baseExercises=null;
   S.energy=null;
+  // Reset collapse state for fresh day view
+  S.exCollapsed=new Set();S.exExpanded=new Set();
   go('day');
 }
 
@@ -1191,11 +1207,28 @@ function rExList(dp,log){
     const logEx=log?.exercises?.find(e=>e.id===id);
     const doneSets=logEx?logEx.sets.filter(s=>s.done).length:0;
     const totalSets=logEx?logEx.sets.length:tgt.sets;
+    const isDone=doneSets>0&&doneSets===totalSets;
+    const isCollapsed=S.exCollapsed.has(i)||(isDone&&!S.exExpanded.has(i));
+    if(isCollapsed){
+      const progLabel=isDone?'<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn);font-size:10px">✓ Done</span>'
+        :doneSets>0?`<span class="bdg" style="font-size:10px">${doneSets}/${totalSets}</span>`:'';
+      return`<div class="ex-card ex-card-collapsed" onclick="toggleExCollapse(${i},${isDone})">
+<div class="ex-collapse-row">
+  <span class="ex-collapse-num">${i+1}</span>
+  <span class="ex-collapse-name">${ex.n}</span>
+  ${progLabel}
+  <span class="ex-collapse-chev">▶</span>
+</div></div>`;
+    }
     return`<div class="ex-card">
 <div class="ex-gif-wrap">
   <div class="gif-ph" id="ph${i}"><div class="gif-sh"></div><div class="gif-ph-txt">${ex.n}</div></div>
   <img class="ex-gif" id="gif${i}" data-xid="${id}" alt="${ex.n}">
-  <div class="ex-banner"><span class="ex-num-i">${i+1}</span><span class="ex-num-n">${ex.n}</span></div>
+  <div class="ex-banner" onclick="event.stopPropagation();toggleExCollapse(${i},${isDone})">
+    <span class="ex-num-i">${i+1}</span>
+    <span class="ex-num-n">${ex.n}</span>
+    <span class="ex-banner-chev">▾</span>
+  </div>
   <button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ Animate</button>
   <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 Tutorial</button>
 </div>
