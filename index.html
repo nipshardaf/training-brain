@@ -2360,28 +2360,43 @@ function deletePR(id){
 function editPR(id){
   const ex=EX[id];const prs=DB.get('prs',{});const pr=prs[id];if(!pr)return;
   const u=unit();
+  const otherU=u==='kg'?'lb':'kg';
+  const toOther=u==='kg'?2.2046:0.4536;
   const sheet=document.createElement('div');
   sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end;';
   sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
-<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+22px);max-width:430px;margin:0 auto;width:100%">
-  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:24px 24px calc(var(--sb)+26px);max-width:430px;margin:0 auto;width:100%">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 20px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:4px">Edit PR</div>
-  <div style="font-size:13px;color:var(--t2);margin-bottom:18px">${ex?.n||id}</div>
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px">
+  <div style="font-size:13px;color:var(--t2);margin-bottom:20px">${ex?.n||id}</div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px">
     <div>
-      <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">Weight (${u})</div>
-      <input id="pr-edit-w" type="number" value="${pr.w}" inputmode="decimal" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:22px;font-weight:700;padding:12px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
+      <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Weight (${u})</div>
+      <input id="pr-edit-w" type="number" value="${pr.w}" inputmode="decimal"
+        oninput="(()=>{const w=parseFloat(this.value)||0;const el=document.getElementById('pr-w-conv');if(el)el.textContent=w?'= '+(w*${toOther}).toFixed(1)+' ${otherU}':'';})()"
+        style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:24px;font-weight:700;padding:13px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
+      <div id="pr-w-conv" style="font-size:12px;color:var(--t2);text-align:center;margin-top:5px;min-height:16px">${pr.w?'= '+(pr.w*toOther).toFixed(1)+' '+otherU:''}</div>
     </div>
     <div>
-      <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:7px">Reps</div>
-      <input id="pr-edit-r" type="number" value="${pr.r}" inputmode="numeric" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:22px;font-weight:700;padding:12px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
+      <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Reps</div>
+      <input id="pr-edit-r" type="number" value="${pr.r}" inputmode="numeric"
+        style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:24px;font-weight:700;padding:13px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
+      <div style="font-size:12px;color:transparent;text-align:center;margin-top:5px;min-height:16px">—</div>
     </div>
   </div>
-  <div style="font-size:11px;color:var(--t2);margin-bottom:18px;text-align:center">Current: ${pr.w}${u} × ${pr.r} on ${pr.date}</div>
+
+  <div style="font-size:12px;color:var(--t2);margin-bottom:20px;text-align:center;padding:8px 12px;background:var(--s2);border-radius:10px">
+    Current PR: <strong style="color:var(--txt)">${pr.w}${u} × ${pr.r}</strong> — set ${pr.date}
+  </div>
+
   <button id="pr-edit-confirm" onclick="(()=>{
     const w=parseFloat(document.getElementById('pr-edit-w').value);
     const r=parseInt(document.getElementById('pr-edit-r').value);
-    if(!w||!r||w<=0||r<=0){document.getElementById('pr-edit-confirm').style.background='var(--red)';setTimeout(()=>document.getElementById('pr-edit-confirm').style.background='var(--acc)',800);return;}
+    if(!w||!r||w<=0||r<=0){
+      const btn=document.getElementById('pr-edit-confirm');
+      btn.style.background='var(--red)';btn.textContent='Enter valid values';
+      setTimeout(()=>{btn.style.background='var(--acc)';btn.textContent='Save changes';},1200);return;}
     const p=DB.get('prs',{});
     p['${id}']={w,r,date:fd(new Date())};
     DB.set('prs',p);
