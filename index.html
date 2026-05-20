@@ -1564,8 +1564,8 @@ function rLock(){
 <div class="lock-logo">🧠</div>
 <div class="lock-title">Training Brain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
-<div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px">
-  <input id="auth-user" type="text" placeholder="Email or username" autocomplete="username" autocapitalize="none" spellcheck="false"
+<div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px" autocomplete="off">
+  <input id="auth-user" type="email" placeholder="Email" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email"
     style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
   <input id="auth-pass" type="password" placeholder="Password" autocomplete="${isNew?'new-password':'current-password'}"
     style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
