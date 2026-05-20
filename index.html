@@ -655,8 +655,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.13';
+const APP_VERSION='1.14';
 const CHANGELOG=[
+  {v:'1.14',d:'Strava shows a success toast after connecting + rest day swap now offers to rebalance your week'},
   {v:'1.13',d:'Goals onboarding — set your activities and goal; non-cyclists no longer get bike days in their plan'},
   {v:'1.12',d:'Coach Says fetches all 4 mood notes in one API call — switching energy is now instant with zero extra calls'},
   {v:'1.11',d:'Coach Says skips the API entirely for new users with no training data — hardcoded tips shown instead'},
@@ -1037,7 +1038,13 @@ async function stravaExchangeCode(code){
     // Clean the ?code= from the URL
     window.history.replaceState({},'',window.location.pathname);
     await stravaFetchActivities();
-  }catch(e){console.warn('Strava exchange failed:',e);}
+    const rides=DB.get('strava_activities',[]);
+    const name=data.athlete?.firstname?` — hey ${data.athlete.firstname}!`:'';
+    showToast(`✅ Strava connected${name} ${rides.length} ride${rides.length!==1?'s':''} synced`,'var(--grn)');
+  }catch(e){
+    console.warn('Strava exchange failed:',e);
+    showToast('⚠️ Strava connection failed — try again','var(--red)');
+  }
 }
 
 async function _stravaAccessToken(){
@@ -3065,10 +3072,48 @@ function doSwap(ds,newType){
   const pk=DB.pk(mon);
   const plan=DB.get(pk,null);if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
+  const oldType=plan[di].type;
+  const wasWorkout=['PUSH','PULL','LEGS','UPPER_PUMP','RIDE','RUN','CARDIO'].includes(oldType);
+  const goingToRest=newType==='REST';
   plan[di].type=newType;
   plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(newType)?genSession(newType):null;
   DB.set(pk,plan);
   closeSwap();syncUp();render();
+  // If swapping a workout TO rest, offer to move it to another rest day in the week
+  if(wasWorkout&&goingToRest){
+    const otherRest=plan.filter((d,i)=>i!==di&&d.type==='REST'&&d.date!==ds);
+    if(otherRest.length>0){
+      const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+      const options=otherRest.map(d=>{
+        const dt=new Date(d.date+'T12:00:00');
+        const dayName=days[dt.getDay()===0?6:dt.getDay()-1];
+        return`<button class="swap-opt" onclick="doRebalanceSwap('${d.date}','${oldType}');closeRebalance()">${dayName} <span>Move ${oldType} here</span></button>`;
+      }).join('');
+      const modal=document.createElement('div');
+      modal.className='swap-modal';
+      modal.id='rebalance-modal';
+      modal.innerHTML=`<div class="swap-ov" onclick="closeRebalance()"></div>
+<div class="swap-sheet">
+  <div class="swap-title">Keep your weekly goal?</div>
+  <div style="font-size:13px;color:var(--t2);padding:0 4px 12px">You moved ${oldType} to rest. Want to slot it into another rest day so you hit your target this week?</div>
+  ${options}
+  <button class="swap-cancel" onclick="closeRebalance()">No thanks, keep as is</button>
+</div>`;
+      document.body.appendChild(modal);
+      requestAnimationFrame(()=>modal.classList.add('on'));
+    }
+  }
+}
+function closeRebalance(){const m=document.getElementById('rebalance-modal');if(m)m.remove();}
+function doRebalanceSwap(ds,workoutType){
+  const mon=getMon(new Date(ds+'T12:00:00'));
+  const pk=DB.pk(mon);
+  const plan=DB.get(pk,null);if(!plan)return;
+  const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
+  plan[di].type=workoutType;
+  plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(workoutType)?genSession(workoutType):null;
+  DB.set(pk,plan);syncUp();render();
+  showToast(`✅ ${workoutType} moved — weekly goal still on track`,'var(--grn)');
 }
 
 /* ── EXERCISE SWAP (busy machine / in-session) ── */
