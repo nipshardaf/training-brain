@@ -660,26 +660,29 @@ const STRAVA_CLIENT_ID='119406';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
 async function getAICoach(energy,ct,dp){
-  // Cache per energy+date — check localStorage first so refreshes don't re-call
-  const cacheKey='coach_'+energy+'_'+(dp?.date||'');
+  const date=dp?.date||'';
+  const cacheKey='coach_'+energy+'_'+date;
+  // Return from cache if already fetched
   if(_coachCache[cacheKey])return _coachCache[cacheKey];
   const stored=DB.get(cacheKey,null);
   if(stored){_coachCache[cacheKey]=stored;return stored;}
-  // Build rich context
+
+  // Check if we already fetched all 4 moods today (avoid duplicate batch call)
+  const batchKey='coach_batch_'+date+'_'+(dp?.type||ct);
+  if(DB.get(batchKey,false))return COACH[energy][ct];
+  DB.set(batchKey,true);
+
+  // Build context once — shared across all 4 mood notes
   const prs=DB.get('prs',{});
   const u=unit();
   const exList=(dp?.exercises||[]).map(id=>{
     const ex=EX[id];if(!ex)return null;
     const pr=prs[id];
-    const tgt=energyTargets(id,energy);
-    return pr
-      ?`${ex.n} (PR: ${pr.w}${u}×${pr.r}, today target ~${tgt.sugW||'?'}${u} × ${tgt.reps})`
-      :`${ex.n} (${tgt.sets}×${tgt.reps})`;
-  }).filter(Boolean).join('\n  ');
-  // Count sessions this week
+    const tgt=energyTargets(id,'okay');
+    return pr?`${ex.n} (PR: ${pr.w}${u}×${pr.r})`:`${ex.n}`;
+  }).filter(Boolean).join(', ');
   let weekSessions=0;
   for(let i=0;i<7;i++){const d=addDays(S.weekStart,i);const l=DB.get(DB.lk(d),null);if(l?.exercises?.some(e=>e.sets.some(s=>s.done)))weekSessions++;}
-  // Last time this workout type was done
   let lastDone='unknown';
   for(let i=1;i<=30;i++){
     const d=addDays(new Date(),-i);
@@ -688,34 +691,49 @@ async function getAICoach(energy,ct,dp){
     const dd=pl?.find(x=>x.date===fd(d)&&x.type===dp?.type);
     if(dd&&DB.get(DB.lk(d),null)?.exercises?.some(e=>e.sets.some(s=>s.done))){lastDone=i===1?'yesterday':`${i} days ago`;break;}
   }
-  const energyDesc={fresh:'feeling great, full energy, ready to push hard',okay:'feeling normal, decent energy',tired:'feeling tired, low energy',sore:'feeling sore or beat up, needs to be careful'};
-  const prompt=`You are a no-nonsense personal trainer giving a quick pre-workout coaching note. Be direct, specific, and practical. Max 3 sentences. No fluff, no generic motivational quotes.
 
-Athlete status:
-- Energy today: ${energy} (${energyDesc[energy]})
-- Workout: ${dp?.type||ct} session
-- Sessions completed this week: ${weekSessions}
-- Last time they did ${dp?.type}: ${lastDone}
-- Today's exercises:
-  ${exList||'General '+ct+' session'}
+  const prompt=`You are a no-nonsense personal trainer. Write 4 pre-workout coaching notes for the same athlete for today's ${dp?.type||ct} session. Each note is 2 sentences max — specific, direct, no fluff. Reference exercises and PRs by name where relevant.
 
-Give specific advice: mention exercises by name, reference their PR weights if relevant, adjust expectations based on energy. Sound like a real coach, not an app.`;
+Athlete context:
+- Workout: ${dp?.type||ct}
+- Sessions this week: ${weekSessions}
+- Last ${dp?.type||ct}: ${lastDone}
+- Exercises + PRs: ${exList||'General session'}
+
+Write exactly 4 notes labelled like this:
+FRESH: [note for when athlete feels great and ready to push hard]
+OKAY: [note for normal energy day]
+TIRED: [note for low energy / tired day]
+SORE: [note for sore or recovering day]`;
+
   try{
     const r=await fetch(GEMINI_PROXY,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:200,temperature:0.75,thinkingConfig:{thinkingBudget:0}}})
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:300,temperature:0.75,thinkingConfig:{thinkingBudget:0}}})
     });
     const raw=await r.text();
-    if(!r.ok){
-      console.warn('AI coach API '+r.status+':',raw.slice(0,400));
-      throw new Error('API '+r.status);
-    }
+    if(!r.ok)throw new Error('API '+r.status);
     const data=JSON.parse(raw);
-    const msg=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if(msg){_coachCache[cacheKey]=msg;DB.set(cacheKey,msg);return msg;}
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(text){
+      // Parse all 4 moods from one response
+      const moods=['FRESH','OKAY','TIRED','SORE'];
+      moods.forEach((m,i)=>{
+        const next=moods[i+1];
+        const re=new RegExp(m+':\\s*([\\s\\S]*?)(?='+( next?next+':':'$')+')','i');
+        const match=text.match(re);
+        if(match){
+          const msg=match[1].trim();
+          const ck='coach_'+m.toLowerCase()+'_'+date;
+          _coachCache[ck]=msg;
+          DB.set(ck,msg);
+        }
+      });
+      return _coachCache[cacheKey]||COACH[energy][ct];
+    }
   }catch(e){console.warn('AI coach failed:',e);}
-  return COACH[energy][ct]; // fallback
+  return COACH[energy][ct];
 }
 
 /* ── PER-EXERCISE AI COACH ── */
@@ -3029,21 +3047,15 @@ function bindEnergy(){
         p.style.transition='';p.style.opacity='1';
         p.textContent=defaultMsg;
         card.classList.add('on');
-        // Debounce: wait 1.5s after last tap before calling AI — prevents wasted calls on misclicks
-        clearTimeout(window._coachDebounce);
-        window._coachDebounce=setTimeout(()=>{
-          const latestEnergy=S.energy;
-          getAICoach(latestEnergy,ct,dp).then(msg=>{
-            const c2=document.getElementById('coach-card');
-            const fallback=COACH[latestEnergy][ct];
-            if(c2&&msg&&msg!==fallback){
-              const p2=c2.querySelector('p');
-              p2.style.transition='opacity .35s ease';
-              p2.style.opacity='0';
-              setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
-            }
-          });
-        },1500);
+        getAICoach(b.dataset.e,ct,dp).then(msg=>{
+          const c2=document.getElementById('coach-card');
+          if(c2&&msg&&msg!==defaultMsg){
+            const p2=c2.querySelector('p');
+            p2.style.transition='opacity .35s ease';
+            p2.style.opacity='0';
+            setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
+          }
+        });
       }
       // Swap exercises based on energy — gym days only
       if(isGym&&dp&&ds){
