@@ -6,13 +6,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="Training Brain">
-  <meta name="theme-color" content="#09090f">
+  <meta name="theme-color" content="#09090f" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f5f4ff" media="(prefers-color-scheme: light)">
   <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Training%20Brain%22%2C%22short_name%22%3A%22Training%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%7D">
   <link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%2309090f'/%3E%3Ctext x='90' y='128' font-size='96' text-anchor='middle'%3E%F0%9F%A7%A0%3C/text%3E%3C/svg%3E">
   <title>Training Brain</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
 <style>
 *,::before,::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -21,6 +22,18 @@
   --grn:#10b981;--amb:#f59e0b;--red:#ef4444;--blu:#3b82f6;
   --txt:#f1f5f9;--t2:#8892a4;
   --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+}
+@media(prefers-color-scheme:light){
+  :root{
+    --bg:#f5f4ff;--s1:#ffffff;--s2:#ede9ff;--s3:#ddd5ff;
+    --bord:rgba(120,80,255,.18);--acc:#7c3aed;--al:#6d28d9;
+    --txt:#111827;--t2:#6b7280;
+  }
+  .bnav{background:rgba(245,244,255,.93)!important}
+  .ex-num,.ex-mt{background:rgba(0,0,0,.45)!important}
+  .set-inp{background:var(--s2)!important;color:var(--txt)!important}
+  .np-btn{background:var(--s2)!important;border-color:var(--bord)!important}
+  .swap-ov{background:rgba(0,0,0,.35)!important}
 }
 html{height:-webkit-fill-available}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:100vh;min-height:-webkit-fill-available;overflow-x:hidden;-webkit-font-smoothing:antialiased}
@@ -122,6 +135,8 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 @keyframes sh{0%{background-position:200% 0}100%{background-position:-200% 0}}
 .ex-num{position:absolute;top:10px;left:10px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:8px;width:26px;height:26px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;z-index:2}
 .ex-mt{position:absolute;bottom:10px;right:10px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border-radius:100px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--al);z-index:2}
+.ex-play{position:absolute;bottom:10px;left:10px;background:rgba(0,0,0,.65);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:none;border-radius:100px;padding:4px 10px;font-size:11px;font-weight:700;color:#fff;cursor:pointer;z-index:2;-webkit-appearance:none;display:flex;align-items:center;gap:5px}
+.ex-play:active{transform:scale(.9)}
 .ex-body{padding:13px 15px}
 .ex-name{font-size:16px;font-weight:700;margin-bottom:8px;display:flex;align-items:center;flex-wrap:wrap;gap:6px}
 .ex-bdgs{display:flex;flex-wrap:wrap;gap:6px}
@@ -154,8 +169,8 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .log-ex-chev.open{transform:rotate(180deg)}
 .log-ex-body{overflow:hidden}
 .log-ex-body.collapsed{display:none}
-.sets-hdr{display:grid;grid-template-columns:30px 1fr 1fr 42px;gap:8px;margin-bottom:7px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;text-align:center}
-.set-row{display:grid;grid-template-columns:30px 1fr 1fr 42px;gap:8px;align-items:center;margin-bottom:7px}
+.sets-hdr{display:grid;grid-template-columns:30px 1fr 80px 42px;gap:8px;margin-bottom:7px;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;text-align:center}
+.set-row{display:grid;grid-template-columns:30px 1fr 80px 42px;gap:8px;align-items:center;margin-bottom:7px}
 .set-row.s-done{opacity:.45}
 .set-n{font-size:12px;font-weight:700;color:var(--t2);text-align:center}
 .set-inp{background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:17px;font-weight:700;padding:10px 6px;text-align:center;-webkit-appearance:none;width:100%;outline:none;font-family:inherit}
@@ -183,9 +198,15 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .hist-set{font-size:12px;color:var(--t2);padding:2px 0}
 .data-btns{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:20px}
 
-/* PR toast */
-.pr-toast{position:fixed;top:calc(var(--st) + 18px);left:50%;transform:translateX(-50%) translateY(-80px);background:#fbbf24;color:#000;font-size:13px;font-weight:800;padding:11px 20px;border-radius:100px;z-index:999;transition:transform .3s ease;white-space:nowrap;pointer-events:none}
+/* PR toast — offset 72px below top to clear Dynamic Island on iPhone 16 Pro Max */
+.pr-toast{position:fixed;top:calc(var(--st) + 72px);left:50%;transform:translateX(-50%) translateY(-120px);background:#fbbf24;color:#000;font-size:13px;font-weight:800;padding:11px 20px;border-radius:100px;z-index:999;transition:transform .35s cubic-bezier(.34,1.56,.64,1);white-space:nowrap;pointer-events:none;box-shadow:0 4px 20px rgba(0,0,0,.3)}
 .pr-toast.on{transform:translateX(-50%) translateY(0)}
+/* weight ± buttons */
+.wt-wrap{display:flex;align-items:center;gap:3px}
+.wt-adj{background:var(--s3);border:none;border-radius:8px;color:var(--txt);font-size:18px;font-weight:700;width:30px;height:42px;cursor:pointer;-webkit-appearance:none;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1}
+.wt-adj:active{background:var(--acc);color:#fff;transform:scale(.88)}
+/* pre-filled weight (from last session) shown dimmed until user edits */
+.set-inp.prefilled{color:var(--t2)}
 
 /* swap modal */
 .swap-modal{position:fixed;inset:0;z-index:200}
@@ -231,51 +252,71 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 <div id="app"></div>
 <script>
 /* ── EXERCISE LIBRARY ── */
+// p = exact folder name in yuhonas/free-exercise-db (uses underscores, null = styled placeholder)
+// Base URL: https://yuhonas.github.io/free-exercise-db/exercises/{p}/0.jpg
+// All folder names verified directly from GitHub repo tree API
 const EX = {
-  bb_bench:    {n:'Barbell Bench Press',   g:'chest',    t:'C',sets:4,reps:'6–8',  rpe:'8',  s:'barbell bench press',      m:'Chest · Triceps'},
-  db_bench:    {n:'DB Bench Press',        g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'7–8',s:'dumbbell bench press',      m:'Chest · Triceps'},
-  incline_bb:  {n:'Incline Barbell Press', g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'7–8',s:'incline barbell bench press',m:'Upper Chest'},
-  incline_db:  {n:'Incline DB Press',      g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  s:'incline dumbbell press',   m:'Upper Chest'},
-  cable_fly:   {n:'Cable Fly',             g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  s:'cable fly',                m:'Chest'},
-  pec_deck:    {n:'Pec Deck',              g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  s:'pec deck',                 m:'Chest'},
-  ohp:         {n:'Overhead Press',        g:'shoulder', t:'C',sets:4,reps:'6–8',  rpe:'8',  s:'barbell shoulder press',   m:'Shoulders'},
-  db_spress:   {n:'DB Shoulder Press',     g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  s:'dumbbell shoulder press',  m:'Shoulders'},
-  arnold:      {n:'Arnold Press',          g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  s:'arnold press',             m:'Shoulders'},
-  lat_raise:   {n:'Lateral Raise',         g:'sdelt',    t:'I',sets:4,reps:'12–15',rpe:'7',  s:'lateral raise',            m:'Side Delts'},
-  cable_lat:   {n:'Cable Lateral Raise',   g:'sdelt',    t:'I',sets:3,reps:'15–20',rpe:'6',  s:'cable lateral raise',      m:'Side Delts'},
-  tri_push:    {n:'Tricep Pushdown',        g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  s:'triceps pushdown',         m:'Triceps'},
-  skull:       {n:'Skull Crushers',         g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  s:'skullcrusher',             m:'Triceps'},
-  tri_oh:      {n:'Overhead Tricep Ext.',   g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  s:'overhead tricep extension',m:'Triceps'},
-  dips:        {n:'Tricep Dips',            g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  s:'triceps dip',              m:'Triceps · Chest'},
-  pullup:      {n:'Pull-Ups',              g:'vback',    t:'C',sets:4,reps:'6–10', rpe:'8',  s:'pull-up',                  m:'Lats · Biceps'},
-  lat_pull:    {n:'Lat Pulldown',          g:'vback',    t:'C',sets:4,reps:'8–10', rpe:'7',  s:'lat pulldown',             m:'Lats · Biceps'},
-  bb_row:      {n:'Barbell Row',           g:'hback_h',  t:'C',sets:4,reps:'6–8',  rpe:'8',  s:'barbell bent over row',    m:'Back · Biceps'},
-  tbar_row:    {n:'T-Bar Row',             g:'hback_h',  t:'C',sets:4,reps:'8–10', rpe:'7–8',s:'t bar row',               m:'Back'},
-  db_row:      {n:'DB Row',               g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  s:'dumbbell row',             m:'Back · Biceps'},
-  cable_row:   {n:'Seated Cable Row',      g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  s:'seated cable row',         m:'Back'},
-  face_pull:   {n:'Face Pull',             g:'rdelt',    t:'I',sets:3,reps:'15–20',rpe:'6',  s:'face pull',                m:'Rear Delts'},
-  rear_fly:    {n:'Rear Delt Fly',         g:'rdelt',    t:'I',sets:3,reps:'12–15',rpe:'6',  s:'reverse fly',              m:'Rear Delts'},
-  bb_curl:     {n:'Barbell Curl',          g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  s:'barbell curl',             m:'Biceps'},
-  db_curl:     {n:'DB Curl',              g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  s:'dumbbell biceps curl',     m:'Biceps'},
-  hammer:      {n:'Hammer Curl',          g:'bi',       t:'I',sets:3,reps:'12–15',rpe:'7',  s:'hammer curl',              m:'Biceps · Brachialis'},
-  preacher:    {n:'Preacher Curl',        g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  s:'preacher curl',            m:'Biceps'},
-  incline_curl:{n:'Incline DB Curl',      g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  s:'incline dumbbell curl',    m:'Biceps'},
-  cable_curl:  {n:'Cable Curl',           g:'bi',       t:'I',sets:3,reps:'12–15',rpe:'7',  s:'cable curl',               m:'Biceps'},
-  bb_squat:    {n:'Barbell Squat',        g:'quad',     t:'C',sets:4,reps:'6–8',  rpe:'8',  s:'barbell squat',            m:'Quads · Glutes'},
-  front_squat: {n:'Front Squat',          g:'quad',     t:'C',sets:4,reps:'6–8',  rpe:'8',  s:'front squat barbell',      m:'Quads'},
-  leg_press:   {n:'Leg Press',            g:'quad',     t:'C',sets:4,reps:'10–12',rpe:'7',  s:'leg press',                m:'Quads · Glutes'},
-  bss:         {n:'Bulgarian Split Squat',g:'quad',     t:'C',sets:3,reps:'8–10', rpe:'8–9',s:'bulgarian split squat',    m:'Quads · Glutes'},
-  lunge:       {n:'Walking Lunges',       g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'7', s:'walking lunge',            m:'Quads · Glutes'},
-  step_up:     {n:'Dumbbell Step-Ups',    g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'7', s:'dumbbell step up',         m:'Quads · Glutes'},
-  rdl:         {n:'Romanian Deadlift',    g:'ham',      t:'C',sets:4,reps:'8–10', rpe:'7–8',s:'romanian deadlift',        m:'Hamstrings · Glutes'},
-  deadlift:    {n:'Conventional Deadlift',g:'ham',      t:'C',sets:4,reps:'5–6',  rpe:'8–9',s:'barbell deadlift',         m:'Full Posterior Chain'},
-  hip_thrust:  {n:'Barbell Hip Thrust',   g:'ham',      t:'C',sets:4,reps:'10–12',rpe:'8',  s:'barbell hip thrust',       m:'Glutes · Hamstrings'},
-  leg_curl:    {n:'Lying Leg Curl',       g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  s:'lying leg curl',           m:'Hamstrings'},
-  calf_raise:  {n:'Standing Calf Raise',  g:'calf',     t:'I',sets:4,reps:'15–20',rpe:'7',  s:'standing calf raise',      m:'Calves'},
-  plank:       {n:'Plank',               g:'core',     t:'I',sets:3,reps:'45s',  rpe:'6',  s:'plank',                    m:'Core'},
-  hang_raise:  {n:'Hanging Leg Raise',   g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  s:'hanging leg raise',        m:'Lower Abs'},
-  ab_wheel:    {n:'Ab Wheel Rollout',    g:'core',     t:'I',sets:3,reps:'10–12',rpe:'7',  s:'ab roller',                m:'Core'},
-  cable_crunch:{n:'Cable Crunch',        g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  s:'cable crunch',             m:'Abs'},
+  bb_bench:    {n:'Barbell Bench Press',   g:'chest',    t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Chest · Triceps',         p:'Barbell_Bench_Press_-_Medium_Grip'},
+  db_bench:    {n:'DB Bench Press',        g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Chest · Triceps',         p:'Dumbbell_Bench_Press'},
+  incline_bb:  {n:'Incline Barbell Press', g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Upper Chest',             p:'Barbell_Incline_Bench_Press_-_Medium_Grip'},
+  incline_db:  {n:'Incline DB Press',      g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Upper Chest',             p:'Incline_Dumbbell_Press'},
+  cable_fly:   {n:'Cable Fly',             g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest',                   p:'Flat_Bench_Cable_Flyes'},
+  pec_deck:    {n:'Pec Deck',              g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest',                   p:'Butterfly'},
+  ohp:         {n:'Overhead Press',        g:'shoulder', t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Shoulders',               p:'Barbell_Shoulder_Press'},
+  db_spress:   {n:'DB Shoulder Press',     g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders',               p:'Dumbbell_Shoulder_Press'},
+  arnold:      {n:'Arnold Press',          g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders',               p:'Arnold_Dumbbell_Press'},
+  lat_raise:   {n:'Lateral Raise',         g:'sdelt',    t:'I',sets:4,reps:'12–15',rpe:'7',  m:'Side Delts',              p:'Side_Lateral_Raise'},
+  cable_lat:   {n:'Cable Lateral Raise',   g:'sdelt',    t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Side Delts',              p:'Cable_Seated_Lateral_Raise'},
+  tri_push:    {n:'Tricep Pushdown',        g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Triceps_Pushdown'},
+  skull:       {n:'Skull Crushers',         g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Triceps',                 p:'EZ-Bar_Skullcrusher'},
+  tri_oh:      {n:'Overhead Tricep Ext.',   g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Cable_Rope_Overhead_Triceps_Extension'},
+  dips:        {n:'Tricep Dips',            g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:'Dips_-_Triceps_Version'},
+  pullup:      {n:'Pull-Ups',              g:'vback',    t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Lats · Biceps',           p:'Pullups'},
+  lat_pull:    {n:'Lat Pulldown',          g:'vback',    t:'C',sets:4,reps:'8–10', rpe:'7',  m:'Lats · Biceps',           p:'Wide-Grip_Lat_Pulldown'},
+  bb_row:      {n:'Barbell Row',           g:'hback_h',  t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Back · Biceps',           p:'Bent_Over_Barbell_Row'},
+  tbar_row:    {n:'T-Bar Row',             g:'hback_h',  t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Back',                   p:'T-Bar_Row_with_Handle'},
+  db_row:      {n:'DB Row',               g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back · Biceps',           p:'One-Arm_Dumbbell_Row'},
+  cable_row:   {n:'Seated Cable Row',      g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back',                    p:'Seated_Cable_Rows'},
+  face_pull:   {n:'Face Pull',             g:'rdelt',    t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Rear Delts',              p:'Face_Pull'},
+  rear_fly:    {n:'Rear Delt Fly',         g:'rdelt',    t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Rear Delts',              p:'Bent_Over_Dumbbell_Rear_Delt_Raise_With_Head_On_Bench'},
+  bb_curl:     {n:'Barbell Curl',          g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Barbell_Curl'},
+  db_curl:     {n:'DB Curl',              g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Dumbbell_Bicep_Curl'},
+  hammer:      {n:'Hammer Curl',          g:'bi',       t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Biceps · Brachialis',     p:'Hammer_Curls'},
+  preacher:    {n:'Preacher Curl',        g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Preacher_Curl'},
+  incline_curl:{n:'Incline DB Curl',      g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Incline_Dumbbell_Curl'},
+  cable_curl:  {n:'Cable Curl',           g:'bi',       t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Biceps',                  p:'Standing_Biceps_Cable_Curl'},
+  bb_squat:    {n:'Barbell Squat',        g:'quad',     t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Quads · Glutes',          p:'Barbell_Squat'},
+  front_squat: {n:'Front Squat',          g:'quad',     t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Quads',                   p:'Front_Barbell_Squat'},
+  leg_press:   {n:'Leg Press',            g:'quad',     t:'C',sets:4,reps:'10–12',rpe:'7',  m:'Quads · Glutes',          p:'Leg_Press'},
+  bss:         {n:'Bulgarian Split Squat',g:'quad',     t:'C',sets:3,reps:'8–10', rpe:'8–9',m:'Quads · Glutes',          p:'Split_Squat_with_Dumbbells',              uni:true},
+  lunge:       {n:'Walking Lunges',       g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'7', m:'Quads · Glutes',          p:'Dumbbell_Lunges',                         uni:true},
+  step_up:     {n:'Dumbbell Step-Ups',    g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'7', m:'Quads · Glutes',          p:'Dumbbell_Step_Ups',                       uni:true},
+  goblet_squat:{n:'Goblet Squat',         g:'quad',     t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Quads · Glutes',          p:'Goblet_Squat'},
+  hack_squat:  {n:'Hack Squat',           g:'quad',     t:'C',sets:4,reps:'8–10', rpe:'8',  m:'Quads',                   p:'Hack_Squat'},
+  leg_ext:     {n:'Leg Extension',        g:'quad',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Quads',                   p:'Leg_Extensions'},
+  adductor_mach:{n:'Adductor Machine',    g:'quad',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Inner Thighs',            p:null},
+  abductor_mach:{n:'Abductor Machine',    g:'quad',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Outer Hips · Glutes',     p:null},
+  rdl:         {n:'Romanian Deadlift',    g:'ham',      t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Hamstrings · Glutes',     p:'Romanian_Deadlift'},
+  deadlift:    {n:'Conventional Deadlift',g:'ham',      t:'C',sets:4,reps:'5–6',  rpe:'8–9',m:'Full Posterior Chain',    p:'Barbell_Deadlift'},
+  hip_thrust:  {n:'Barbell Hip Thrust',   g:'ham',      t:'C',sets:4,reps:'10–12',rpe:'8',  m:'Glutes · Hamstrings',     p:'Barbell_Hip_Thrust'},
+  glute_bridge:{n:'Glute Bridge',         g:'ham',      t:'C',sets:3,reps:'12–15',rpe:'6',  m:'Glutes · Hamstrings',     p:'Barbell_Glute_Bridge'},
+  glute_kick:  {n:'Cable Glute Kickback', g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Glutes',                  p:'Glute_Kickback',                          uni:true},
+  nordic_curl: {n:'Nordic Curl',          g:'ham',      t:'C',sets:3,reps:'5–8',  rpe:'9',  m:'Hamstrings',              p:null},
+  leg_curl:    {n:'Lying Leg Curl',       g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Lying_Leg_Curls'},
+  seated_leg_curl:{n:'Seated Leg Curl',   g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Seated_Leg_Curl'},
+  calf_raise:  {n:'Standing Calf Raise',  g:'calf',     t:'I',sets:4,reps:'15–20',rpe:'7',  m:'Calves',                  p:'Standing_Calf_Raises'},
+  seated_calf: {n:'Seated Calf Raise',    g:'calf',     t:'I',sets:4,reps:'15–20',rpe:'7',  m:'Calves · Soleus',         p:'Seated_Calf_Raise'},
+  single_calf: {n:'Single-Leg Calf Raise',g:'calf',     t:'I',sets:3,reps:'15–20',rpe:'7',  m:'Calves',                  p:null,                                      uni:true},
+  plank:       {n:'Plank',               g:'core',     t:'I',sets:3,reps:'45s',  rpe:'6',  m:'Core',                    p:'Plank'},
+  hang_raise:  {n:'Hanging Leg Raise',   g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Abs',               p:'Hanging_Leg_Raise'},
+  ab_wheel:    {n:'Ab Wheel Rollout',    g:'core',     t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Core',                    p:'Ab_Roller'},
+  cable_crunch:{n:'Cable Crunch',        g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Abs',                     p:'Cable_Crunch'},
+  mach_crunch: {n:'Machine Ab Crunch',   g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Abs',                     p:'Ab_Crunch_Machine'},
+  short_foot:  {n:'Short Foot Exercise', g:'foot',     t:'I',sets:3,reps:'10–12',rpe:'5',  m:'Intrinsic Foot',          p:null},
+  towel_scrunch:{n:'Towel Scrunches',    g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'4',  m:'Intrinsic Foot',          p:null},
+  arch_raise:  {n:'Arch Raise',          g:'foot',     t:'I',sets:3,reps:'12–15',rpe:'4',  m:'Arch · Intrinsic Foot',   p:null},
+  toe_spread:  {n:'Toe Spread & Hold',   g:'foot',     t:'I',sets:3,reps:'10×5s', rpe:'3', m:'Intrinsic Foot',          p:null},
+  heel_raise:  {n:'Heel Raise (arch)',   g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Arch · Calves',           p:null,                                      uni:true},
 };
 
 /* ── SESSION SLOT TEMPLATES ── */
@@ -296,12 +337,12 @@ const SLOTS = {
     ['hammer','db_curl','preacher','incline_curl'],
   ],
   LEGS:[
-    ['bb_squat','front_squat','bss','lunge','step_up'],
-    ['rdl','deadlift','hip_thrust'],
-    ['leg_press','bss','lunge','step_up'],
-    ['leg_curl'],
-    ['calf_raise'],
-    ['plank','hang_raise','ab_wheel','cable_crunch'],
+    ['bb_squat','front_squat','hack_squat','goblet_squat','bss','lunge','step_up'],
+    ['rdl','deadlift','hip_thrust','glute_bridge','nordic_curl'],
+    ['leg_press','leg_ext','bss','lunge','step_up'],
+    ['leg_curl','seated_leg_curl','leg_ext'],
+    ['calf_raise','seated_calf','single_calf'],
+    ['plank','hang_raise','ab_wheel','cable_crunch','mach_crunch'],
   ],
   UPPER_PUMP:[
     ['incline_db','cable_fly','pec_deck','db_bench'],
@@ -349,8 +390,70 @@ const MOBILITY=[
   {i:'🚶',t:'15 min walk outside: blood flow + sunlight'},
 ];
 
+/* ── ENERGY SWAP MAPS ── */
+// Each key maps to a priority list — first unused one is picked
+const SWAP_LIGHT={
+  bb_bench:['pec_deck','cable_fly'],    db_bench:['cable_fly','pec_deck'],
+  incline_bb:['cable_fly','incline_db'],incline_db:['pec_deck','cable_fly'],
+  ohp:['db_spress','lat_raise'],        arnold:['lat_raise','db_spress'],
+  dips:['tri_oh','tri_push'],           skull:['tri_push','tri_oh'],
+  bb_squat:['leg_press','lunge','bss'], front_squat:['leg_press','lunge'],
+  bss:['lunge','step_up'],              step_up:['lunge','bss'],
+  deadlift:['leg_curl'],                rdl:['leg_curl'],
+  hip_thrust:['leg_curl','calf_raise'],
+  bb_row:['cable_row','db_row'],        tbar_row:['cable_row','db_row'],
+  db_row:['cable_row'],                 pullup:['lat_pull'],
+  bb_curl:['cable_curl','db_curl'],     preacher:['db_curl','cable_curl'],
+  deadlift:['rdl','leg_curl'],          nordic_curl:['leg_curl','seated_leg_curl'],
+  cable_crunch:['mach_crunch'],         ab_wheel:['cable_crunch','mach_crunch'],
+};
+const SWAP_HEAVY={
+  pec_deck:['bb_bench','incline_bb'],   cable_fly:['incline_bb','incline_db'],
+  incline_db:['incline_bb'],            db_bench:['bb_bench'],
+  db_spress:['ohp'],                    lat_raise:['db_spress','ohp'],
+  tri_oh:['dips','skull'],              tri_push:['skull','dips'],
+  leg_press:['bb_squat','front_squat'], lunge:['bss','bb_squat'],
+  leg_curl:['rdl','deadlift'],
+  cable_row:['bb_row','tbar_row'],      lat_pull:['pullup'],
+  cable_curl:['bb_curl'],               db_curl:['bb_curl'],
+};
+function applyEnergySwap(exs,energy){
+  if(energy==='okay')return exs;
+  const map=energy==='fresh'?SWAP_HEAVY:SWAP_LIGHT;
+  // Pre-populate used with current plan so we never swap TO something already there
+  const used=new Set(exs);
+  const result=[];
+  for(const id of exs){
+    used.delete(id); // allow this slot to be replaced
+    const alts=map[id]||[];
+    const picked=alts.find(a=>EX[a]&&!used.has(a))||id;
+    used.add(picked);
+    result.push(picked);
+  }
+  return result;
+}
+
+/* ── ENERGY PROFILES ── */
+// sets/reps/rpe override per energy; mult = fraction of PR weight to suggest
+const ENERGY_PROFILE={
+  fresh:{sets:5, reps:'3–5',   rpe:'9',   mult:0.90, label:'💪 Strength — heavy weight, low reps'},
+  okay: {sets:null,reps:null,  rpe:null,  mult:0.80, label:''},
+  tired:{sets:3, reps:'10–15', rpe:'7',   mult:0.65, label:'😪 Volume — moderate weight, higher reps'},
+  sore: {sets:2, reps:'15–20', rpe:'5',   mult:0.55, label:'🤕 Recovery — light weight, blood flow only'},
+};
+function energyTargets(exId,energy){
+  const prof=ENERGY_PROFILE[energy]||ENERGY_PROFILE.okay;
+  const ex=EX[exId];if(!ex)return{sets:3,reps:'8–12',rpe:'7',sugW:null};
+  const sets=prof.sets??ex.sets;
+  const reps=prof.reps??ex.reps;
+  const rpe=prof.rpe??ex.rpe;
+  const pr=DB.get('prs',{})[exId];
+  const sugW=pr?.w?Math.round(pr.w*prof.mult/2.5)*2.5:null;
+  return{sets,reps,rpe,sugW};
+}
+
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:''};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -408,11 +511,25 @@ function verdict(score){
 
 /* ── WEEK GENERATION ── */
 function buildWeek(wdays){
+  const bikePref=DB.get('bike_pref','weather');
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
+  const mk=(w,type)=>{const exs=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(type)?genSession(type):null;return{date:w.date,type,exercises:exs,weather:w};};
+
+  if(bikePref==='none'){
+    // No riding at all — fill week with gym + rest
+    const restIdx=ranked[ranked.length-1].i;
+    const gymCandidates=[0,1,2,3,4,5,6].filter(i=>i!==restIdx);
+    const legsDay=gymCandidates[Math.floor(gymCandidates.length/2)];
+    const others=gymCandidates.filter(i=>i!==legsDay);
+    const asgn={[legsDay]:'LEGS'};
+    ['PUSH','PULL','UPPER_PUMP','PUSH'].forEach((t,idx)=>{if(others[idx]!==undefined)asgn[others[idx]]=t;});
+    return wdays.map((w,i)=>mk(w,i===restIdx?'REST':asgn[i]||'REST'));
+  }
+
   const r1=ranked[0],r2=ranked[1];
   const OT=45;
-  const t1=r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR';
-  const t2=r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR';
+  const t1=bikePref==='indoor'?'LONG_INDOOR':r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR';
+  const t2=bikePref==='indoor'?'SHORT_INDOOR':r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR';
   const rideSet=new Set([r1.i,r2.i]);
   const rest5=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i));
   // Rest day: day after long ride if available, else lowest-score non-ride day
@@ -436,19 +553,26 @@ function buildWeek(wdays){
     else if(i===r2.i)type=t2;
     else if(i===restIdx)type='REST';
     else type=asgn[i]||'REST';
-    const exs=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(type)?genSession(type):null;
-    return{date:w.date,type,exercises:exs,weather:w};
+    return mk(w,type);
   });
 }
 
 /* ── SESSION GENERATION ── */
-function genSession(type){
+function genSession(type,energy='okay'){
   const slots=SLOTS[type];
   const recent=DB.get('recent_ex',[]);
   const picked=[];
   for(const candidates of slots){
-    const avail=candidates.filter(id=>!picked.includes(id));
+    let avail=candidates.filter(id=>!picked.includes(id));
     if(!avail.length)continue;
+    // Filter by energy level — prefer compound when fresh, isolation when tired/sore
+    if(energy==='fresh'){
+      const comp=avail.filter(id=>EX[id]?.t==='C');
+      if(comp.length)avail=comp;
+    } else if(energy==='tired'||energy==='sore'){
+      const iso=avail.filter(id=>EX[id]?.t==='I');
+      if(iso.length)avail=iso;
+    }
     const sorted=[...avail].sort((a,b)=>{
       const ai=recent.indexOf(a),bi=recent.indexOf(b);
       if(ai===-1&&bi===-1)return Math.random()<.5?-1:1;
@@ -460,43 +584,121 @@ function genSession(type){
   return picked;
 }
 
-/* ── GIF LOADING ── */
-const GIF_BASE='https://yuhonas.github.io/free-exercise-db/exercises/';
-async function loadGifDb(){
-  const cached=DB.get('gif_v3',null);
-  if(cached){Object.assign(S.gifCache,cached);patchGifs();return;}
-  try{
-    const r=await fetch('https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/dist/exercises.json',{cache:'force-cache'});
-    if(!r.ok)return;
-    const data=await r.json();
-    Object.entries(EX).forEach(([id,ex])=>{
-      if(!ex.s)return;
-      const term=ex.s.toLowerCase();
-      const m=data.find(e=>e.name.toLowerCase()===term)||data.find(e=>e.name.toLowerCase().startsWith(term))||data.find(e=>e.name.toLowerCase().includes(term.split(' ')[0])&&e.name.toLowerCase().includes(term.split(' ').pop()));
-      if(m&&m.images&&m.images[0])S.gifCache[id]=GIF_BASE+m.images[0];
-    });
-    DB.set('gif_v3',S.gifCache);
-    patchGifs();
-  }catch(_){}
+/* ── EXERCISE IMAGES ── */
+// Images come directly from yuhonas/free-exercise-db via hardcoded p field.
+// No runtime JSON fetch needed — paths are verified and embedded per exercise.
+// jsDelivr CDN mirrors GitHub repos — never blocked by ad blockers unlike yuhonas.github.io
+const GIF_BASE='https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/exercises/';
+const _animTimers={};
+
+// Muscle group placeholder styles for exercises with p:null
+const G_PH={
+  chest:   {bg:'linear-gradient(135deg,#7c3aed,#a855f7)',i:'🏋️'},
+  shoulder:{bg:'linear-gradient(135deg,#0891b2,#06b6d4)',i:'💪'},
+  sdelt:   {bg:'linear-gradient(135deg,#0e7490,#0891b2)',i:'💪'},
+  tri:     {bg:'linear-gradient(135deg,#6d28d9,#8b5cf6)',i:'💪'},
+  vback:   {bg:'linear-gradient(135deg,#1d4ed8,#3b82f6)',i:'🏋️'},
+  hback_h: {bg:'linear-gradient(135deg,#1e40af,#2563eb)',i:'🏋️'},
+  hback:   {bg:'linear-gradient(135deg,#1e3a8a,#1d4ed8)',i:'🏋️'},
+  rdelt:   {bg:'linear-gradient(135deg,#0e7490,#0891b2)',i:'💪'},
+  bi:      {bg:'linear-gradient(135deg,#7c3aed,#a78bfa)',i:'💪'},
+  quad:    {bg:'linear-gradient(135deg,#059669,#34d399)',i:'🦵'},
+  ham:     {bg:'linear-gradient(135deg,#065f46,#059669)',i:'🦵'},
+  calf:    {bg:'linear-gradient(135deg,#047857,#10b981)',i:'🦶'},
+  core:    {bg:'linear-gradient(135deg,#b45309,#f59e0b)',i:'💪'},
+  foot:    {bg:'linear-gradient(135deg,#92400e,#d97706)',i:'🦶'},
+};
+
+function loadGifDb(){
+  // Build cache directly from hardcoded paths — instant, no network call
+  Object.entries(EX).forEach(([id,ex])=>{
+    if(ex.p){
+      S.gifCache[id]={
+        f0:GIF_BASE+ex.p+'/0.jpg',
+        f1:GIF_BASE+ex.p+'/1.jpg',
+      };
+    }
+  });
+  patchGifs();
 }
 function patchGifs(){
-  document.querySelectorAll('.ex-gif[data-xid]').forEach(img=>{
-    const url=S.gifCache[img.dataset.xid];
-    if(url)loadImg(img,url);
-  });
+  document.querySelectorAll('.ex-gif[data-xid]').forEach(img=>loadExImg(img));
 }
-function loadImg(img,url){
-  const ph=img.closest('.ex-gif-wrap')?.querySelector('.gif-ph');
+function loadExImg(img){
+  const xid=img.dataset.xid;
+  const entry=S.gifCache[xid];
+  const wrap=img.closest('.ex-gif-wrap');
+  const ph=wrap?.querySelector('.gif-ph');
+  if(!entry){
+    // No image path — show styled placeholder immediately
+    const ex=EX[xid];
+    const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:'💪'};
+    if(ph)ph.innerHTML=`<div style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:40px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div></div>`;
+    return;
+  }
   const t=new Image();
-  t.onload=()=>{img.src=url;img.classList.add('on');if(ph)ph.classList.add('off');};
-  t.onerror=()=>{if(ph)ph.innerHTML=`<div style="text-align:center;padding:20px 10px"><div style="font-size:32px;margin-bottom:7px">💪</div><div style="font-size:11px;color:#8892a4">${img.alt}</div></div>`;};
-  t.src=url;
+  t.onload=()=>{img.src=t.src;img.classList.add('on');if(ph)ph.classList.add('off');};
+  t.onerror=()=>{
+    // Path wrong — fall back to styled placeholder
+    const ex=EX[xid];
+    const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:'💪'};
+    if(ph)ph.innerHTML=`<div style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:40px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div></div>`;
+  };
+  t.src=entry.f0;
 }
-function loadAllGifs(){
-  document.querySelectorAll('.ex-gif[data-xid]').forEach(img=>{
-    const url=S.gifCache[img.dataset.xid];
-    if(url)loadImg(img,url);
-  });
+function loadAllGifs(){patchGifs();}
+
+// Animate between frame 0 and frame 1 on tap — simulates motion
+function toggleAnim(xid,btn){
+  const entry=S.gifCache[xid];
+  if(!entry||!entry.f1){openVid(xid);return;} // no second frame → go straight to video
+  const img=document.querySelector(`.ex-gif[data-xid="${xid}"]`);if(!img)return;
+  if(_animTimers[xid]){
+    clearInterval(_animTimers[xid]);delete _animTimers[xid];
+    img.src=entry.f0;btn.textContent='▶';return;
+  }
+  let frame=0;
+  _animTimers[xid]=setInterval(()=>{
+    frame=1-frame;
+    img.src=frame?entry.f1:entry.f0;
+  },700);
+  btn.textContent='⏹';
+}
+
+function openVid(xid){
+  const ex=EX[xid];if(!ex)return;
+  const q=encodeURIComponent(ex.n+' exercise proper form tutorial');
+  const ytSearch='https://www.youtube.com/results?search_query='+q;
+  // Build search suggestions for different channels
+  const searches=[
+    {label:'🔍 YouTube Search',url:ytSearch},
+    {label:'📺 Jeff Nippard',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Jeff Nippard '+ex.n)},
+    {label:'📺 Alan Thrall',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Alan Thrall '+ex.n)},
+    {label:'📺 AthleanX',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('AthleanX '+ex.n)},
+  ];
+  const modal=document.createElement('div');
+  modal.id='vid-modal';
+  modal.style.cssText='position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:flex-end';
+  modal.innerHTML=`
+<div onclick="closeVid()" style="position:absolute;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px)"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:430px;padding:20px 16px calc(var(--sb,0px) + 20px);z-index:1">
+  <div style="width:36px;height:4px;background:var(--bord);border-radius:4px;margin:0 auto 16px"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div style="font-size:16px;font-weight:800">${ex.n}</div>
+    <button onclick="closeVid()" style="background:var(--s2);border:none;border-radius:8px;color:var(--t2);font-size:18px;line-height:1;padding:6px 10px;cursor:pointer;-webkit-appearance:none">✕</button>
+  </div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:16px">${ex.m} · Tutorial videos open in YouTube</div>
+  ${searches.map(s=>`
+  <a href="${s.url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--s2);border:1px solid var(--bord);border-radius:14px;margin-bottom:10px;text-decoration:none;color:var(--txt)">
+    <span style="font-size:20px">${s.label.split(' ')[0]}</span>
+    <span style="font-size:14px;font-weight:600">${s.label.split(' ').slice(1).join(' ')}</span>
+    <span style="margin-left:auto;color:var(--t2);font-size:16px">›</span>
+  </a>`).join('')}
+</div>`;
+  document.body.appendChild(modal);
+}
+function closeVid(){
+  document.getElementById('vid-modal')?.remove();
 }
 
 /* ── UNIT HELPERS ── */
@@ -530,50 +732,61 @@ function rLock(){
   const hasPIN=!!DB.get('pin',null);
   // Show welcome/choose screen first, then PIN pad
   if(S.lockMode==='choose'){
-    const hasFB=!!DB.get('fb_config',null);
     const fbUser=DB.get('fb_user',null);
     return`<div class="lock-wrap">
 <div class="lock-logo">🧠</div>
 <div class="lock-title">Training Brain</div>
-<div class="lock-sub" style="margin-bottom:36px">Your personal gym &amp; cycling tracker</div>
-<div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:12px">
-  <button class="btn btn-p" onclick="goToPIN()" style="font-size:16px;padding:17px;display:flex;align-items:center;justify-content:center;gap:10px">
-    ${hasFB?`<svg width="20" height="20" viewBox="0 0 48 48"><path fill="#FFC107" d="M43.6 20H24v8h11.3C33.6 33.1 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.7-.4-4z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.5 15.1 18.9 12 24 12c3 0 5.7 1.1 7.8 2.9l5.7-5.7C34.1 6.5 29.3 4 24 4c-7.6 0-14.2 4.2-17.7 10.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-1.9 13.5-5l-6.2-5.2C29.5 35.6 26.9 36 24 36c-5.2 0-9.6-2.9-11.3-7l-6.6 4.9C9.8 39.8 16.4 44 24 44z"/><path fill="#1976D2" d="M43.6 20H24v8h11.3c-.9 2.5-2.6 4.6-4.8 6l6.2 5.2C40.8 35.7 44 30.3 44 24c0-1.3-.1-2.7-.4-4z"/></svg>`:'🔐'}
-    ${fbUser?`Sign in as ${fbUser.name?.split(' ')[0]||'you'}`:'Sign In'}
-  </button>
-  <button class="btn btn-s" onclick="enterGuest()" style="font-size:15px;padding:15px">👁 Continue as Guest</button>
+<div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
+<div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px">
+  <input id="auth-email" type="email" placeholder="Email" autocomplete="email" value="${fbUser?.email||''}" style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+  <input id="auth-pass" type="password" placeholder="Password" autocomplete="current-password" style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+  <div id="auth-err" style="color:var(--red);font-size:12px;text-align:center;min-height:18px;line-height:1.4"></div>
+  <button class="btn btn-p" onclick="doAuth(false)" style="padding:16px;font-size:16px">Sign In</button>
+  <button class="btn btn-s" onclick="doAuth(true)" style="padding:14px;font-size:14px">Create Account</button>
+  <div style="text-align:center;margin-top:2px">
+    <button onclick="enterGuest()" style="background:none;border:none;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;padding:8px 20px">👁 Continue as Guest</button>
+  </div>
 </div>
-<div style="font-size:11px;color:var(--t2);margin-top:20px;text-align:center;line-height:1.7">Guest mode is read-only<br>Sign in to log workouts &amp; track progress</div>
 </div>`;}
   // Firebase config setup screen
   if(S.lockMode==='fb_setup'){
     return`<div class="lock-wrap" style="padding:28px 20px;justify-content:flex-start;padding-top:60px">
 <div style="font-size:44px;margin-bottom:10px">☁️</div>
-<div class="lock-title" style="margin-bottom:6px">Connect Google account</div>
-<div class="lock-sub" style="max-width:320px;margin-bottom:22px;line-height:1.8">One-time setup — takes about 5 minutes. After this, just tap "Sign in with Google" every time.</div>
+<div class="lock-title" style="margin-bottom:6px">Connect cloud storage</div>
+<div class="lock-sub" style="max-width:320px;margin-bottom:22px;line-height:1.8">One-time setup — takes about 5 minutes. After this, create your account and sign in with just an email and password.</div>
 <div style="width:100%;max-width:340px;text-align:left">
-  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:12px;line-height:2;color:var(--t2)">
-    <strong style="color:var(--txt);display:block;margin-bottom:4px">Step 1 — Create a Firebase project</strong>
-    1. Go to <strong style="color:var(--al)">console.firebase.google.com</strong> <button onclick="navigator.clipboard.writeText('https://console.firebase.google.com').then(()=>{this.textContent='✓';setTimeout(()=>this.textContent='Copy',1500)})" style="background:var(--s3);border:none;color:var(--al);font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px;cursor:pointer;-webkit-appearance:none">Copy</button><br>
-    2. Click <strong style="color:var(--txt)">Add project</strong> → name it anything → Create<br>
-    3. Click the <strong style="color:var(--txt)">&lt;/&gt;</strong> web icon → name it → <strong style="color:var(--txt)">Register app</strong><br>
-    4. Copy the <strong style="color:var(--txt)">firebaseConfig = { ... }</strong> block shown
+
+  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:10px;font-size:12px;color:var(--t2)">
+    <strong style="color:var(--txt);font-size:13px;display:block;margin-bottom:8px">Step 1 — Create a project</strong>
+    <span style="display:block;line-height:1.8">1. Go to <strong style="color:var(--al)">console.firebase.google.com</strong> <button onclick="navigator.clipboard.writeText('https://console.firebase.google.com').then(()=>{this.textContent='✓ Copied';setTimeout(()=>this.textContent='Copy link',1500)})" style="background:var(--s3);border:none;color:var(--al);font-size:10px;font-weight:700;padding:3px 8px;border-radius:6px;cursor:pointer;-webkit-appearance:none">Copy link</button></span>
+    <span style="display:block;line-height:1.8">2. Click <strong style="color:var(--txt)">Add project</strong> → name it anything → hit Create</span>
   </div>
-  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:12px;line-height:2;color:var(--t2)">
-    <strong style="color:var(--txt);display:block;margin-bottom:4px">Step 2 — Enable Google Sign-In</strong>
-    In Firebase console → <strong style="color:var(--txt)">Authentication</strong> → Get started → <strong style="color:var(--txt)">Google</strong> → Enable → Save
+
+  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:10px;font-size:12px;color:var(--t2)">
+    <strong style="color:var(--txt);font-size:13px;display:block;margin-bottom:8px">Step 2 — Get your config code</strong>
+    <span style="display:block;line-height:1.8">1. On the project homepage, click the <strong style="color:var(--txt)">&lt;/&gt;</strong> icon (Web app)</span>
+    <span style="display:block;line-height:1.8">2. Give it any nickname → click <strong style="color:var(--txt)">Register app</strong></span>
+    <span style="display:block;line-height:1.8">3. You'll see a block of code — copy everything between the <strong style="color:var(--acc)">{</strong> and <strong style="color:var(--acc)">}</strong> of <code>firebaseConfig</code></span>
+    <span style="display:block;margin-top:6px;padding:8px 10px;background:var(--s2);border-radius:8px;font-family:monospace;font-size:11px;color:var(--al);line-height:1.7">apiKey: "...",<br>authDomain: "...",<br>projectId: "...",<br>...</span>
+    <span style="display:block;margin-top:6px;line-height:1.8">4. Click <strong style="color:var(--txt)">Continue to console</strong></span>
+    <span style="display:block;margin-top:4px;color:var(--amb);font-size:11px">⚠️ Already registered and missed the config? Go to <strong>Project Settings</strong> (⚙️ gear icon, top left) → <strong>Your apps</strong> → the config is there.</span>
   </div>
-  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:12px;line-height:2;color:var(--t2)">
-    <strong style="color:var(--txt);display:block;margin-bottom:4px">Step 3 — Enable database</strong>
-    In Firebase console → <strong style="color:var(--txt)">Firestore Database</strong> → Create database → <strong style="color:var(--txt)">Start in test mode</strong> → Done
+
+  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:10px;font-size:12px;color:var(--t2)">
+    <strong style="color:var(--txt);font-size:13px;display:block;margin-bottom:8px">Step 3 — Enable Email/Password login <span style="color:var(--grn);font-size:11px">${!!DB.get('fb_config') ? '' : ''}</span></strong>
+    <span style="display:block;line-height:1.8">Left menu → <strong style="color:var(--txt)">Authentication</strong> → Get started</span>
+    <span style="display:block;line-height:1.8">→ <strong style="color:var(--txt)">Email/Password</strong> → toggle Enable → Save</span>
   </div>
-  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:12px;line-height:2;color:var(--t2)">
-    <strong style="color:var(--txt);display:block;margin-bottom:4px">Step 4 — Add your app's URL</strong>
-    Authentication → <strong style="color:var(--txt)">Settings</strong> → Authorised domains → Add domain:<br>
-    <strong style="color:var(--al)">nipshardaf.github.io</strong>
+
+  <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:14px;font-size:12px;color:var(--t2)">
+    <strong style="color:var(--txt);font-size:13px;display:block;margin-bottom:8px">Step 4 — Enable database</strong>
+    <span style="display:block;line-height:1.8">Left menu → <strong style="color:var(--txt)">Firestore Database</strong> → Create database</span>
+    <span style="display:block;line-height:1.8">→ pick any location → choose <strong style="color:var(--txt)">Start in test mode</strong> → Done</span>
   </div>
-  <textarea id="fb-cfg-input" placeholder='Paste your firebaseConfig here:&#10;{&#10;  apiKey: "...",&#10;  authDomain: "...",&#10;  ...&#10;}' style="width:100%;height:120px;background:var(--s1);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:12px;padding:12px;font-family:monospace;resize:none;outline:none;margin-bottom:10px"></textarea>
-  <button class="btn btn-p" onclick="saveFBConfig()" style="margin-bottom:8px">🔗 Connect & Sign in with Google</button>
+
+  <strong style="color:var(--txt);font-size:13px;display:block;margin-bottom:6px">Paste your firebaseConfig here:</strong>
+  <textarea id="fb-cfg-input" placeholder='{&#10;  apiKey: "AIza...",&#10;  authDomain: "your-app.firebaseapp.com",&#10;  projectId: "your-app",&#10;  storageBucket: "your-app.appspot.com",&#10;  messagingSenderId: "123...",&#10;  appId: "1:123..."&#10;}' style="width:100%;height:140px;background:var(--s1);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:12px;padding:12px;font-family:monospace;resize:none;outline:none;margin-bottom:10px"></textarea>
+  <button class="btn btn-p" onclick="saveFBConfig()" style="margin-bottom:8px">🔗 Save & Continue</button>
   <button class="btn btn-s" onclick="skipGistSetup()">Skip — save on device only</button>
 </div>
 </div>`;}
@@ -671,19 +884,28 @@ function debouncedSync(){clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>save
 /* ── FIREBASE / GOOGLE SYNC ── */
 let _fb=null,_fbDb=null,_fbAuth=null;
 
+const FB_CFG={
+  apiKey:"AIzaSyCSq4c3qF8ylYVFNAqiGFi52AUt57RdpIQ",
+  authDomain:"training-631c1.firebaseapp.com",
+  projectId:"training-631c1",
+  storageBucket:"training-631c1.firebasestorage.app",
+  messagingSenderId:"66824949311",
+  appId:"1:66824949311:web:5feb9a945f92b750e9328a",
+  databaseURL:"https://training-631c1-default-rtdb.firebaseio.com"
+};
+
 function initFirebase(){
   if(_fb)return true;
-  const cfg=DB.get('fb_config',null);if(!cfg)return false;
   try{
-    _fb=firebase.initializeApp(cfg,'tb');
+    _fb=firebase.initializeApp(FB_CFG,'tb');
     _fbAuth=firebase.auth(_fb);
-    _fbDb=firebase.firestore(_fb);
+    _fbDb=firebase.database(_fb);
     return true;
   }catch(e){return false;}
 }
 
 async function signInGoogle(){
-  if(!initFirebase()){S.lockMode='fb_setup';render();return;}
+  if(!initFirebase()){alert('Could not connect to Firebase.');return;}
   try{
     const provider=new firebase.auth.GoogleAuthProvider();
     const result=await _fbAuth.signInWithPopup(provider);
@@ -697,6 +919,44 @@ async function signInGoogle(){
   }
 }
 
+async function doAuth(isNew){
+  const emailEl=document.getElementById('auth-email');
+  const passEl=document.getElementById('auth-pass');
+  const errEl=document.getElementById('auth-err');
+  const email=(emailEl?.value||'').trim();
+  const pass=passEl?.value||'';
+  if(errEl)errEl.textContent='';
+  if(!email||!pass){if(errEl)errEl.textContent='Please enter your email and password.';return;}
+  if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your internet connection.';return;}
+  // Show loading state
+  const btn=document.querySelector('.btn-p');if(btn){btn.textContent='…';btn.disabled=true;}
+  try{
+    let result;
+    if(isNew){
+      result=await _fbAuth.createUserWithEmailAndPassword(email,pass);
+    }else{
+      result=await _fbAuth.signInWithEmailAndPassword(email,pass);
+    }
+    S.fbUser={uid:result.user.uid,name:result.user.displayName||email.split('@')[0],email:result.user.email};
+    DB.set('fb_user',S.fbUser);
+    S.authed=true;S.lockMode='choose';
+    await loadFromCloud();
+    render();
+  }catch(e){
+    const msgs={
+      'auth/user-not-found':'No account with this email — try "Create Account".',
+      'auth/wrong-password':'Wrong password. Try again.',
+      'auth/invalid-credential':'Wrong email or password.',
+      'auth/email-already-in-use':'Email already registered — use "Sign In".',
+      'auth/weak-password':'Password must be at least 6 characters.',
+      'auth/invalid-email':'Enter a valid email address.',
+      'auth/too-many-requests':'Too many attempts. Try again later.',
+    };
+    if(errEl)errEl.textContent=msgs[e.code]||('Error: '+e.message);
+    if(btn){btn.textContent='Sign In';btn.disabled=false;}
+  }
+}
+
 async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest)return;
   const data={};
@@ -705,7 +965,7 @@ async function saveToCloud(manual=false){
     if(k.startsWith('log_')||k.startsWith('plan_')||k==='prs'||k==='recent_ex')data[k]=DB.get(k);
   }
   try{
-    await _fbDb.collection('users').doc(S.fbUser.uid).set({data,updated:new Date().toISOString()});
+    await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:new Date().toISOString()});
     DB.set('fb_last_sync',new Date().toISOString());
     if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>Synced just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button>`;render();}
   }catch(_){}
@@ -714,8 +974,8 @@ async function saveToCloud(manual=false){
 async function loadFromCloud(){
   if(!S.fbUser||!_fbDb)return;
   try{
-    const doc=await _fbDb.collection('users').doc(S.fbUser.uid).get();
-    if(doc.exists){const {data}=doc.data();Object.entries(data||{}).forEach(([k,v])=>DB.set(k,v));}
+    const snap=await _fbDb.ref('users/'+S.fbUser.uid).once('value');
+    if(snap.exists()){const {data}=snap.val()||{};Object.entries(data||{}).forEach(([k,v])=>DB.set(k,v));}
   }catch(_){}
 }
 
@@ -733,7 +993,7 @@ function saveFBConfig(){
     const cfg=JSON.parse(match[0]);
     DB.set('fb_config',cfg);
     _fb=null; // reset so initFirebase picks up new config
-    signInGoogle();
+    S.lockMode='choose';render();
   }catch(e){alert('Invalid format. Make sure you copied the full firebaseConfig {...} block.');}
 }
 
@@ -747,10 +1007,15 @@ const syncToGist=saveToCloud;
 const syncFromGist=loadFromCloud;
 
 /* ── NAVIGATION ── */
-function go(screen,opts={}){S.screen=screen;Object.assign(S,opts);render();}
+function go(screen,opts={}){
+  // stop any running exercise animations
+  Object.keys(_animTimers).forEach(k=>{clearInterval(_animTimers[k]);delete _animTimers[k];});
+  S.screen=screen;Object.assign(S,opts);render();
+}
 function openDay(dateStr){
   S.viewDate=new Date(dateStr+'T12:00:00');
   S.weekStart=getMon(S.viewDate);
+  S.baseExercises=null;
   S.energy=null;
   go('day');
 }
@@ -794,20 +1059,22 @@ ${pat
   <div class="week-label">${lbl}</div>
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
-${plan?`
+${(()=>{const p=DB.get('bike_pref','weather');const opts=[{v:'weather',i:'📡',l:'Use weather'},{v:'indoor',i:'🏠',l:'Indoor only'},{v:'none',i:'🏋️',l:'No biking'}];const tabs=`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`;
+return plan?`
 <div class="day-list">
   ${plan.map(d=>rDayRow(d,today)).join('')}
 </div>
-<button class="btn btn-s mt12" onclick="genPlan()">🔄 Refresh with new weather</button>
+${tabs}
+<button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🔄 Refresh with new weather':'🔄 Regenerate plan'}</button>
 `:`<div class="empty-wrap">
-  <div class="empty-icon">📡</div>
+  <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'📡'}</div>
   <div class="empty-title">No plan yet</div>
-  <div class="empty-sub">Tap below — the app fetches your local weather and builds next week's plan automatically.</div>
-  <button class="btn btn-p" onclick="genPlan()">📡 Generate This Week's Plan</button>
-</div>`}
+  ${tabs}
+  <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'📡 Generate with weather forecast':p==='indoor'?'🏠 Generate (indoor rides)':'🏋️ Generate (gym only)'}</button>
+</div>`;})()}
 <div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>PRs</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
 </div>
 </div>`;
 }
@@ -884,23 +1151,29 @@ function eBtn(k,emoji,lbl){
 }
 
 function rExList(dp,log){
-  return`<div class="sec-lbl">Exercises</div><div class="ex-list">${(dp.exercises||[]).map((id,i)=>{
+  const energyLabel=S.energy?ENERGY_PROFILE[S.energy]?.label:'';
+  const elbl=energyLabel?`<span style="background:var(--s2);border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--al)">${energyLabel}</span>`:'';
+  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="sec-lbl" style="margin-bottom:0">Exercises</div>${elbl}</div><div class="ex-list">${(dp.exercises||[]).map((id,i)=>{
     const ex=EX[id];if(!ex)return'';
     const pr=DB.get('prs',{})[id];
+    const tgt=energyTargets(id,S.energy||'okay');
     const logEx=log?.exercises?.find(e=>e.id===id);
     const doneSets=logEx?logEx.sets.filter(s=>s.done).length:0;
-    const totalSets=logEx?logEx.sets.length:ex.sets;
+    const totalSets=logEx?logEx.sets.length:tgt.sets;
     return`<div class="ex-card">
 <div class="ex-gif-wrap">
   <div class="gif-ph" id="ph${i}"><div class="gif-sh"></div><div class="gif-ph-txt">${ex.n}</div></div>
   <img class="ex-gif" id="gif${i}" data-xid="${id}" alt="${ex.n}">
   <div class="ex-num">${i+1}</div>
   <div class="ex-mt">${ex.m}</div>
+  <button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ Animate</button>
+  <button class="ex-play" style="left:auto;right:10px;bottom:38px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 Tutorial</button>
 </div>
 <div class="ex-body">
   <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
   <div class="ex-bdgs">
-    <span class="bdg bs">${ex.sets} sets</span><span class="bdg br">${ex.reps} reps</span><span class="bdg bp">RPE ${ex.rpe}</span>
+    <span class="bdg bs">${tgt.sets} sets</span><span class="bdg br">${tgt.reps} reps</span><span class="bdg bp">RPE ${tgt.rpe}</span>
+    ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
   </div>
   <div style="display:flex;gap:7px;margin-top:9px">
@@ -942,11 +1215,27 @@ function startLog(ds){if(noGuest())return;
     log={date:ds,type:dp.type,exercises:(dp.exercises||[]).map(id=>{
       const ex=EX[id];
       const last=getLastLog(id);
-      return{id,sets:Array.from({length:ex.sets},(_,si)=>({w:last?last[si]?.w||'':'',r:last?last[si]?.r||'':'',done:false}))};
+      return{id,sets:makeSets(id,S.energy||'okay',last)};
     }),completed:false};
     DB.set(DB.lk(S.viewDate),log);
   }
   S.activeLog=log;S.openLogEx=0;go('log');
+}
+
+function makeSets(exId,energy,last){
+  const ex=EX[exId];if(!ex)return[];
+  const n=energyTargets(exId,energy).sets;
+  if(ex.uni){
+    return Array.from({length:n*2},(_,i)=>{
+      const side=i%2===0?'L':'R';
+      const pw=last?.[i]?.w||'';
+      return{w:pw,r:last?.[i]?.r||'',done:false,side,_edited:!!pw};
+    });
+  }
+  return Array.from({length:n},(_,si)=>{
+    const pw=last?.[si]?.w||'';
+    return{w:pw,r:last?.[si]?.r||'',done:false,_edited:!!pw};
+  });
 }
 
 function getLastLog(exId){
@@ -976,25 +1265,42 @@ function rLog(){
 </div>`;
 }
 
+function setLabel(si,set){
+  if(set.side==='L')return'<span style="font-size:10px;font-weight:800;color:var(--al)">L</span>';
+  if(set.side==='R')return'<span style="font-size:10px;font-weight:800;color:#f472b6">R</span>';
+  return String(si+1);
+}
 function rLogEx(le,ei){
   const ex=EX[le.id];if(!ex)return'';
   const pr=DB.get('prs',{})[le.id];
+  const tgt=energyTargets(le.id,S.energy||'okay');
   const allDone=le.sets.every(s=>s.done);
   const doneSets=le.sets.filter(s=>s.done).length;
   const isOpen=S.openLogEx===ei;
+  const wPh=tgt.sugW?`~${tgt.sugW}${unit()}`:'—';
+  const rPh=tgt.reps||'—';
+  // compact summary for when collapsed and done
+  const bestSet=allDone?le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0]:null;
+  const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
   return`<div class="log-ex${allDone?' done-ex':''}" id="lex${ei}">
 <div class="log-ex-hdr" onclick="togLogEx(${ei})">
-  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
+  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}${!isOpen&&allDone?summary:''}</div>
+  <button class="wt-adj" style="font-size:13px;padding:4px 7px;width:auto;height:auto;margin-left:4px;flex-shrink:0" onclick="event.stopPropagation();openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄</button>
   <span class="log-ex-prog${allDone?' done':''}" id="prog${ei}">${allDone?'✓ Done':doneSets+'/'+le.sets.length}</span>
   <span class="log-ex-chev${isOpen?' open':''}" id="chev${ei}">▾</span>
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar()}
+  <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} sets · ${tgt.reps} reps · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' suggested</span>':''}</div>
   <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
-    <span class="set-n">${si+1}</span>
-    <input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
-    <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
+    <span class="set-n">${setLabel(si,set)}</span>
+    <div class="wt-wrap">
+      <button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button>
+      <input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="${wPh}" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
+      <button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button>
+    </div>
+    <input class="set-inp" type="text" inputmode="numeric" placeholder="${rPh}" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`).join('')}
   <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
@@ -1042,6 +1348,12 @@ function togSet(ei,si){
   if(exEl)exEl.className='log-ex'+(allDone?' done-ex':'');
   const prog=document.getElementById('prog'+ei);
   if(prog){prog.textContent=allDone?'✓ Done':doneSets+'/'+le.sets.length;prog.className='log-ex-prog'+(allDone?' done':'');}
+  // update compact summary in header
+  if(allDone){
+    const best=le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0];
+    const sumEl=document.getElementById('sum'+ei);
+    if(sumEl&&best)sumEl.textContent=`${best.w}${unit()} × ${best.r}`;
+  }
   if(allDone&&set.done){
     setTimeout(()=>{
       const nextEi=ei+1;
@@ -1063,7 +1375,7 @@ function addSet(ei){
   const div=document.createElement('div');
   div.className='set-row';div.id=`sr${ei}_${si}`;
   div.innerHTML=`<span class="set-n">${si+1}</span>
-    <input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" onchange="updSet(${ei},${si},'w',this.value)">
+    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button><input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${last.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">○</button>`;
   body.insertBefore(div,addBtn);
@@ -1083,10 +1395,31 @@ function checkPR(id,weight,reps){
 function prToast(name){
   let t=document.querySelector('.pr-toast');
   if(!t){t=document.createElement('div');t.className='pr-toast';document.body.appendChild(t);}
-  t.textContent=`🏆 New PR: ${name}!`;
+  t.textContent=`🏆 New Personal Best — ${name}!`;
   t.classList.add('on');
   clearTimeout(t._tid);
-  t._tid=setTimeout(()=>{t.classList.remove('on');},2600);
+  t._tid=setTimeout(()=>{t.classList.remove('on');},2800);
+}
+
+function adjW(ei,si,dir){
+  if(!S.activeLog)return;
+  const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
+  const step=DB.get('unit','kg')==='lb'?5:2.5;
+  const cur=parseFloat(set.w)||0;
+  const nw=Math.max(0,Math.round((cur+dir*step)*10)/10);
+  set.w=nw%1===0?String(nw):nw.toFixed(1);
+  set._edited=true;
+  DB.set(DB.lk(S.viewDate),S.activeLog);
+  const inp=document.querySelector(`#sr${ei}_${si} .w-inp`);
+  if(inp){inp.value=set.w;inp.classList.remove('prefilled');}
+  debouncedSync();
+}
+
+function markEdited(ei,si,inp){
+  if(!S.activeLog)return;
+  const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
+  set._edited=true;
+  inp.classList.remove('prefilled');
 }
 
 function completeWk(){
@@ -1112,7 +1445,7 @@ function rPRs(){
     if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push(log);
   }
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Personal Records · History</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Progress · Records · History</div></div>
 
 <div class="sec-hdr">☁️ Cloud sync</div>
 ${S.fbUser
@@ -1122,12 +1455,12 @@ ${S.fbUser
     </div>
     <div class="data-btns">
       <button class="btn btn-s" onclick="saveToCloud(true)">🔄 Sync now</button>
-      <button class="btn btn-s" onclick="if(confirm('Disconnect Google sync?')){localStorage.removeItem('fb_config');localStorage.removeItem('fb_user');S.fbUser=null;render();}">Disconnect</button>
+      <button class="btn btn-s" onclick="if(confirm('Disconnect cloud sync?')){localStorage.removeItem('fb_config');localStorage.removeItem('fb_user');S.fbUser=null;render();}">Disconnect</button>
     </div>`
   :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Auto-save to Google account</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Connect your Google account so your data is always safe — accessible from any device.</div>
-      <button class="btn btn-p" onclick="S.lockMode='fb_setup';S.authed=false;render()">🔗 Connect Google account</button>
+      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Sign in or create an account to save your data online and access it from any device.</div>
+      <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
     </div>`}
 
 <div class="sec-hdr">💾 Manual backup</div>
@@ -1139,6 +1472,26 @@ ${S.fbUser
   <button class="btn btn-s" onclick="changePIN()">🔑 Change PIN</button>
   <button class="btn btn-s" onclick="lockApp()">🔒 Lock app</button>
 </div>
+
+<div class="sec-hdr">🚴 Biking preference</div>
+${(()=>{const p=DB.get('bike_pref','weather');return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Controls how outdoor rides are planned each week.</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;border-radius:10px;border:1px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="weather" ${p==='weather'?'checked':''} onchange="DB.set('bike_pref','weather');render()" style="accent-color:var(--acc)">
+      <div><div style="font-weight:700;font-size:13px">Use weather forecast</div><div style="font-size:11px;color:var(--t2)">Outdoor rides when conditions are good</div></div>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;border-radius:10px;border:1px solid ${p==='indoor'?'var(--acc)':'var(--bord)'};background:${p==='indoor'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="indoor" ${p==='indoor'?'checked':''} onchange="DB.set('bike_pref','indoor');render()" style="accent-color:var(--acc)">
+      <div><div style="font-weight:700;font-size:13px">Always indoor</div><div style="font-size:11px;color:var(--t2)">Trainer only, ignore weather</div></div>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;border-radius:10px;border:1px solid ${p==='none'?'var(--acc)':'var(--bord)'};background:${p==='none'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="none" ${p==='none'?'checked':''} onchange="DB.set('bike_pref','none');render()" style="accent-color:var(--acc)">
+      <div><div style="font-weight:700;font-size:13px">No biking</div><div style="font-size:11px;color:var(--t2)">Gym only — extra workout days instead of rides</div></div>
+    </label>
+  </div>
+  <div style="margin-top:12px;font-size:11px;color:var(--t2)">⚠️ Changing this will affect newly generated weeks, not existing plans.</div>
+</div>`})()}
 
 <div class="sec-hdr">🏆 Personal Records</div>
 ${!prKeys.length
@@ -1167,7 +1520,7 @@ ${!history.length
 
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>PRs</span></button>
+  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
 </div>
 </div>`;
 }
@@ -1203,15 +1556,12 @@ function doSwap(ds,newType){
   closeSwap();syncToGist();render();
 }
 
-/* ── EXERCISE SWAP (busy machine) ── */
+/* ── EXERCISE SWAP (busy machine / in-session) ── */
+
 function getAlternatives(exId,type){
-  // 1. Other exercises in the same slot
   const slots=SLOTS[type]||[];
   let slotAlts=[];
-  for(const slot of slots){
-    if(slot.includes(exId)){slotAlts=slot.filter(id=>id!==exId);break;}
-  }
-  // 2. Same muscle group from full library, excluding what's already in today's session
+  for(const slot of slots){if(slot.includes(exId)){slotAlts=slot.filter(id=>id!==exId);break;}}
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   const ds=S.viewDate?fd(S.viewDate):null;
@@ -1220,24 +1570,55 @@ function getAlternatives(exId,type){
   const sameGroup=Object.entries(EX)
     .filter(([id,e])=>id!==exId&&e.g===ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id))
     .map(([id])=>id);
-  return[...slotAlts,...sameGroup].slice(0,5);
+  // broader same-category (adjacent muscle groups)
+  const broader=Object.entries(EX)
+    .filter(([id,e])=>id!==exId&&e.g!==ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id)&&!sameGroup.includes(id)&&ex.m.split(' · ').some(m=>e.m.includes(m.split(' ')[0])))
+    .map(([id])=>id).slice(0,3);
+  return{slotAlts,sameGroup,broader};
 }
 
 function openExSwap(exId,exIdx,ds,type){if(noGuest())return;
-  const alts=getAlternatives(exId,type);
+  const {slotAlts,sameGroup,broader}=getAlternatives(exId,type);
+  const ex=EX[exId];
+  function altBtn(id){const e=EX[id];if(!e)return'';
+    return`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps · RPE ${e.rpe}</span></button>`;}
+  function section(title,ids){return ids.length?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">${title}</div>${ids.map(altBtn).join('')}`:''}
+  const suggestions=`
+    ${section('Same movement slot',slotAlts)}
+    ${section('Same muscle group',sameGroup.slice(0,4))}
+    ${section('Related muscles',broader)}
+    ${(!slotAlts.length&&!sameGroup.length&&!broader.length)?'<p style="color:var(--t2);font-size:13px;padding:10px 0">No alternatives found.</p>':''}`;
   const modal=document.createElement('div');
   modal.className='swap-modal';
   modal.id='ex-swap-modal';
   modal.innerHTML=`<div class="swap-ov" onclick="closeExSwap()"></div>
 <div class="swap-sheet">
-  <div class="swap-title">Swap: ${EX[exId]?.n||exId}</div>
-  ${alts.length?alts.map(id=>{const e=EX[id];if(!e)return'';
-    return`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.sets} sets · ${e.reps} reps · RPE ${e.rpe}</span></button>`;
-  }).join(''):'<p style="color:var(--t2);font-size:13px;padding:10px 0">No alternatives found.</p>'}
+  <div class="swap-title">Swap: ${ex?.n||exId}</div>
+  <input id="swap-search" type="text" placeholder="🔍  Search all exercises…" oninput="filterSwap('${exId}',${exIdx},'${ds}','${type}',this.value)"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:15px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:4px;-webkit-appearance:none">
+  <div id="swap-results">${suggestions}</div>
   <button class="swap-cancel" onclick="closeExSwap()">Cancel</button>
 </div>`;
   document.body.appendChild(modal);
-  requestAnimationFrame(()=>modal.classList.add('on'));
+  requestAnimationFrame(()=>{modal.classList.add('on');document.getElementById('swap-search')?.focus();});
+}
+
+function filterSwap(exId,exIdx,ds,type,query){
+  const q=query.trim().toLowerCase();
+  const results=document.getElementById('swap-results');if(!results)return;
+  if(!q){
+    // restore suggestions
+    const {slotAlts,sameGroup,broader}=getAlternatives(exId,type);
+    function altBtn(id){const e=EX[id];if(!e)return'';
+      return`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps · RPE ${e.rpe}</span></button>`;}
+    function section(title,ids){return ids.length?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">${title}</div>${ids.map(altBtn).join('')}`:''}
+    results.innerHTML=section('Same movement slot',slotAlts)+section('Same muscle group',sameGroup.slice(0,4))+section('Related muscles',broader);
+    return;
+  }
+  const matches=Object.entries(EX).filter(([id,e])=>id!==exId&&(e.n.toLowerCase().includes(q)||e.m.toLowerCase().includes(q)||e.g.toLowerCase().includes(q)));
+  if(!matches.length){results.innerHTML='<p style="color:var(--t2);font-size:13px;padding:10px 0">No exercises found.</p>';return;}
+  results.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">Search results</div>`+
+    matches.map(([id,e])=>`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps · RPE ${e.rpe}</span></button>`).join('');
 }
 
 function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.remove();}
@@ -1253,7 +1634,7 @@ function openExLog(exId,exIdx,ds){if(noGuest())return;
   if(!log){
     log={date:ds,type:dp.type,exercises:(dp.exercises||[]).map(id=>{
       const ex=EX[id];const last=getLastLog(id);
-      return{id,sets:Array.from({length:ex.sets},(_,si)=>({w:last?last[si]?.w||'':'',r:last?last[si]?.r||'':'',done:false}))};
+      return{id,sets:makeSets(id,S.energy||'okay',last)};
     }),completed:false};
     DB.set(DB.lk(date),log);
   }
@@ -1285,8 +1666,8 @@ function showExLogModal(le,ei,ds){
 
 function exLogRow(ei,si,set){
   return`<div class="set-row${set.done?' s-done':''}" id="elr${ei}_${si}">
-    <span class="set-n">${si+1}</span>
-    <input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${set.w}" onchange="updSet(${ei},${si},'w',this.value)">
+    <span class="set-n">${setLabel(si,set)}</span>
+    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button><input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="—" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="elk${ei}_${si}" onclick="exLogTog(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`;
@@ -1337,7 +1718,7 @@ function doExSwap(oldId,exIdx,ds,type,newId){
   if(S.activeLog&&S.activeLog.date===ds){
     const ex=EX[newId];
     const last=getLastLog(newId);
-    S.activeLog.exercises[exIdx]={id:newId,sets:Array.from({length:ex.sets},(_,si)=>({w:last?last[si]?.w||'':'',r:last?last[si]?.r||'':'',done:false}))};
+    S.activeLog.exercises[exIdx]={id:newId,sets:makeSets(newId,S.energy||'okay',last)};
     DB.set(DB.lk(S.viewDate),S.activeLog);
   }
   closeExSwap();render();
@@ -1349,17 +1730,23 @@ function bindEnergy(){
     b.addEventListener('click',()=>{
       S.energy=b.dataset.e;
       document.querySelectorAll('.ebtn').forEach(x=>x.classList.toggle('sel',x.dataset.e===b.dataset.e));
+      const pk=DB.pk(S.weekStart);
+      const plan=DB.get(pk,null);
+      const ds=S.viewDate?fd(S.viewDate):null;
+      const dp=plan?.find(d=>d.date===ds);
+      const isRide=dp&&['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
+      const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP'].includes(dp.type);
+      const ct=isRide?'ride':isGym?'gym':'rest';
+      // Update coach message
       const card=document.getElementById('coach-card');
-      if(card){
-        const pk=DB.pk(S.weekStart);
-        const plan=DB.get(pk,null);
-        const ds=S.viewDate?fd(S.viewDate):null;
-        const dp=plan?.find(d=>d.date===ds);
-        const isRide=dp&&['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
-        const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP'].includes(dp.type);
-        const ct=isRide?'ride':isGym?'gym':'rest';
-        card.querySelector('p').textContent=COACH[b.dataset.e][ct];
-        card.classList.add('on');
+      if(card){card.querySelector('p').textContent=COACH[b.dataset.e][ct];card.classList.add('on');}
+      // Swap exercises based on energy — gym days only
+      if(isGym&&dp&&ds){
+        if(!S.baseExercises)S.baseExercises=[...dp.exercises];
+        const newExs=applyEnergySwap(S.baseExercises,b.dataset.e);
+        const di=plan.findIndex(d=>d.date===ds);
+        if(di!==-1){plan[di].exercises=newExs;DB.set(pk,plan);}
+        render();
       }
     });
   });
@@ -1403,6 +1790,17 @@ function importData(){
 /* ── GENERATE PLAN ── */
 function genPlan(){
   if(noGuest())return;
+  const bikePref=DB.get('bike_pref','weather');
+  if(bikePref!=='weather'){
+    // No location needed — build plan directly with placeholder weather data
+    const wdays=Array.from({length:7},(_,i)=>({
+      date:fd(addDays(S.weekStart,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0
+    }));
+    const plan=buildWeek(wdays);
+    DB.set(DB.pk(S.weekStart),plan);
+    render();
+    return;
+  }
   const btn=document.querySelector('.btn-p,.btn-s');
   if(btn){btn.textContent='📡 Fetching weather…';btn.disabled=true;}
   navigator.geolocation.getCurrentPosition(async pos=>{
@@ -1428,11 +1826,9 @@ function init(){
   if(dow===0||dow===6)S.weekStart=getMon(addDays(today,7));
   render();
   loadGifDb();
+  // Unregister any old service workers to prevent stale caching
   if('serviceWorker' in navigator){
-    try{
-      const sw=`self.addEventListener('install',()=>self.skipWaiting());self.addEventListener('activate',e=>e.waitUntil(clients.claim()));self.addEventListener('fetch',e=>{const u=new URL(e.request.url);if(u.hostname!==self.location.hostname){e.respondWith(fetch(e.request).catch(()=>new Response('',{status:408})));return;}e.respondWith(caches.open('hb-v4').then(c=>c.match(e.request).then(h=>h||fetch(e.request).then(r=>{c.put(e.request,r.clone());return r}))));});`;
-      navigator.serviceWorker.register(URL.createObjectURL(new Blob([sw],{type:'text/javascript'})));
-    }catch(_){}
+    navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(r=>r.unregister()));
   }
 }
 init();
