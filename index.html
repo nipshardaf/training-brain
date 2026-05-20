@@ -1576,7 +1576,10 @@ function rLock(){
     ?`<button class="btn btn-p" onclick="doAuth(true)" style="padding:16px;font-size:16px">Create Account</button>
        <button class="btn btn-s" onclick="S._authNew=false;render()" style="padding:14px;font-size:14px">← Back to Sign In</button>`
     :`<button class="btn btn-p" onclick="doAuth(false)" style="padding:16px;font-size:16px">Sign In</button>
-       <button class="btn btn-s" onclick="S._authNew=true;render()" style="padding:14px;font-size:14px">Create Account</button>`
+       <button class="btn btn-s" onclick="S._authNew=true;render()" style="padding:14px;font-size:14px">Create Account</button>
+       <div style="text-align:center;margin-top:4px">
+         <button onclick="doForgotPassword()" style="background:none;border:none;color:var(--al);font-size:13px;font-weight:600;cursor:pointer;padding:6px 20px">Forgot password?</button>
+       </div>`
   }
   <div style="text-align:center;margin-top:2px">
     <button onclick="enterGuest()" style="background:none;border:none;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;padding:8px 20px">👁 Continue as Guest</button>
@@ -1785,6 +1788,19 @@ async function signInGoogle(){
     render();
   }catch(e){
     if(e.code!=='auth/popup-closed-by-user')alert('Sign-in failed: '+e.message);
+  }
+}
+
+async function doForgotPassword(){
+  const userEl=document.getElementById('auth-user');
+  const email=(userEl?.value||'').trim();
+  const errEl=document.getElementById('auth-err');
+  if(!email){if(errEl)errEl.textContent='Enter your email above first.';return;}
+  try{
+    await firebase.auth().sendPasswordResetEmail(email);
+    if(errEl){errEl.style.color='var(--grn)';errEl.textContent='✅ Reset email sent — check your inbox.';}
+  }catch(e){
+    if(errEl){errEl.style.color='var(--red)';errEl.textContent=e.code==='auth/user-not-found'?'No account found with that email.':('Error: '+e.message);}
   }
 }
 
