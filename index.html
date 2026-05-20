@@ -672,15 +672,39 @@ async function getAICoach(energy,ct,dp){
   if(DB.get(batchKey,false))return COACH[energy][ct];
   DB.set(batchKey,true);
 
-  // Build context once — shared across all 4 mood notes
+  // Build rich context — skip API entirely if no meaningful data
   const prs=DB.get('prs',{});
   const u=unit();
-  const exList=(dp?.exercises||[]).map(id=>{
+  let hasPRs=0,hasHistory=0;
+  const exLines=(dp?.exercises||[]).map(id=>{
     const ex=EX[id];if(!ex)return null;
     const pr=prs[id];
-    const tgt=energyTargets(id,'okay');
-    return pr?`${ex.n} (PR: ${pr.w}${u}×${pr.r})`:`${ex.n}`;
-  }).filter(Boolean).join(', ');
+    const lastSets=getLastLog(id);
+    let line=ex.n;
+    if(pr){
+      hasPRs++;
+      line+=` (PR: ${pr.w}${u}×${pr.r}`;
+      if(lastSets){
+        const done=lastSets.filter(s=>s.done&&s.w);
+        if(done.length){
+          hasHistory++;
+          const avgW=Math.round(done.reduce((a,s)=>a+(parseFloat(s.w)||0),0)/done.length);
+          const avgR=Math.round(done.reduce((a,s)=>a+(parseInt(s.r)||0),0)/done.length);
+          const pct=pr.w>0?Math.round(avgW/pr.w*100):0;
+          line+=`, last session: ${avgW}${u}×${avgR} avg — ${done.length}/${lastSets.length} sets done${pct<85?' ⚠️ below PR pace':''}`;
+        }
+      }
+      line+=')';
+    }
+    return line;
+  }).filter(Boolean);
+
+  // Not worth calling AI if user has no real data yet — hardcoded is just as good
+  if(hasPRs===0&&hasHistory===0){
+    DB.set(batchKey,false); // allow retry once they have data
+    return COACH[energy][ct];
+  }
+
   let weekSessions=0;
   for(let i=0;i<7;i++){const d=addDays(S.weekStart,i);const l=DB.get(DB.lk(d),null);if(l?.exercises?.some(e=>e.sets.some(s=>s.done)))weekSessions++;}
   let lastDone='unknown';
@@ -692,19 +716,20 @@ async function getAICoach(energy,ct,dp){
     if(dd&&DB.get(DB.lk(d),null)?.exercises?.some(e=>e.sets.some(s=>s.done))){lastDone=i===1?'yesterday':`${i} days ago`;break;}
   }
 
-  const prompt=`You are a no-nonsense personal trainer. Write 4 pre-workout coaching notes for the same athlete for today's ${dp?.type||ct} session. Each note is 2 sentences max — specific, direct, no fluff. Reference exercises and PRs by name where relevant.
+  const prompt=`You are a no-nonsense personal trainer. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences max — specific, direct, no fluff. You have real performance data — use it. Reference exercises, weights, and completion rates by name.
 
-Athlete context:
+Athlete data:
 - Workout: ${dp?.type||ct}
-- Sessions this week: ${weekSessions}
+- Sessions completed this week: ${weekSessions}
 - Last ${dp?.type||ct}: ${lastDone}
-- Exercises + PRs: ${exList||'General session'}
+- Exercises (with PRs and last session performance):
+  ${exLines.join('\n  ')}
 
 Write exactly 4 notes labelled like this:
-FRESH: [note for when athlete feels great and ready to push hard]
-OKAY: [note for normal energy day]
-TIRED: [note for low energy / tired day]
-SORE: [note for sore or recovering day]`;
+FRESH: [note for feeling great — push for PRs or high reps]
+OKAY: [note for normal day — hit targets, stay consistent]
+TIRED: [note for low energy — adjust weights, don't skip]
+SORE: [note for sore/recovering — what to reduce or focus on]`;
 
   try{
     const r=await fetch(GEMINI_PROXY,{
