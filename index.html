@@ -657,7 +657,8 @@ async function openExCoach(id){
   const energy=S.energy||'okay';
   const energyLabel={fresh:'high energy — ready to push hard',okay:'normal energy',tired:'low energy / tired',sore:'sore or recovering'}[energy]||'normal energy';
   const prTxt=prs?`User's current PR: ${prs.w}${u} × ${prs.r} reps.`:'No PR logged yet — suggest how to find a working weight.';
-  const cacheKey='excoach2_'+id+'_'+energy;
+  const prKey=prs?prs.w+'x'+prs.r:'nopr';
+  const cacheKey='excoach2_'+id+'_'+energy+'_'+prKey;
 
   // Build bottom sheet
   let sheet=document.getElementById('ex-coach-sheet');
@@ -719,6 +720,8 @@ async function openExCoach(id){
     if(el)el.innerHTML=html||`<p style="font-size:14px;color:var(--t2);line-height:1.7">${text.replace(/\n/g,'<br>')}</p>`;
   }
 
+  const lsCached=DB.get(cacheKey);
+  if(lsCached){_exCoachCache[cacheKey]=lsCached;renderSections(lsCached);return;}
   if(_exCoachCache[cacheKey]){renderSections(_exCoachCache[cacheKey]);return;}
 
   try{
@@ -744,7 +747,7 @@ Rules: 1–2 sentences per section. Under 200 words total. Be precise and direct
     if(!r.ok)throw new Error('API '+r.status);
     const data=await r.json();
     const msg=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if(msg){_exCoachCache[cacheKey]=msg;renderSections(msg);}
+    if(msg){_exCoachCache[cacheKey]=msg;DB.set(cacheKey,msg);renderSections(msg);}
   }catch(e){
     const el=document.getElementById('ex-coach-body');
     const cue=EX_CUES[id]||'Focus on full range of motion and controlled tempo.';
