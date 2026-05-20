@@ -654,12 +654,34 @@ const COACH = {
   sore:{gym:'🤕 Body\'s talking. Warm up 10+ min, reduce weights. If something hurts beyond soreness, skip that movement.',ride:'🤕 If legs are sore, skip or do 10 min very easy spinning only.',rest:'🤕 Gentle mobility only. Prioritise protein and sleep tonight.'},
 };
 
+/* ── VERSION & CHANGELOG ── */
+const APP_VERSION='1.13';
+const CHANGELOG=[
+  {v:'1.13',d:'Goals onboarding — set your activities and goal; non-cyclists no longer get bike days in their plan'},
+  {v:'1.12',d:'Coach Says fetches all 4 mood notes in one API call — switching energy is now instant with zero extra calls'},
+  {v:'1.11',d:'Coach Says skips the API entirely for new users with no training data — hardcoded tips shown instead'},
+  {v:'1.10',d:'Exercise Coach tips hardcoded for all 61 exercises — instant, works offline, zero API usage'},
+  {v:'1.9', d:'AI fallback chain added — Gemini → Perplexity → OpenAI so coaching never goes offline when quota is hit'},
+  {v:'1.8', d:'Login fixed to support real Gmail addresses; Forgot Password button added'},
+  {v:'1.7', d:'Edit PR modal improved with live lb↔kg conversion and current PR display'},
+  {v:'1.6', d:'iOS PWA support: install to home screen, works offline with proper home screen icon'},
+  {v:'1.5', d:'Exercise Coach button added with 5-section technique guide: Connect, Setup, Rep, Avoid, Today'},
+  {v:'1.4', d:'Coach Says introduced — AI pre-workout note personalised to your energy level and PR history'},
+  {v:'1.3', d:'Energy selector (Fresh / Okay / Tired / Sore) added with adaptive exercise swaps based on how you feel'},
+  {v:'1.2', d:'Strava integration added to sync real ride data and auto-adapt the cycling plan to your actual performance'},
+  {v:'1.1', d:'Cycling planner added with weather-based day selection and 4-week progressive block structure'},
+  {v:'1.0', d:'Initial launch — gym planner with Push/Pull/Legs, exercise library, PR tracking, and weekly schedule'},
+];
+
 /* ── AI COACH ── */
 const GEMINI_PROXY='https://training-brain-ai.ht9323.workers.dev';
 const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
 async function getAICoach(energy,ct,dp){
+  // Guests get hardcoded responses — no API keys wasted
+  if(S.guest)return COACH[energy][ct];
+
   const date=dp?.date||'';
   const cacheKey='coach_'+energy+'_'+date;
   // Return from cache if already fetched
@@ -2292,6 +2314,7 @@ function rDay(){
 <div class="coach${S.energy?' on':''}" id="coach-card">
   <div class="coach-lbl">Coach says</div>
   <p>${S.energy?COACH[S.energy][ct]:''}</p>
+  ${S.guest&&S.energy?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bord);font-size:11px;color:var(--t2)">🔒 <a href="#" onclick="lockApp();return false;" style="color:var(--al);text-decoration:none;font-weight:700">Sign in</a> for personalised advice based on your actual lifts and history</div>`:''}
 </div>
 ${(()=>{
   const prs=DB.get('prs',{});
@@ -2732,6 +2755,27 @@ function rPRs(){
   const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
 <div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Progress · Records · History</div></div>
+
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+  <span>📋 What's new</span>
+  <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
+  <div style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
+    <div>
+      <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
+    </div>
+    <span id="changelog-arr" style="color:var(--t2);font-size:12px">▼</span>
+  </div>
+  <div id="changelog-list" style="display:none;border-top:1px solid var(--bord)">
+    ${CHANGELOG.slice(1).map(c=>`<div style="padding:10px 15px;border-bottom:1px solid var(--bord);display:flex;gap:10px;align-items:baseline">
+      <span style="font-size:10px;font-weight:800;color:var(--al);flex-shrink:0;min-width:30px">v${c.v}</span>
+      <span style="font-size:12px;color:var(--t2);line-height:1.5">${c.d}</span>
+    </div>`).join('')}
+    <div style="padding:10px 15px;text-align:center;font-size:11px;color:var(--t2)">🏁 v1.0 — Initial launch</div>
+  </div>
+</div>
 
 <div class="sec-hdr">🎯 Your goals</div>
 ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
