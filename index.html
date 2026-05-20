@@ -1565,7 +1565,7 @@ function rLock(){
 <div class="lock-title">Training Brain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
 <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px">
-  <input id="auth-user" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false"
+  <input id="auth-user" type="text" placeholder="Email or username" autocomplete="username" autocapitalize="none" spellcheck="false"
     style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
   <input id="auth-pass" type="password" placeholder="Password" autocomplete="${isNew?'new-password':'current-password'}"
     style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
@@ -1795,29 +1795,16 @@ async function doForgotPassword(){
   const userEl=document.getElementById('auth-user');
   const errEl=document.getElementById('auth-err');
   const raw=(userEl?.value||'').trim();
+  const isEmail=raw.includes('@');
   const username=raw.toLowerCase().replace(/[^a-z0-9_]/g,'');
-  if(!username){if(errEl)errEl.textContent='Enter your username above first.';return;}
+  if(!raw){if(errEl)errEl.textContent='Enter your email or username above first.';return;}
   if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your connection.';return;}
   try{
-    // Look up if username exists and has a recovery email
-    const snap=await _fbDb.ref('usernames/'+username).once('value');
-    if(!snap.exists()){
-      if(errEl){errEl.style.color='var(--red)';errEl.textContent='No account found for "'+username+'". Check your username.';}
-      return;
-    }
-    const uid=snap.val().uid;
-    const profileSnap=await _fbDb.ref('users/'+uid+'/profile').once('value');
-    const recovery=profileSnap.val()?.recovery||null;
-    const internalEmail=username+'@training-brain.app';
-    await _fbAuth.sendPasswordResetEmail(internalEmail);
-    if(errEl){
-      errEl.style.color='var(--grn)';
-      errEl.textContent=recovery
-        ?'✅ Reset link sent. Check your recovery email ('+recovery.replace(/(.{2}).+(@.+)/,'$1…$2')+').'
-        :'✅ Reset link sent. Check the email associated with your account.';
-    }
+    const loginEmail=isEmail?raw.toLowerCase():username+'@training-brain.app';
+    await _fbAuth.sendPasswordResetEmail(loginEmail);
+    if(errEl){errEl.style.color='var(--grn)';errEl.textContent='✅ Reset link sent — check your inbox.';}
   }catch(e){
-    if(errEl){errEl.style.color='var(--red)';errEl.textContent='Error: '+e.message;}
+    if(errEl){errEl.style.color='var(--red)';errEl.textContent=e.code==='auth/user-not-found'?'No account found for that email.':'Error: '+e.message;}
   }
 }
 
@@ -1826,17 +1813,18 @@ async function doAuth(isNew){
   const passEl=document.getElementById('auth-pass');
   const recoveryEl=document.getElementById('auth-recovery');
   const errEl=document.getElementById('auth-err');
-  const username=(userEl?.value||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
+  const raw=(userEl?.value||'').trim();
+  const isEmail=raw.includes('@');
+  const username=raw.toLowerCase().replace(/[^a-z0-9_]/g,'');
   const pass=passEl?.value||'';
   const recovery=(recoveryEl?.value||'').trim()||null;
   if(errEl)errEl.textContent='';
-  if(!username){if(errEl)errEl.textContent='Enter a username.';return;}
-  if(username.length<3){if(errEl)errEl.textContent='Username must be at least 3 characters.';return;}
+  if(!raw){if(errEl)errEl.textContent='Enter your email or username.';return;}
   if(!pass){if(errEl)errEl.textContent='Enter a password.';return;}
   if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your internet connection.';return;}
   const btn=document.querySelector('.btn-p');if(btn){btn.textContent='…';btn.disabled=true;}
-  // Internal Firebase email derived from username
-  const internalEmail=username+'@training-brain.app';
+  // Use real email directly if provided, otherwise derive internal email from username
+  const internalEmail=isEmail?raw.toLowerCase():username+'@training-brain.app';
   try{
     let result;
     if(isNew){
