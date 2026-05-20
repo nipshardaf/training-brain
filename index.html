@@ -2173,6 +2173,18 @@ function rDay(){
   <div class="coach-lbl">Coach says</div>
   <p>${S.energy?COACH[S.energy][ct]:''}</p>
 </div>
+${(()=>{
+  const prs=DB.get('prs',{});
+  const hasPRs=Object.keys(prs).length>0;
+  let hasLog=false;
+  for(let i=1;i<=14;i++){const l=DB.get(DB.lk(addDays(new Date(),-i)),null);if(l?.exercises?.some(e=>e.sets.some(s=>s.done))){hasLog=true;break;}}
+  if(hasPRs||hasLog)return'';
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:16px;padding:14px 15px;margin-bottom:18px">
+  <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);margin-bottom:7px">🧠 Personalised coaching</div>
+  <p style="font-size:13px;line-height:1.65;color:var(--t2);margin:0">The coach learns from your logged workouts and PRs. Once you start tracking sets, it'll give specific advice based on your actual performance — weights to hit, what to push, and when to back off.</p>
+  <div style="font-size:11px;color:var(--al);margin-top:8px;font-weight:600">→ Log your first session to get started</div>
+</div>`;
+})()}
 ${isGym&&dp.exercises?rExList(dp,log):''}
 ${isRide?rRideCard(dp):''}
 ${dp.type==='REST'?rRestCard():''}
