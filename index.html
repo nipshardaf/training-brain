@@ -383,9 +383,10 @@ const COACH = {
 };
 
 /* ── AI COACH ── */
+const GEMINI_KEY_DEFAULT='AIzaSyA8zS2USxJ7PXVvG9dCNSXCZABkY9CgCCU';
 const _coachCache={};
 async function getAICoach(energy,ct,dp){
-  const key=DB.get('gemini_key','');
+  const key=DB.get('gemini_key','')||GEMINI_KEY_DEFAULT;
   if(!key)return COACH[energy][ct];
   // Cache per energy+date so it doesn't re-call on every tap
   const cacheKey=energy+'_'+(dp?.date||'');
@@ -1595,16 +1596,18 @@ ${S.fbUser
 
 <div class="sec-hdr">🤖 AI Coach</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="font-size:13px;font-weight:700;margin-bottom:4px">Gemini API Key</div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:10px;line-height:1.5">Enables AI-powered coaching personalised to your exercises and PRs. Free at <span style="color:var(--al)">aistudio.google.com</span></div>
-  <div style="display:flex;gap:8px;align-items:center">
-    <input id="gemini-key-inp" type="password" placeholder="AIza…" value="${DB.get('gemini_key','')}"
-      style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--txt);outline:none;-webkit-appearance:none"
-      oninput="this.dataset.dirty='1'">
-    <button onclick="(()=>{const v=document.getElementById('gemini-key-inp').value.trim();DB.set('gemini_key',v);Object.keys(_coachCache).forEach(k=>delete _coachCache[k]);const b=this;b.textContent='✓';setTimeout(()=>b.textContent='Save',1200);})()"
-      style="background:var(--acc);color:#fff;border:none;border-radius:10px;padding:10px 16px;font-size:13px;font-weight:700;cursor:pointer;-webkit-appearance:none;flex-shrink:0">Save</button>
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+    <div style="font-size:13px;font-weight:700">Gemini AI</div>
+    <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
   </div>
-  ${DB.get('gemini_key','')?'<div style="font-size:11px;color:var(--grn);margin-top:8px">✓ AI coaching active</div>':'<div style="font-size:11px;color:var(--t2);margin-top:8px">No key — using built-in coach</div>'}
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">Coaching is personalised to your exercises, PRs and energy level.</div>
+  <div style="font-size:11px;color:var(--t2)">Optional: override with your own key</div>
+  <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+    <input id="gemini-key-inp" type="password" placeholder="Paste custom key to override…" value="${DB.get('gemini_key','')}"
+      style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:9px 12px;font-size:12px;color:var(--txt);outline:none;-webkit-appearance:none">
+    <button onclick="(()=>{const v=document.getElementById('gemini-key-inp').value.trim();DB.set('gemini_key',v);Object.keys(_coachCache).forEach(k=>delete _coachCache[k]);const b=this;b.textContent='✓';setTimeout(()=>b.textContent='Save',1200);})()"
+      style="background:var(--s2);color:var(--txt);border:1px solid var(--bord);border-radius:10px;padding:9px 14px;font-size:12px;font-weight:700;cursor:pointer;-webkit-appearance:none;flex-shrink:0">Save</button>
+  </div>
 </div>
 
 <div class="sec-hdr">🚴 Biking preference</div>
@@ -1875,18 +1878,12 @@ function bindEnergy(){
       const card=document.getElementById('coach-card');
       if(card){
         const p=card.querySelector('p');
-        const hasKey=!!DB.get('gemini_key','');
-        if(hasKey){
-          p.innerHTML='<span style="opacity:.5;font-style:italic">✨ Coaching you…</span>';
-          card.classList.add('on');
-          getAICoach(b.dataset.e,ct,dp).then(msg=>{
-            const c2=document.getElementById('coach-card');
-            if(c2){c2.querySelector('p').textContent=msg;c2.style.animation='none';setTimeout(()=>{c2.style.animation='';},10);}
-          });
-        }else{
-          p.textContent=COACH[b.dataset.e][ct];
-          card.classList.add('on');
-        }
+        p.innerHTML='<span style="opacity:.5;font-style:italic">✨ Coaching you…</span>';
+        card.classList.add('on');
+        getAICoach(b.dataset.e,ct,dp).then(msg=>{
+          const c2=document.getElementById('coach-card');
+          if(c2){c2.querySelector('p').textContent=msg;}
+        });
       }
       // Swap exercises based on energy — gym days only
       if(isGym&&dp&&ds){
