@@ -920,6 +920,15 @@ function initFirebase(){
     _fb=firebase.initializeApp(FB_CFG,'tb');
     _fbAuth=firebase.auth(_fb);
     _fbDb=firebase.database(_fb);
+    // When Firebase resolves its own session (handles PWA re-open on iOS)
+    _fbAuth.onAuthStateChanged(user=>{
+      if(user){
+        S.fbUser={uid:user.uid,name:user.displayName||user.email.split('@')[0],email:user.email};
+        DB.set('fb_user',S.fbUser);
+        // Auto-unlock if no PIN set — user already authenticated
+        if(!S.authed&&!DB.get('pin',null)){S.authed=true;render();}
+      }
+    });
     return true;
   }catch(e){return false;}
 }
@@ -1836,9 +1845,14 @@ function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;ren
 
 /* ── INIT ── */
 function init(){
-  // Restore Google user from cache and init Firebase
+  // Restore Firebase user from localStorage cache
   const cached=DB.get('fb_user',null);
-  if(cached){S.fbUser=cached;initFirebase();}
+  if(cached){
+    S.fbUser=cached;
+    initFirebase();
+    // Auto-unlock immediately if no PIN — avoids sign-in prompt on every PWA open
+    if(!DB.get('pin',null))S.authed=true;
+  }
   const today=new Date();
   S.weekStart=getMon(today);
   const dow=today.getDay();
