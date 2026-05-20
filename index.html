@@ -652,45 +652,103 @@ Give specific advice: mention exercises by name, reference their PR weights if r
 const _exCoachCache={};
 async function openExCoach(id){
   const ex=EX[id];if(!ex)return;
-  // Show bottom sheet immediately with loading state
-  let sheet=document.getElementById('ex-coach-sheet');
-  if(!sheet){sheet=document.createElement('div');sheet.id='ex-coach-sheet';
-    sheet.style.cssText='position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bord);border-radius:24px 24px 0 0;padding:20px 20px 40px;z-index:800;transform:translateY(100%);transition:transform .3s;max-height:80vh;overflow-y:auto;max-width:430px;margin:0 auto';
-    document.body.appendChild(sheet);}
   const prs=DB.get('prs',{})[id];
   const u=unit();
-  const prTxt=prs?`Their PR is ${prs.w}${u}×${prs.r}.`:'No PR recorded yet.';
-  sheet.innerHTML=`<div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 16px"></div>
-<div style="font-size:16px;font-weight:800;margin-bottom:4px">🤖 Coach on ${ex.n}</div>
-<div style="font-size:12px;color:var(--t2);margin-bottom:16px">${ex.m}</div>
-<div id="ex-coach-body" style="font-size:14px;color:var(--t2);line-height:1.7">Loading AI tips…</div>`;
+  const energy=S.energy||'okay';
+  const energyLabel={fresh:'high energy — ready to push hard',okay:'normal energy',tired:'low energy / tired',sore:'sore or recovering'}[energy]||'normal energy';
+  const prTxt=prs?`User's current PR: ${prs.w}${u} × ${prs.r} reps.`:'No PR logged yet — suggest how to find a working weight.';
+  const cacheKey='excoach2_'+id+'_'+energy;
+
+  // Build bottom sheet
+  let sheet=document.getElementById('ex-coach-sheet');
+  if(!sheet){sheet=document.createElement('div');sheet.id='ex-coach-sheet';
+    sheet.style.cssText='position:fixed;bottom:0;left:0;right:0;background:var(--s1);border-top:1px solid var(--bord);border-radius:24px 24px 0 0;padding:20px 18px calc(env(safe-area-inset-bottom,0px)+28px);z-index:800;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:92vh;overflow-y:auto;max-width:430px;margin:0 auto';
+    document.body.appendChild(sheet);}
+
+  sheet.innerHTML=`
+<div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
+<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:16px">
+  <div>
+    <div style="font-size:17px;font-weight:800">${ex.n}</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:3px">${ex.m}</div>
+  </div>
+  ${prs?`<div style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.25);border-radius:10px;padding:7px 11px;text-align:right;flex-shrink:0">
+    <div style="font-size:14px;font-weight:800;color:var(--al)">${prs.w}${u} × ${prs.r}</div>
+    <div style="font-size:10px;color:var(--t2)">Your PR</div>
+  </div>`:`<div style="background:var(--s2);border-radius:10px;padding:7px 11px;text-align:right;flex-shrink:0">
+    <div style="font-size:11px;color:var(--t2)">No PR yet</div>
+  </div>`}
+</div>
+<div id="ex-coach-body">
+  ${[1,2,3,4,5].map(i=>`<div style="height:${[60,72,60,52,52][i-1]}px;background:var(--s2);border-radius:12px;margin-bottom:10px;opacity:${.7-.1*i}"></div>`).join('')}
+  <div style="text-align:center;font-size:12px;color:var(--t2);margin-top:8px">Loading your coaching session…</div>
+</div>`;
+
   sheet.style.transform='translateY(0)';
-  // Overlay
+
   let ov=document.getElementById('ex-coach-ov');
   if(!ov){ov=document.createElement('div');ov.id='ex-coach-ov';
     ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:799';
     ov.onclick=()=>{sheet.style.transform='translateY(100%)';ov.style.display='none';};
     document.body.appendChild(ov);}
   ov.style.display='block';
-  // Use cache or call AI
-  if(_exCoachCache[id]){document.getElementById('ex-coach-body').innerHTML=_exCoachCache[id];return;}
+
+  function renderSections(text){
+    const defs=[
+      {k:'CONNECT', icon:'🎯', label:'Mind-muscle',  col:'#a78bfa', bg:'rgba(167,139,250,.1)'},
+      {k:'SETUP',   icon:'⚙️', label:'Setup',        col:'#60a5fa', bg:'rgba(96,165,250,.1)'},
+      {k:'REP',     icon:'🔁', label:'The rep',       col:'#fb923c', bg:'rgba(251,146,60,.1)'},
+      {k:'AVOID',   icon:'❌', label:'Avoid this',   col:'#f87171', bg:'rgba(248,113,113,.1)'},
+      {k:'TODAY',   icon:'📈', label:'Your next set', col:'#34d399', bg:'rgba(52,211,153,.1)'},
+    ];
+    const keys=defs.map(d=>d.k).join('|');
+    const parsed={};
+    defs.forEach(d=>{
+      const re=new RegExp(d.k+'\\s*:\\s*([\\s\\S]*?)(?=(?:'+keys+')\\s*:|$)','i');
+      const m=text.match(re);
+      if(m)parsed[d.k]=m[1].trim().replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,' ');
+    });
+    const html=defs.map(d=>{
+      const c=parsed[d.k];if(!c)return'';
+      return`<div style="background:${d.bg};border-left:3px solid ${d.col};border-radius:0 12px 12px 0;padding:12px 14px;margin-bottom:10px">
+  <div style="font-size:10px;font-weight:900;color:${d.col};text-transform:uppercase;letter-spacing:.7px;margin-bottom:5px">${d.icon} ${d.label}</div>
+  <div style="font-size:14px;line-height:1.65;color:var(--txt)">${c}</div>
+</div>`;
+    }).join('');
+    const el=document.getElementById('ex-coach-body');
+    if(el)el.innerHTML=html||`<p style="font-size:14px;color:var(--t2);line-height:1.7">${text.replace(/\n/g,'<br>')}</p>`;
+  }
+
+  if(_exCoachCache[cacheKey]){renderSections(_exCoachCache[cacheKey]);return;}
+
   try{
-    const prompt=`You are an expert personal trainer. Give 3 practical tips for "${ex.n}" targeting ${ex.m}. Cover: (1) form cue, (2) common mistake to avoid, (3) a progression or variation idea. ${prTxt} Be direct and specific. Use numbered list format. Max 120 words total.`;
+    const prompt=`You are an expert strength coach giving a focused 1-on-1 coaching session.
+
+Exercise: ${ex.n}
+Target muscles: ${ex.m}
+User energy today: ${energyLabel}
+${prTxt}
+
+Write a coaching guide using EXACTLY these 5 labelled sections on separate lines:
+
+CONNECT: How to mentally connect with and feel ${ex.m} working during this lift — one specific visualisation or sensation cue.
+SETUP: Two specific body-positioning cues that maximise the stretch and tension on ${ex.m} before the first rep.
+REP: How to execute the eccentric (lowering) and concentric (lifting) to maximise ${ex.m} stimulus — include one tempo or pause tip.
+AVOID: The single most common error that shifts stress off ${ex.m} on ${ex.n}, and the one-sentence fix.
+TODAY: A specific weight × reps recommendation for their next working set based on their PR and energy level. If no PR, suggest a starting approach.
+
+Rules: 1–2 sentences per section. Under 200 words total. Be precise and direct — no filler phrases.`;
+
     const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:260,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:420,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
     if(!r.ok)throw new Error('API '+r.status);
     const data=await r.json();
     const msg=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if(msg){
-      const html=msg.replace(/\n/g,'<br>').replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>');
-      _exCoachCache[id]=html;
-      const el=document.getElementById('ex-coach-body');
-      if(el)el.innerHTML=html;
-    }
+    if(msg){_exCoachCache[cacheKey]=msg;renderSections(msg);}
   }catch(e){
     const el=document.getElementById('ex-coach-body');
     const cue=EX_CUES[id]||'Focus on full range of motion and controlled tempo.';
-    if(el)el.innerHTML=`<em>${cue}</em>`;
+    if(el)el.innerHTML=`<div style="background:var(--s2);border-radius:12px;padding:14px;font-size:14px;color:var(--t2);line-height:1.7"><em>${cue}</em></div><div style="font-size:11px;color:var(--t2);margin-top:10px;text-align:center">AI unavailable — showing base cue</div>`;
   }
 }
 
