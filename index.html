@@ -748,7 +748,7 @@ Rules: 1–2 sentences per section. Under 200 words total. Be precise and direct
   }catch(e){
     const el=document.getElementById('ex-coach-body');
     const cue=EX_CUES[id]||'Focus on full range of motion and controlled tempo.';
-    if(el)el.innerHTML=`<div style="background:var(--s2);border-radius:12px;padding:14px;font-size:14px;color:var(--t2);line-height:1.7"><em>${cue}</em></div><div style="font-size:11px;color:var(--t2);margin-top:10px;text-align:center">AI unavailable — showing base cue</div>`;
+    if(el)el.innerHTML=`<div style="background:var(--s2);border-radius:12px;padding:14px;font-size:14px;color:var(--t2);line-height:1.7"><em>${cue}</em></div>`;
   }
 }
 
@@ -2108,7 +2108,6 @@ function rExList(dp,log){
     <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--al);border-color:rgba(167,139,250,.3)" onclick="event.stopPropagation();openExLog('${id}',${i},'${dp.date}')">📝 Log sets</button>
     <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--grn);border-color:rgba(16,185,129,.3)" onclick="event.stopPropagation();openExCoach('${id}')">🤖 Coach</button>
   </div>
-  <button onclick="event.stopPropagation();toggleExCollapse(${i},${isDone})" style="width:100%;margin-top:10px;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:700;padding:8px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;-webkit-appearance:none">▲ Collapse</button>
 </div>
 </div>`;
   }).join('')}</div>`;
