@@ -665,11 +665,6 @@ async function getAICoach(energy,ct,dp){
   if(_coachCache[cacheKey])return _coachCache[cacheKey];
   const stored=DB.get(cacheKey,null);
   if(stored){_coachCache[cacheKey]=stored;return stored;}
-  // Rate limit — max 1 AI call per 12 seconds across refreshes
-  const lastCall=DB.get('coach_last_call',0);
-  const now=Date.now();
-  if(now-lastCall<12000)return COACH[energy][ct];
-  DB.set('coach_last_call',now);
   // Build rich context
   const prs=DB.get('prs',{});
   const u=unit();
@@ -3034,15 +3029,21 @@ function bindEnergy(){
         p.style.transition='';p.style.opacity='1';
         p.textContent=defaultMsg;
         card.classList.add('on');
-        getAICoach(b.dataset.e,ct,dp).then(msg=>{
-          const c2=document.getElementById('coach-card');
-          if(c2&&msg&&msg!==defaultMsg){
-            const p2=c2.querySelector('p');
-            p2.style.transition='opacity .35s ease';
-            p2.style.opacity='0';
-            setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
-          }
-        });
+        // Debounce: wait 1.5s after last tap before calling AI — prevents wasted calls on misclicks
+        clearTimeout(window._coachDebounce);
+        window._coachDebounce=setTimeout(()=>{
+          const latestEnergy=S.energy;
+          getAICoach(latestEnergy,ct,dp).then(msg=>{
+            const c2=document.getElementById('coach-card');
+            const fallback=COACH[latestEnergy][ct];
+            if(c2&&msg&&msg!==fallback){
+              const p2=c2.querySelector('p');
+              p2.style.transition='opacity .35s ease';
+              p2.style.opacity='0';
+              setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
+            }
+          });
+        },1500);
       }
       // Swap exercises based on energy — gym days only
       if(isGym&&dp&&ds){
