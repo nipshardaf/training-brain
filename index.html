@@ -5,25 +5,25 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="apple-mobile-web-app-title" content="Training Brain">
+  <meta name="apple-mobile-web-app-title" content="FitBrain">
   <meta name="theme-color" content="#09090f" media="(prefers-color-scheme: dark)">
   <meta name="theme-color" content="#f5f4ff" media="(prefers-color-scheme: light)">
   <!-- Open Graph / Social link previews -->
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://nipshardaf.github.io/training-brain/">
-  <meta property="og:title" content="Training Brain">
+  <meta property="og:title" content="FitBrain">
   <meta property="og:description" content="AI-powered training companion. Plan your gym workouts, cycling rides, and track your progress — all in one place.">
   <meta property="og:image" content="https://nipshardaf.github.io/training-brain/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Training Brain">
+  <meta name="twitter:title" content="FitBrain">
   <meta name="twitter:description" content="AI-powered training companion. Plan your gym workouts, cycling rides, and track your progress — all in one place.">
   <meta name="twitter:image" content="https://nipshardaf.github.io/training-brain/og-image.png">
   <!-- PWA / Home screen icon -->
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Training%20Brain%22%2C%22short_name%22%3A%22Training%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22apple-touch-icon.png%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
-  <title>Training Brain</title>
+  <title>FitBrain</title>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
@@ -1562,7 +1562,7 @@ function rLock(){
     const isNew=S._authNew||false;
     return`<div class="lock-wrap">
 <div class="lock-logo">🧠</div>
-<div class="lock-title">Training Brain</div>
+<div class="lock-title">FitBrain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
 <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px" autocomplete="off">
   <input id="auth-user" type="email" placeholder="Email" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email"
@@ -1954,7 +1954,7 @@ function rWeek(){
   const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
   return`<div class="screen">
 <div class="hdr" style="position:relative">
-  <h1>Training Brain</h1>
+  <h1>FitBrain</h1>
   <div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div>
   <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">🔒</button>
 </div>
@@ -2474,7 +2474,7 @@ function rPRs(){
     if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push(log);
   }
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Progress · Records · History</div></div>
+<div class="hdr"><h1>FitBrain</h1><div class="hdr-sub">Progress · Records · History</div></div>
 
 <div class="sec-hdr">☁️ Cloud sync</div>
 ${S.fbUser
@@ -2999,7 +2999,7 @@ function importData(){
         Object.entries(data).forEach(([k,v])=>{if(!k.startsWith('_')){DB.set(k,v);count++;}});
         alert(`✅ Restored ${count} records successfully!`);
         render();
-      }catch{alert('❌ Could not read file — make sure it\'s a Training Brain backup.');}
+      }catch{alert('❌ Could not read file — make sure it\'s a FitBrain backup.');}
     };
     reader.readAsText(file);
   };
