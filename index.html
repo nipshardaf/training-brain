@@ -1793,14 +1793,31 @@ async function signInGoogle(){
 
 async function doForgotPassword(){
   const userEl=document.getElementById('auth-user');
-  const email=(userEl?.value||'').trim();
   const errEl=document.getElementById('auth-err');
-  if(!email){if(errEl)errEl.textContent='Enter your email above first.';return;}
+  const raw=(userEl?.value||'').trim();
+  const username=raw.toLowerCase().replace(/[^a-z0-9_]/g,'');
+  if(!username){if(errEl)errEl.textContent='Enter your username above first.';return;}
+  if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your connection.';return;}
   try{
-    await firebase.auth().sendPasswordResetEmail(email);
-    if(errEl){errEl.style.color='var(--grn)';errEl.textContent='✅ Reset email sent — check your inbox.';}
+    // Look up if username exists and has a recovery email
+    const snap=await _fbDb.ref('usernames/'+username).once('value');
+    if(!snap.exists()){
+      if(errEl){errEl.style.color='var(--red)';errEl.textContent='No account found for "'+username+'". Check your username.';}
+      return;
+    }
+    const uid=snap.val().uid;
+    const profileSnap=await _fbDb.ref('users/'+uid+'/profile').once('value');
+    const recovery=profileSnap.val()?.recovery||null;
+    const internalEmail=username+'@training-brain.app';
+    await _fbAuth.sendPasswordResetEmail(internalEmail);
+    if(errEl){
+      errEl.style.color='var(--grn)';
+      errEl.textContent=recovery
+        ?'✅ Reset link sent. Check your recovery email ('+recovery.replace(/(.{2}).+(@.+)/,'$1…$2')+').'
+        :'✅ Reset link sent. Check the email associated with your account.';
+    }
   }catch(e){
-    if(errEl){errEl.style.color='var(--red)';errEl.textContent=e.code==='auth/user-not-found'?'No account found with that email.':('Error: '+e.message);}
+    if(errEl){errEl.style.color='var(--red)';errEl.textContent='Error: '+e.message;}
   }
 }
 
