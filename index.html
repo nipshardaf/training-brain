@@ -667,8 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.25';
+const APP_VERSION='1.26';
 const CHANGELOG=[
+  {v:'1.26',d:'Tapping + Add on an activity now adds it instantly — no more going through the full setup screen'},
   {v:'1.25',d:'Skipping a gym day automatically shifts the rest of the week — no prompts, no dropped muscle groups'},
   {v:'1.23',d:'Activity chips now show an ⓘ info button explaining what each activity covers; renamed to Cardio & Classes'},
   {v:'1.22',d:'Smarter swap rebalancing — skipping a workout now offers to replace an upcoming session so no muscle group gets dropped'},
@@ -2872,7 +2873,7 @@ ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-
 </div>`}
 
 <div class="sec-hdr">🏃 Your Activities</div>
-${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🏊',l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:7px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 13px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:15px;cursor:pointer;padding:0 0 0 6px;line-height:1">ⓘ</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="openGoalsSetup(true,2)" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:15px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''}<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">${_a2.length?'✏️ Change my activities':'➕ Set up activities'}</button></div>`;})()}
+${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🏊',l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:7px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 13px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:15px;cursor:pointer;padding:0 0 0 6px;line-height:1">ⓘ</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:15px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''}<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">${_a2.length?'✏️ Change my activities':'➕ Set up activities'}</button></div>`;})()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
   <span>🏆 Personal Records</span>
@@ -3280,6 +3281,17 @@ function doSwap(ds,newType){
   }
   DB.set(pk,plan);
   closeSwap();syncUp();render();
+}
+function quickAddActivity(key){
+  const profile=DB.get('user_profile',{});
+  const acts=new Set(profile.activities||[]);
+  if(acts.has(key))return;
+  acts.add(key);
+  profile.activities=[...acts];
+  DB.set('user_profile',profile);
+  syncUp();render();
+  const labels={gym:'Gym & Weights',cycling:'Cycling',running:'Running',cardio:'Cardio & Classes'};
+  showToast(`✅ ${labels[key]||key} added to your plan`,'var(--grn)');
 }
 function showActInfo(k){
   const info={
