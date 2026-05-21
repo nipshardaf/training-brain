@@ -883,11 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.50';
+const APP_VERSION='1.51';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
-  {v:'1.50',d:'Backup status moved to Settings tab — plan screen is cleaner',det:'The "Backed up X ago / Back up now" bar has moved from the top of the Plan tab to the top of Settings. It was always-visible noise on the screen you use most — now it sits in Settings where account and data actions live. The bar still shows the same info: green dot + time since last backup + a "Back up now" button. If you\'re not signed in, a warning still appears in Settings prompting you to sign in.'},
+  {v:'1.51',d:'Backup status now lives inside the Account card in Settings',det:'The backup status row (green dot, "Backed up X ago", "Back up now") is now grouped inside the Account card under Settings → Account & Backup, separated by a subtle divider below the signed-in name. It was previously floating as a standalone bar at the top of Settings. This keeps all account and backup actions in one place.'},
   {v:'1.49',d:'Plan mode labels clarified — Outdoor + Gym, Indoor + Gym, Gym only',det:'The three plan modes have been renamed to be self-explanatory. "Use weather" is now "Outdoor + Gym" — it schedules outdoor cardio on the best weather days and gym on the rest. "Indoor only" is now "Indoor + Gym" — trainer or Zwift sessions indoors plus gym, weather ignored. "No biking" / "Gym only" keeps the same meaning but is now clearly labelled everywhere: the plan tab selector, the generate/regenerate buttons, the empty state, and the ride preference section in Settings. All three labels are consistent across every part of the app.'},
   {v:'1.48',d:'Goals and settings no longer re-ask after sign-in — login now syncs both ways',det:'Every sign-in (Google, username/password, PIN unlock, and iOS PWA auto-restore) now runs a load-then-push cycle: it pulls the latest data from Firebase first, then immediately pushes any local data that Firebase is missing back up. This fixes the root cause of goals, activities, and Strava reappearing after reinstall or signing in on a new device — the profile was stored locally but never made it to Firebase because the sync only ran on explicit data changes. Now the first login after any gap automatically closes that gap.'},
   {v:'1.47',d:'Bodyweight exercises added; "Home week" toggle skips the gym without changing your profile',det:'18 new bodyweight exercises added across all session types: push-ups (standard, decline, diamond), pike push-up, inverted row, superman, bodyweight squat, jump squat, bodyweight lunge, single-leg glute bridge, donkey kick, wall sit, mountain climber, bicycle crunch, side plank, floor leg raise, crunch, and burpee. Each has full coaching cues and Traditional Chinese translation. Every slot in every workout type now includes bodyweight alternatives — when gym equipment is unavailable (e.g. home gym profile), the app automatically falls back to bodyweight versions without you having to do anything. The new "Training from home this week?" toggle on the Plan tab forces bodyweight-only session generation for that week only, without permanently changing your gym profile — tap it again or shift to a different week to turn it off. A purple "Home week" badge appears on each gym-day screen so you know the mode is active.'},
@@ -3739,10 +3739,6 @@ function rSettings(){
   const pat=S.fbUser;
   return`<div class="screen">
 <div class="hdr"><h1><img src="/training-brain/assets/icons/app-logo-symbol.png" width="22" height="22" style="vertical-align:middle;margin-right:5px;object-fit:contain" onerror="this.style.display='none'">Training Brain</h1><div class="hdr-sub">${_T('sub_settings')}</div></div>
-${pat
-  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'☁️ Not backed up yet':syncAge<2?'☁️ Backed up just now':syncAge<60?`☁️ Backed up ${syncAge}m ago`:'☁️ Backed up '+lastSync.slice(0,10)}</span><button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button></div>`
-  :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">⚠️ Saving locally only — sign in to back up your data</span><button onclick="go('settings')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
-}
 
 <div class="sec-hdr">${_T('ai_coach')}</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
@@ -3884,6 +3880,10 @@ ${(()=>{
 ${S.fbUser
   ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
       <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;padding-top:10px;border-top:1px solid rgba(16,185,129,.2)">
+        <span style="color:var(--t2);font-size:11px"><span class="sync-dot"></span>${syncAge===null?'☁️ Not backed up yet':syncAge<2?'☁️ Backed up just now':syncAge<60?`☁️ Backed up ${syncAge}m ago`:'☁️ Backed up '+lastSync.slice(0,10)}</span>
+        <button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer;padding:0">Back up now</button>
+      </div>
     </div>
     <div class="data-btns">
       <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
