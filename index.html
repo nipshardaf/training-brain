@@ -365,6 +365,32 @@ const EX = {
   heel_raise:  {n:'Heel Raise (arch)',   g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Arch · Calves',           p:null,                                      uni:true},
 };
 
+/* ── EXERCISE NAMES — Traditional Chinese ── */
+const EX_ZH={
+  bb_bench:'槓鈴臥推',db_bench:'啞鈴臥推',incline_bb:'上斜槓鈴臥推',incline_db:'上斜啞鈴臥推',
+  cable_fly:'繩索飛鳥',pec_deck:'蝴蝶機夾胸',ohp:'過頭推舉',db_spress:'啞鈴肩推',arnold:'阿諾肩推',
+  lat_raise:'側平舉',cable_lat:'繩索側平舉',tri_push:'三頭肌下壓',skull:'仰臥臂屈伸',
+  tri_oh:'過頭三頭肌伸展',dips:'三頭肌雙槓臂屈伸',pullup:'引體向上',lat_pull:'滑輪下拉',
+  bb_row:'槓鈴划船',tbar_row:'T槓划船',db_row:'啞鈴划船',cable_row:'坐姿繩索划船',
+  face_pull:'面拉',rear_fly:'後三角飛鳥',bb_curl:'槓鈴彎舉',db_curl:'啞鈴彎舉',hammer:'錘式彎舉',
+  preacher:'牧師彎舉',incline_curl:'上斜啞鈴彎舉',cable_curl:'繩索彎舉',bb_squat:'槓鈴深蹲',
+  front_squat:'前蹲舉',leg_press:'腿推舉',bss:'保加利亞分腿蹲',lunge:'行走弓步',step_up:'啞鈴登階',
+  goblet_squat:'高腳杯深蹲',hack_squat:'哈克深蹲',leg_ext:'腿屈伸',adductor_mach:'內收肌訓練機',
+  abductor_mach:'外展肌訓練機',rdl:'羅馬尼亞硬舉',deadlift:'傳統硬舉',hip_thrust:'槓鈴臀推',
+  glute_bridge:'臀橋',glute_kick:'繩索臀部後踢',nordic_curl:'北歐式腿彎舉',leg_curl:'俯臥腿彎舉',
+  seated_leg_curl:'坐姿腿彎舉',calf_raise:'站姿提踵',seated_calf:'坐姿提踵',single_calf:'單腿提踵',
+  plank:'平板支撐',hang_raise:'懸吊舉腿',ab_wheel:'健腹輪',cable_crunch:'繩索捲腹',
+  mach_crunch:'機械捲腹',short_foot:'縮足運動',towel_scrunch:'毛巾抓握',arch_raise:'足弓提升',
+  toe_spread:'腳趾張開保持',heel_raise:'提踵（足弓）',
+};
+// Snapshot original English names so the language can switch both ways
+const EX_EN_NAMES={};
+Object.keys(EX).forEach(id=>{EX_EN_NAMES[id]=EX[id].n;});
+function applyExLang(){
+  const zh=DB.get('lang','en')==='zh';
+  Object.keys(EX).forEach(id=>{EX[id].n=(zh&&EX_ZH[id])?EX_ZH[id]:EX_EN_NAMES[id];});
+}
+
 /* ── SESSION SLOT TEMPLATES ── */
 const SLOTS = {
   PUSH:[
@@ -684,9 +710,22 @@ const COACH = {
   sore:{gym:'🤕 Body\'s talking. Warm up 10+ min, reduce weights. If something hurts beyond soreness, skip that movement.',ride:'🤕 If legs are sore, skip or do 10 min very easy spinning only.',rest:'🤕 Gentle mobility only. Prioritise protein and sleep tonight.'},
 };
 
+/* ── COACH MESSAGES — Traditional Chinese ── */
+const COACH_ZH = {
+  fresh:{gym:'🔥 狀態極佳 — 全力衝刺你的頂組，追求漸進負荷。若重量感覺輕鬆，就加 2.5 公斤。',ride:'🔥 雙腿充滿活力 — 高質量的 Zone 2 訓練日。保持心率穩定，可考慮騎得久一點。',rest:'🔥 精力充沛 — 慢慢做完整套活動度訓練。你的身體會在下次訓練回報你。'},
+  okay:{gym:'💪 穩定的基礎。有控制地完成所有計劃組數。持續的訓練帶來持續的成果。',ride:'💪 能量穩定 — 維持 Zone 2，讓雙腿自由轉動。',rest:'💪 良好的休息日。完成整套活動度訓練，或許到外面散個步。'},
+  tired:{gym:'😪 能量偏低。減重 10–15%，專注動作形式，略過頂組。能來訓練就值得肯定。',ride:'😪 考慮縮短至 15–20 分鐘 Zone 1，或乾脆休息。別在油盡燈枯時硬逼質量。',rest:'😪 今晚多睡一點比任何訓練都重要。只做輕度伸展。'},
+  sore:{gym:'🤕 身體在發出訊號。熱身 10 分鐘以上，減輕重量。若有超出痠痛的疼痛，略過該動作。',ride:'🤕 若雙腿痠痛，休息或只做 10 分鐘非常輕鬆的踩踏。',rest:'🤕 只做溫和的活動度訓練。今晚以蛋白質和睡眠為優先。'},
+};
+function coachMsg(e,ct){
+  const src=DB.get('lang','en')==='zh'?COACH_ZH:COACH;
+  return((src[e]||COACH[e])||{})[ct]||'';
+}
+
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.38';
+const APP_VERSION='1.39';
 const CHANGELOG=[
+  {v:'1.39',d:'Chinese translation expanded — all 61 exercise names, coach messages, and the workout day screen',det:'All 61 exercises now show proper Traditional Chinese names (硬舉, 深蹲, 臥推, 引體向上, etc.) everywhere they appear — day screen, log, history, PRs and swap sheets. The "Coach says" pre-workout messages are fully translated for every energy level. The workout day screen UI is now translated too: the Exercises heading, Animate / Tutorial / collapse buttons, Busy? and Log sets buttons, set/rep badges, the back and swap buttons, and the log-workout button. The exercise form-cue tips remain in English for now.'},
   {v:'1.38',d:'Fixed the Swap Workout sheet showing raw code instead of workout names',det:'After workout labels were made translatable (lazy functions), the "Change workout for this day" sheet was still rendering them directly — so it showed text like ()=>_T(\'wt_push\') instead of "Push". The swap sheet now calls the label and description functions correctly, matching every other screen.'},
   {v:'1.37',d:'Chinese language polish — history screen translated, overcrowding fixes, layout class added',det:'The Workout History screen is now fully translated (Completed, exercise/set counts, set rows). Added a lang-zh class on the page root when Traditional Chinese is active, with CSS rules that slightly reduce font sizes, allow exercise card titles to wrap to two lines instead of truncating, tighten button padding, and shrink the bottom-nav labels so nothing overflows. The My Training tab label was shortened to 訓練. Language preference now syncs to the cloud, so it restores correctly after signing in on a new device. Exercise-name and coach-message translation are still to come.'},
   {v:'1.36',d:'Weekly AI Review added — a Sunday training analysis covering 8 weeks of data',det:'Every Sunday a card appears on the Plan tab offering a weekly review. Tapping Generate sends your last 8 weeks of gym sessions, ride data (Strava or manually logged), all-time PRs and the current plan to the AI coach. It returns four sections: an honest performance summary, progressive overload targets for next week, recovery flags, and one focus goal. The result is cached per week and synced to the cloud, so reopening the app the same Sunday never re-calls the API. An optional "Email me this summary" button delivers it via EmailJS once you add your email and EmailJS keys in Settings. Fully bilingual.'},
@@ -802,6 +841,10 @@ const TRANS={
     wr_emailjs_help:'Create a free account at emailjs.com, add an email service and a template containing {{to_email}} and {{summary}} fields, then paste the three IDs below.',
     h_completed:'Completed',h_exercises:'exercises',h_sets_logged:'sets logged',h_reps:'reps',
     h_no_workouts:'No workouts logged yet',
+    back_week:'Week',exercises_lbl:'Exercises',collapse:'collapse',coach_says:'Coach says',
+    sets_unit:'sets',reps_unit:'reps',
+    log_workout:'Log This Workout',continue_log:'Continue Logging',view_log:'View Log',
+    suggested:'suggested',
     lang_en:'English',lang_zh:'繁體中文',
   },
   zh:{
@@ -868,6 +911,10 @@ const TRANS={
     wr_emailjs_help:'在 emailjs.com 建立免費帳戶，新增電郵服務和包含 {{to_email}} 與 {{summary}} 欄位的範本，然後在下方貼上三個 ID。',
     h_completed:'已完成',h_exercises:'項練習',h_sets_logged:'組已記錄',h_reps:'下',
     h_no_workouts:'尚未記錄任何訓練',
+    back_week:'本週',exercises_lbl:'訓練動作',collapse:'收合',coach_says:'教練建議',
+    sets_unit:'組',reps_unit:'下',
+    log_workout:'記錄這次訓練',continue_log:'繼續記錄',view_log:'查看記錄',
+    suggested:'建議',
     lang_en:'English',lang_zh:'繁體中文',
   }
 };
@@ -897,7 +944,7 @@ const _GROUP_META={
 };
 async function getAICoach(energy,ct,dp){
   // Guests get hardcoded responses — no API keys wasted
-  if(S.guest)return COACH[energy][ct];
+  if(S.guest)return coachMsg(energy,ct);
 
   const date=dp?.date||'';
   const cacheKey='coach_'+energy+'_'+date;
@@ -908,7 +955,7 @@ async function getAICoach(energy,ct,dp){
 
   // Check if we already fetched all 4 moods today (avoid duplicate batch call)
   const batchKey='coach_batch_'+date+'_'+(dp?.type||ct);
-  if(DB.get(batchKey,false))return COACH[energy][ct];
+  if(DB.get(batchKey,false))return coachMsg(energy,ct);
   DB.set(batchKey,true);
 
   // Build rich context — skip API entirely if no meaningful data
@@ -941,7 +988,7 @@ async function getAICoach(energy,ct,dp){
   // Not worth calling AI if user has no real data yet — hardcoded is just as good
   if(hasPRs===0&&hasHistory===0){
     DB.set(batchKey,false); // allow retry once they have data
-    return COACH[energy][ct];
+    return coachMsg(energy,ct);
   }
 
   let weekSessions=0;
@@ -1003,10 +1050,10 @@ SORE: [note for sore/recovering — what to reduce or focus on]`;
           DB.set(ck,msg);
         }
       });
-      return _coachCache[cacheKey]||COACH[energy][ct];
+      return _coachCache[cacheKey]||coachMsg(energy,ct);
     }
   }catch(e){console.warn('AI coach failed:',e);}
-  return COACH[energy][ct];
+  return coachMsg(energy,ct);
 }
 
 /* ── PER-EXERCISE AI COACH ── */
@@ -2474,6 +2521,7 @@ function openDay(dateStr){
 function render(){
   const el=document.getElementById('app');
   document.documentElement.classList.toggle('lang-zh',DB.get('lang','en')==='zh');
+  applyExLang();
   if(!S.authed){el.innerHTML=rLock();return;}
   // Show goals onboarding for new users (not guest — they get a simpler experience)
   if(!S.guest&&!DB.get('user_profile',null)&&!document.getElementById('goals-sheet')){
@@ -2618,9 +2666,9 @@ function rDay(){
   const v=verdict(w.score);
   return`<div class="screen">
 <div class="day-hdr">
-  <button class="back-btn" onclick="go('week')">← Week</button>
+  <button class="back-btn" onclick="go('week')">← ${_T('back_week')}</button>
   <div class="day-hdr-r">${shortD(S.viewDate)}</div>
-  <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">Swap ↕</button>
+  <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">${_T('swap')} ↕</button>
 </div>
 <div class="day-hero" style="border-color:${wi.c}33">
   <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${(typeof wi.l==='function'?wi.l():wi.l).toUpperCase()}</div>
@@ -2633,8 +2681,8 @@ function rDay(){
   ${eBtn('fresh','🔥',_T('e_fresh'))}${eBtn('okay','💪',_T('e_okay'))}${eBtn('tired','😪',_T('e_tired'))}${eBtn('sore','🤕',_T('e_sore'))}
 </div>
 <div class="coach${S.energy?' on':''}" id="coach-card">
-  <div class="coach-lbl">Coach says</div>
-  <p>${S.energy?COACH[S.energy][ct]:''}</p>
+  <div class="coach-lbl">${_T('coach_says')}</div>
+  <p>${S.energy?coachMsg(S.energy,ct):''}</p>
   ${S.guest&&S.energy?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bord);font-size:11px;color:var(--t2)">🔒 <a href="#" onclick="lockApp();return false;" style="color:var(--al);text-decoration:none;font-weight:700">Sign in</a> for personalised advice based on your actual lifts and history</div>`:''}
 </div>
 ${(()=>{
@@ -2652,7 +2700,7 @@ ${(()=>{
 ${isGym&&dp.exercises?rExList(dp,log):''}
 ${isRide?rRideCard(dp):''}
 ${dp.type==='REST'?rRestCard():''}
-${isGym?`<button class="btn btn-p mt12" onclick="startLog('${ds}')">${log&&log.completed?'✓ View Log':log?'📝 Continue Logging':'📝 Log This Workout'}</button>`:''}
+${isGym?`<button class="btn btn-p mt12" onclick="startLog('${ds}')">${log&&log.completed?'✓ '+_T('view_log'):log?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button>`:''}
 </div>`;
 }
 
@@ -2661,9 +2709,9 @@ function eBtn(k,emoji,lbl){
 }
 
 function rExList(dp,log){
-  const energyLabel=S.energy?ENERGY_PROFILE[S.energy]?.label:'';
+  const energyLabel=S.energy?_T('e_'+S.energy):'';
   const elbl=energyLabel?`<span style="background:var(--s2);border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--al)">${energyLabel}</span>`:'';
-  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="sec-lbl" style="margin-bottom:0">Exercises</div>${elbl}</div><div class="ex-list">${(dp.exercises||[]).map((id,i)=>{
+  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="sec-lbl" style="margin-bottom:0">${_T('exercises_lbl')}</div>${elbl}</div><div class="ex-list">${(dp.exercises||[]).map((id,i)=>{
     const ex=EX[id];if(!ex)return'';
     const pr=DB.get('prs',{})[id];
     const tgt=energyTargets(id,S.energy||'okay');
@@ -2690,22 +2738,22 @@ function rExList(dp,log){
   <div class="ex-banner" onclick="event.stopPropagation();toggleExCollapse(${i},${isDone})">
     <span class="ex-num-i">${i+1}</span>
     <span class="ex-num-n">${ex.n}</span>
-    <span class="ex-banner-chev" style="background:rgba(0,0,0,.4);border-radius:100px;padding:2px 7px;font-size:11px">▾ collapse</span>
+    <span class="ex-banner-chev" style="background:rgba(0,0,0,.4);border-radius:100px;padding:2px 7px;font-size:11px">▾ ${_T('collapse')}</span>
   </div>
-  <button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ Animate</button>
-  <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 Tutorial</button>
+  <button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ ${_T('animate')}</button>
+  <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 ${_T('tutorial')}</button>
 </div>
 <div class="ex-body">
   <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
   <div class="ex-bdgs">
-    <span class="bdg bs">${tgt.sets} sets</span><span class="bdg br">${tgt.reps} reps</span><span class="bdg bp">RPE ${tgt.rpe}</span>
+    <span class="bdg bs">${tgt.sets} ${_T('sets_unit')}</span><span class="bdg br">${tgt.reps} ${_T('reps_unit')}</span><span class="bdg bp">RPE ${tgt.rpe}</span>
     ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
   </div>
   ${EX_CUES[id]?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:7px;padding:7px 10px;background:var(--s2);border-radius:9px;border-left:2px solid var(--acc)">💡 ${EX_CUES[id]}</div>`:''}
   <div style="display:flex;gap:7px;margin-top:9px">
-    <button class="ex-busy-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openExSwap('${id}',${i},'${dp.date}','${dp.type}')">🔄 Busy?</button>
-    <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--al);border-color:rgba(167,139,250,.3)" onclick="event.stopPropagation();openExLog('${id}',${i},'${dp.date}')">📝 Log sets</button>
+    <button class="ex-busy-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openExSwap('${id}',${i},'${dp.date}','${dp.type}')">🔄 ${_T('busy')}</button>
+    <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--al);border-color:rgba(167,139,250,.3)" onclick="event.stopPropagation();openExLog('${id}',${i},'${dp.date}')">📝 ${_T('log_sets')}</button>
     <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--grn);border-color:rgba(16,185,129,.3)" onclick="event.stopPropagation();openExCoach('${id}')">💡 ${_T('coach_btn')}</button>
   </div>
 </div>
@@ -3126,7 +3174,7 @@ function rLogEx(le,ei){
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar()}
-  <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} sets · ${tgt.reps} reps · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' suggested</span>':''}</div>
+  <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
   <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
     <span class="set-n">${setLabel(si,set)}</span>
