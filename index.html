@@ -365,22 +365,22 @@ const EX = {
   heel_raise:  {n:'Heel Raise (arch)',   g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Arch · Calves',           p:null,                                      uni:true},
   // ── Bodyweight / home exercises ────────────────────────────────────────────
   pushup:       {n:'Push-Up',              g:'chest',    t:'C',sets:4,reps:'10–15',rpe:'6',  m:'Chest · Triceps',         p:null, bw:true},
-  decline_pu:   {n:'Decline Push-Up',      g:'chest',    t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Upper Chest',             p:null, bw:true},
+  decline_pu:   {n:'Decline Push-Up',      g:'chest',    t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Upper Chest',             p:'Decline_Push-Up', bw:true},
   diamond_pu:   {n:'Diamond Push-Up',      g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:null, bw:true},
   pike_pu:      {n:'Pike Push-Up',         g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders · Triceps',     p:null, bw:true},
   inverted_row: {n:'Inverted Row',         g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back · Biceps',           p:null, bw:true},
-  superman:     {n:'Superman',             g:'hback_h',  t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Lower Back · Glutes',     p:null, bw:true},
-  bw_squat:     {n:'Bodyweight Squat',     g:'quad',     t:'C',sets:3,reps:'15–20',rpe:'5',  m:'Quads · Glutes',          p:null, bw:true},
-  jump_squat:   {n:'Jump Squat',           g:'quad',     t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Quads · Glutes',          p:null, bw:true},
-  bw_lunge:     {n:'Bodyweight Lunge',     g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Quads · Glutes',          p:null, bw:true, uni:true},
-  sl_glute_bridge:{n:'Single-Leg Glute Bridge',g:'ham',  t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Glutes · Hamstrings',     p:null, bw:true, uni:true},
+  superman:     {n:'Superman',             g:'hback_h',  t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Lower Back · Glutes',     p:'Superman', bw:true},
+  bw_squat:     {n:'Bodyweight Squat',     g:'quad',     t:'C',sets:3,reps:'15–20',rpe:'5',  m:'Quads · Glutes',          p:'Bodyweight_Squat', bw:true},
+  jump_squat:   {n:'Jump Squat',           g:'quad',     t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Quads · Glutes',          p:'Freehand_Jump_Squat', bw:true},
+  bw_lunge:     {n:'Bodyweight Lunge',     g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Quads · Glutes',          p:'Bodyweight_Walking_Lunge', bw:true, uni:true},
+  sl_glute_bridge:{n:'Single-Leg Glute Bridge',g:'ham',  t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Glutes · Hamstrings',     p:'Single_Leg_Glute_Bridge', bw:true, uni:true},
   donkey_kick:  {n:'Donkey Kick',          g:'ham',      t:'I',sets:3,reps:'15/leg',rpe:'5', m:'Glutes',                  p:null, bw:true, uni:true},
   wall_sit:     {n:'Wall Sit',             g:'quad',     t:'I',sets:3,reps:'45s',   rpe:'6', m:'Quads',                   p:null, bw:true},
-  mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:null, bw:true},
+  mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:'Mountain_Climbers', bw:true},
   bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:null, bw:true},
   side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:null, bw:true, uni:true},
   leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:null, bw:true},
-  crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:null, bw:true},
+  crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:'Crunches', bw:true},
   burpee:       {n:'Burpee',               g:'core',     t:'C',sets:3,reps:'10–15', rpe:'8', m:'Full Body',               p:null, bw:true},
 };
 
@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.53';
+const APP_VERSION='1.54';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.54',d:'"At home today" moved to each workout day — now per-day, instant, no regenerate needed',det:'"Training from home this week?" has been redesigned. Instead of a week-wide toggle on the Plan tab that required a separate Regenerate tap, there is now a compact "Training at home today?" row on each individual gym day screen. Tap it and the exercises switch to bodyweight immediately — no second step. Tap it again to switch back to gym exercises. It only affects that one day. Also fixed: 8 of the 18 bodyweight exercises now show real demo images (Decline Push-Up, Superman, Bodyweight Squat, Jump Squat, Bodyweight Lunge, Single-Leg Glute Bridge, Mountain Climber, Crunch) — the remaining 10 show styled muscle-group placeholders since those specific movements are not in the exercise image database.'},
   {v:'1.53',d:'Settings Account section layout fixes — no empty space, clearer button labels',det:'"Sign out" no longer sits in a half-empty two-column row. "Backup (.json)" renamed to "Download backup" — the .json detail was meaningless to most people.'},
   {v:'1.52',d:'iPhone home screen icon updated to the current app logo',det:'The apple-touch-icon (the icon shown when you add Training Brain to your iPhone home screen) was still the original placeholder. It now uses the same logo shown inside the app. To see the update: remove the existing home screen shortcut and re-add it via Safari → Share → Add to Home Screen.'},
   {v:'1.51',d:'Backup status now lives inside the Account card in Settings',det:'The backup status row (green dot, "Backed up X ago", "Back up now") is now grouped inside the Account card under Settings → Account & Backup, separated by a subtle divider below the signed-in name. It was previously floating as a standalone bar at the top of Settings. This keeps all account and backup actions in one place.'},
@@ -2183,8 +2184,7 @@ function buildWeek(wdays){
 }
 
 /* ── SESSION GENERATION ── */
-function genSession(type,energy='okay'){
-  const bwOnly=DB.get('home_week_'+fd(S.weekStart),false);
+function genSession(type,energy='okay',bwOnly=false){
   const slots=SLOTS[type];
   const recent=DB.get('recent_ex',[]);
   const picked=[];
@@ -2786,14 +2786,6 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <div class="week-label">${lbl}</div>
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
-${(()=>{const hw=DB.get('home_week_'+fd(S.weekStart),false);return`<div onclick="toggleHomeWeek()" style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:${hw?'rgba(124,58,237,.1)':'var(--s1)'};border:1px solid ${hw?'var(--acc)':'var(--bord)'};border-radius:12px;margin-bottom:12px;cursor:pointer">
-  <span style="font-size:16px">🏠</span>
-  <div style="flex:1;min-width:0">
-    <div style="font-size:12px;font-weight:700;color:${hw?'var(--al)':'var(--txt)'}">${hw?'Home week active':'Training from home this week?'}</div>
-    <div style="font-size:11px;color:var(--t2);margin-top:1px">${hw?'Exercises use bodyweight — regenerate to apply':'Tap to switch to bodyweight exercises'}</div>
-  </div>
-  <div style="background:${hw?'var(--acc)':'var(--s2)'};border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:${hw?'#fff':'var(--t2)'};flex-shrink:0">${hw?'On':'Off'}</div>
-</div>`;})()}
 ${rReviewCard()}
 ${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
@@ -2905,8 +2897,13 @@ function rDay(){
   <div class="hero-name">${typeof wi.d==='function'?wi.d():wi.d}</div>
   <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>
   ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
-  ${DB.get('home_week_'+fd(S.weekStart),false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 Home week</div>`:''}
+  ${DB.get('home_day_'+ds,false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 At home today</div>`:''}
 </div>
+${isGym?(()=>{const hd=DB.get('home_day_'+ds,false);return`<div onclick="toggleHomeDay('${ds}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:${hd?'rgba(124,58,237,.1)':'var(--s1)'};border:1px solid ${hd?'var(--acc)':'var(--bord)'};border-radius:12px;margin-bottom:14px;cursor:pointer">
+  <span style="font-size:15px">🏠</span>
+  <div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:${hd?'var(--al)':'var(--txt)'}">${hd?'Gym at home — bodyweight exercises':'Training at home today?'}</div>
+  <div style="background:${hd?'var(--acc)':'var(--s2)'};border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;color:${hd?'#fff':'var(--t2)'};flex-shrink:0">${hd?'On':'Off'}</div>
+</div>`;})():''}
 <div class="sec-lbl">${_T('how_feeling')}</div>
 <div class="egrid">
   ${eBtn('fresh','🔥',_T('e_fresh'))}${eBtn('okay','💪',_T('e_okay'))}${eBtn('tired','😪',_T('e_tired'))}${eBtn('sore','🤕',_T('e_sore'))}
@@ -4526,13 +4523,24 @@ function genPlan(){
 
 function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;render();}
 
-function toggleHomeWeek(){
-  const key='home_week_'+fd(S.weekStart);
+function toggleHomeDay(dateStr){
+  const key='home_day_'+dateStr;
   const on=!DB.get(key,false);
   DB.set(key,on);
+  // Re-generate exercises for just this day immediately
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(plan){
+    const dp=plan.find(d=>d.date===dateStr);
+    const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP'];
+    if(dp&&GYM_SEQ.includes(dp.type)){
+      dp.exercises=genSession(dp.type,'okay',on);
+      DB.set(pk,plan);
+    }
+  }
   render();
-  if(on)showToast('🏠 Home week on — tap Regenerate to switch exercises','var(--acc)');
-  else showToast('🏠 Home week off — tap Regenerate to restore gym exercises','var(--t2)');
+  if(on)showToast('🏠 Switched to bodyweight exercises','var(--acc)');
+  else showToast('🏠 Switched back to gym exercises','var(--t2)');
 }
 
 /* ── INIT ── */
