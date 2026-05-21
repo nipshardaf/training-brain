@@ -21,8 +21,8 @@
   <meta name="twitter:description" content="AI-powered training companion. Plan your gym workouts, cycling rides, and track your progress — all in one place.">
   <meta name="twitter:image" content="https://nipshardaf.github.io/training-brain/og-image.png">
   <!-- PWA / Home screen icon -->
-  <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
-  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Training%20Brain%22%2C%22short_name%22%3A%22Training%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22apple-touch-icon.png%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
+  <link rel="apple-touch-icon" sizes="180x180" href="/training-brain/assets/icons/app-logo-symbol.png">
+  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Training%20Brain%22%2C%22short_name%22%3A%22Training%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22%2Ftraining-brain%2Fassets%2Ficons%2Fapp-logo-symbol.png%22%2C%22sizes%22%3A%22192x192%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
   <title>Training Brain</title>
   <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
   <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.51';
+const APP_VERSION='1.52';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.52',d:'iPhone home screen icon updated to the current app logo',det:'The apple-touch-icon (the icon shown when you add Training Brain to your iPhone home screen) was still the original placeholder. It now uses the same logo shown inside the app. To see the update: remove the existing home screen shortcut and re-add it via Safari → Share → Add to Home Screen.'},
   {v:'1.51',d:'Backup status now lives inside the Account card in Settings',det:'The backup status row (green dot, "Backed up X ago", "Back up now") is now grouped inside the Account card under Settings → Account & Backup, separated by a subtle divider below the signed-in name. It was previously floating as a standalone bar at the top of Settings. This keeps all account and backup actions in one place.'},
   {v:'1.49',d:'Plan mode labels clarified — Outdoor + Gym, Indoor + Gym, Gym only',det:'The three plan modes have been renamed to be self-explanatory. "Use weather" is now "Outdoor + Gym" — it schedules outdoor cardio on the best weather days and gym on the rest. "Indoor only" is now "Indoor + Gym" — trainer or Zwift sessions indoors plus gym, weather ignored. "No biking" / "Gym only" keeps the same meaning but is now clearly labelled everywhere: the plan tab selector, the generate/regenerate buttons, the empty state, and the ride preference section in Settings. All three labels are consistent across every part of the app.'},
   {v:'1.48',d:'Goals and settings no longer re-ask after sign-in — login now syncs both ways',det:'Every sign-in (Google, username/password, PIN unlock, and iOS PWA auto-restore) now runs a load-then-push cycle: it pulls the latest data from Firebase first, then immediately pushes any local data that Firebase is missing back up. This fixes the root cause of goals, activities, and Strava reappearing after reinstall or signing in on a new device — the profile was stored locally but never made it to Firebase because the sync only ran on explicit data changes. Now the first login after any gap automatically closes that gap.'},
