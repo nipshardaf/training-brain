@@ -2872,55 +2872,9 @@ ${!history.length
 
 /* ── SETTINGS SCREEN ── */
 function rSettings(){
+  const hasPIN=!!DB.get('pin',null);
   return`<div class="screen">
 <div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Settings · Connected services</div></div>
-
-<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>📋 What's new</span>
-  <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
-</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
-  <div style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
-    <div>
-      <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
-    </div>
-    <span id="changelog-arr" style="color:var(--t2);font-size:12px">▼</span>
-  </div>
-  <div id="changelog-list" style="display:none;border-top:1px solid var(--bord)">
-    ${CHANGELOG.slice(1).map(c=>`<div style="padding:10px 15px;border-bottom:1px solid var(--bord);display:flex;gap:10px;align-items:baseline">
-      <span style="font-size:10px;font-weight:800;color:var(--al);flex-shrink:0;min-width:30px">v${c.v}</span>
-      <span style="font-size:12px;color:var(--t2);line-height:1.5">${c.d}</span>
-    </div>`).join('')}
-    <div style="padding:10px 15px;text-align:center;font-size:11px;color:var(--t2)">🏁 v1.0 — Initial launch</div>
-  </div>
-</div>
-
-<div class="sec-hdr">☁️ Cloud sync</div>
-${S.fbUser
-  ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
-      <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span><br>
-      <span style="color:var(--t2)">Last sync: ${(DB.get('fb_last_sync','Never')||'Never').slice(0,16).replace('T',' ')}</span>
-    </div>
-    <div class="data-btns">
-      <button class="btn btn-s" onclick="saveToCloud(true)">🔄 Sync now</button>
-      <button class="btn btn-s" onclick="signOut()">🚪 Sign Out</button>
-    </div>`
-  :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Sign in or create an account to save your data online and access it from any device.</div>
-      <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
-    </div>`}
-
-<div class="sec-hdr">💾 Backup & security</div>
-<div class="data-btns">
-  <button class="btn btn-s" onclick="exportData()">⬇️ Export</button>
-  <button class="btn btn-s" onclick="importData()">⬆️ Import</button>
-</div>
-<div class="data-btns">
-  <button class="btn btn-s" onclick="changePIN()">🔑 Change PIN</button>
-  <button class="btn btn-s" onclick="lockApp()">🔒 Lock app</button>
-</div>
 
 <div class="sec-hdr">🤖 AI Coach</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
@@ -2928,7 +2882,7 @@ ${S.fbUser
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
     <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
   </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.5">Coaching is personalised to your exercises, PRs and energy level. Powered by Gemini 2.5 Flash.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5">Gives you a personalised pre-workout note each day based on your logged sets, PRs, and how you're feeling. Powered by Gemini 2.5 Flash.</div>
 </div>
 
 <div class="sec-hdr">🏋️ Gym Profile</div>
@@ -3035,6 +2989,50 @@ ${(()=>{
   <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">🟠 Connect Strava</button>
 </div>`;
 })()}
+
+<div class="sec-hdr">☁️ Account & backup</div>
+${S.fbUser
+  ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
+      <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span><br>
+      <span style="color:var(--t2)">Last backup: ${(DB.get('fb_last_sync','Never')||'Never').slice(0,16).replace('T',' ')}</span>
+    </div>
+    <div class="data-btns">
+      <button class="btn btn-s" onclick="saveToCloud(true)">🔄 Back up now</button>
+      <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
+    </div>`
+  :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Sign in to save your workouts, PRs, and plan to the cloud — accessible on any device.</div>
+      <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
+    </div>`}
+<div class="data-btns">
+  <button class="btn btn-s" onclick="exportData()">⬇️ Export data</button>
+  <button class="btn btn-s" onclick="importData()">⬆️ Import data</button>
+</div>
+${hasPIN?`<div class="data-btns" style="margin-top:8px">
+  <button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>
+</div>`:''}
+
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
+  <span>📋 What's new</span>
+  <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
+  <div style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
+    <div>
+      <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
+    </div>
+    <span id="changelog-arr" style="color:var(--t2);font-size:12px">▼</span>
+  </div>
+  <div id="changelog-list" style="display:none;border-top:1px solid var(--bord)">
+    ${CHANGELOG.slice(1).map(c=>`<div style="padding:10px 15px;border-bottom:1px solid var(--bord);display:flex;gap:10px;align-items:baseline">
+      <span style="font-size:10px;font-weight:800;color:var(--al);flex-shrink:0;min-width:30px">v${c.v}</span>
+      <span style="font-size:12px;color:var(--t2);line-height:1.5">${c.d}</span>
+    </div>`).join('')}
+    <div style="padding:10px 15px;text-align:center;font-size:11px;color:var(--t2)">🏁 v0.1 — Initial build</div>
+  </div>
+</div>
 
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
