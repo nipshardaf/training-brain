@@ -952,9 +952,9 @@ Rules: 1–2 sentences per section. Under 200 words total. Be precise and direct
 }
 
 /* ── GOALS ONBOARDING ── */
-function openGoalsSetup(isEdit=false){
+function openGoalsSetup(isEdit=false,startStep=1){
   const cur=DB.get('user_profile',{});
-  let step=1;
+  let step=startStep;
   let selGoals=new Set(cur.goals||( cur.goal?[cur.goal]:[] ));
   let selActs=new Set(cur.activities||[]);
   let selDays=cur.days||4;
@@ -2958,8 +2958,33 @@ ${!history.length
 /* ── SETTINGS SCREEN ── */
 function rSettings(){
   const hasPIN=!!DB.get('pin',null);
+  const _profile=DB.get('user_profile',null);
+  const _acts=_profile?.activities||[];
+  const _actMeta={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🪜',l:'Other Cardio'}};
+  const _missing=Object.keys(_actMeta).filter(a=>!_acts.includes(a));
   return`<div class="screen">
 <div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Settings · Connected services</div></div>
+
+<div class="sec-hdr">🏃 Your Activities</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  ${_acts.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+    ${_acts.map(a=>{const m=_actMeta[a];return m?`<div style="display:flex;align-items:center;gap:7px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 13px">
+      <span style="font-size:18px">${m.i}</span>
+      <span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span>
+    </div>`:'';}).join('')}
+  </div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}
+  ${_missing.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px">Not in your plan yet:</div>
+  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+    ${_missing.map(a=>{const m=_actMeta[a];return`<div onclick="openGoalsSetup(true,2)" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer">
+      <span style="font-size:18px">${m.i}</span>
+      <span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span>
+      <span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span>
+    </div>`;}).join('')}
+  </div>`:''}
+  <button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">
+    ${_acts.length?'✏️ Change my activities':'➕ Set up activities'}
+  </button>
+</div>
 
 <div class="sec-hdr">🤖 AI Coach</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
