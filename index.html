@@ -667,8 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.30';
+const APP_VERSION='1.31';
 const CHANGELOG=[
+  {v:'1.31',d:'Exercise "Coach" button renamed to "Tips" — more accurate label for hardcoded guidance',det:'The Coach button on each exercise opened a hardcoded tips panel with connection cues, setup notes, rep execution and what to avoid — not live AI coaching. Renamed to Tips with a 💡 icon to set the right expectation. The AI Coach section at the top of each workout day is the actual real-time coaching.'},
   {v:'1.30',d:'Traditional Chinese language support added — switch between English and 繁體中文 in Settings',det:'Added a full translations system with English and Traditional Chinese. Tap Settings → Language to switch. Translated: navigation tabs, screen subtitles, all section headers, workout type names, day names, energy selector, activity names, and key toasts. The language preference is saved locally and applied instantly on switch.'},
   {v:'1.29',d:'Sign-up hardened — orphaned accounts prevented, password length validated before attempting',det:'Fixed a gap where Firebase Auth could create an account but the database write immediately after could fail, leaving a user permanently locked out. Now if the database registration fails after auth creation, the auth account is automatically deleted so the user can try again cleanly. Also added an early password length check (minimum 6 chars) before any network call is made.'},
   {v:'1.28',d:'Active activity chips now have a − button to remove instantly; "Change my activities" button removed',det:'Each active activity chip (Cycling, Gym & Weights, etc.) now has a red − button on the right to remove it directly. The redundant "Change my activities" button is gone — add and remove are now handled entirely from the chips. The "Set up activities" button only appears when you have no activities at all.'},
@@ -736,7 +737,7 @@ const TRANS={
     g_fitness:'General fitness',g_endurance:'Endurance / event prep',g_perf:'Sport performance',
     days:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
     today:'Today',done:'✓ Done',great_ride:'Great day to ride',
-    swap:'Swap',log_sets:'Log sets',coach_btn:'Coach',busy:'Busy?',
+    swap:'Swap',log_sets:'Log sets',coach_btn:'Tips',busy:'Busy?',
     animate:'Animate',tutorial:'Tutorial',
     back_up_now:'Back up now',backed_now:'Backed up just now',
     backed_ago:'Backed up',sign_out:'Sign out',
@@ -773,7 +774,7 @@ const TRANS={
     g_fitness:'一般健康',g_endurance:'耐力 / 賽事準備',g_perf:'運動表現',
     days:['一','二','三','四','五','六','日'],
     today:'今天',done:'✓ 完成',great_ride:'適合騎車',
-    swap:'更換',log_sets:'記錄組數',coach_btn:'教練',busy:'器材被佔？',
+    swap:'更換',log_sets:'記錄組數',coach_btn:'提示',busy:'器材被佔？',
     animate:'動畫',tutorial:'教學',
     back_up_now:'立即備份',backed_now:'剛剛已備份',
     backed_ago:'已備份',sign_out:'登出',
@@ -2580,7 +2581,7 @@ function rExList(dp,log){
   <div style="display:flex;gap:7px;margin-top:9px">
     <button class="ex-busy-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openExSwap('${id}',${i},'${dp.date}','${dp.type}')">🔄 Busy?</button>
     <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--al);border-color:rgba(167,139,250,.3)" onclick="event.stopPropagation();openExLog('${id}',${i},'${dp.date}')">📝 Log sets</button>
-    <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--grn);border-color:rgba(16,185,129,.3)" onclick="event.stopPropagation();openExCoach('${id}')">🤖 Coach</button>
+    <button class="ex-busy-btn" style="margin-top:0;flex:1;color:var(--grn);border-color:rgba(16,185,129,.3)" onclick="event.stopPropagation();openExCoach('${id}')">💡 ${_T('coach_btn')}</button>
   </div>
 </div>
 </div>`;
