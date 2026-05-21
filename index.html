@@ -207,6 +207,18 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .pr-row-name{font-size:14px;font-weight:700;flex:1}
 .pr-row-val{font-size:14px;font-weight:700;color:#fbbf24}
 .pr-row-date{font-size:11px;color:var(--t2);width:100%;margin-top:2px}
+/* grouped PRs */
+.prg-hdr{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 15px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;margin-bottom:4px}
+.prg-hdr:active{opacity:.8}
+.prg-body{display:flex;flex-direction:column;gap:2px;margin-bottom:10px}
+.prc-row{background:var(--s1);border:1px solid var(--bord);border-radius:11px;overflow:hidden;cursor:pointer}
+.prc-main{display:flex;align-items:center;justify-content:space-between;padding:10px 13px;gap:8px}
+.prc-main:active{background:var(--s2)}
+.prc-name{font-size:13px;font-weight:700;flex:1}
+.prc-val{font-size:13px;font-weight:800;color:#fbbf24;flex-shrink:0}
+.prc-actions{display:none;border-top:1px solid var(--bord);padding:8px 10px;gap:6px}
+.prc-actions.open{display:flex}
+.prc-date{font-size:10px;color:var(--t2);flex-shrink:0}
 /* history */
 .sec-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;color:var(--t2);margin:20px 0 10px}
 .hist-row{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:8px;cursor:pointer}
@@ -694,6 +706,22 @@ const GEMINI_PROXY='https://training-brain-ai.ht9323.workers.dev';
 const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
+// PR group open/closed state (UI only — not persisted)
+const _prGroupOpen={Push:true,Pull:false,Legs:false,Core:false,Other:false};
+// Map EX.g values → display group
+const _EX_GROUP={
+  chest:'Push',shoulder:'Push',tri:'Push',front_delt:'Push',
+  vback:'Pull',hback_h:'Pull',bi:'Pull',rear_delt:'Pull',
+  quad:'Legs',ham:'Legs',glute:'Legs',calf:'Legs',hip:'Legs',
+  core:'Core',abs:'Core',
+};
+const _GROUP_META={
+  Push:{i:'🔴',label:'Push',sub:'Chest · Shoulders · Triceps'},
+  Pull:{i:'🔵',label:'Pull',sub:'Back · Biceps · Rear Delts'},
+  Legs:{i:'🟡',label:'Legs',sub:'Quads · Hamstrings · Glutes'},
+  Core:{i:'🟢',label:'Core',sub:'Abs · Core'},
+  Other:{i:'⚪',label:'Other',sub:''},
+};
 async function getAICoach(energy,ct,dp){
   // Guests get hardcoded responses — no API keys wasted
   if(S.guest)return COACH[energy][ct];
@@ -2247,6 +2275,8 @@ const syncDown=loadFromCloud;
 function go(screen,opts={}){
   // stop any running exercise animations
   Object.keys(_animTimers).forEach(k=>{clearInterval(_animTimers[k]);delete _animTimers[k];});
+  // clear PR search when leaving progress tab
+  if(screen!=='prs')DB.set('_pr_search','');
   S.screen=screen;Object.assign(S,opts);render();
 }
 function openDay(dateStr){
@@ -2837,10 +2867,68 @@ ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-
   <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
 </div>`}
 
-<div class="sec-hdr">🏆 Personal Records</div>
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+  <span>🏆 Personal Records</span>
+  ${prKeys.length?`<span style="font-size:11px;color:var(--t2);font-weight:600">${prKeys.length} total</span>`:''}
+</div>
 ${!prKeys.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:8px">No PRs yet — log a workout to start tracking</div>`
-  :`<div class="prs-list">${prKeys.map(id=>{const ex=EX[id];if(!ex)return'';const pr=prs[id];const u=unit();return`<div class="pr-row"><div class="pr-row-name">${ex.n}</div><div class="pr-row-val">🏆 ${pr.w}${u} × ${pr.r}</div><div class="pr-row-date">${pr.date}</div><div style="display:flex;gap:6px;margin-top:8px;width:100%"><button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button><button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">🗑 Delete</button></div></div>`;}).join('')}</div>`}
+  :(()=>{
+    const u=unit();
+    const q=DB.get('_pr_search','').toLowerCase();
+    // Search bar
+    const searchBar=`<div style="margin-bottom:12px;position:relative">
+      <input id="pr-search" type="search" placeholder="Search exercises…" value="${DB.get('_pr_search','')}"
+        oninput="DB.set('_pr_search',this.value);render()"
+        style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:13px;padding:10px 14px;outline:none;font-family:inherit">
+    </div>`;
+    // Group PRs
+    const groups={Push:[],Pull:[],Legs:[],Core:[],Other:[]};
+    prKeys.forEach(id=>{
+      const ex=EX[id];if(!ex)return;
+      if(q&&!ex.n.toLowerCase().includes(q))return;
+      const grp=_EX_GROUP[ex.g]||'Other';
+      groups[grp].push(id);
+    });
+    const hasResults=Object.values(groups).some(a=>a.length>0);
+    if(!hasResults)return searchBar+`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:8px">No PRs match "${q}"</div>`;
+    const groupHTML=Object.entries(groups).map(([grp,ids])=>{
+      if(!ids.length)return'';
+      const m=_GROUP_META[grp];
+      const open=_prGroupOpen[grp]||(q.length>0);
+      return`<div style="margin-bottom:8px">
+        <div class="prg-hdr" onclick="_prGroupOpen['${grp}']=!_prGroupOpen['${grp}'];render()">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:18px">${m.i}</span>
+            <div>
+              <div style="font-size:14px;font-weight:800">${m.label}</div>
+              <div style="font-size:11px;color:var(--t2)">${m.sub}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="font-size:11px;font-weight:700;background:var(--s2);padding:3px 9px;border-radius:100px;color:var(--t2)">${ids.length}</span>
+            <span style="color:var(--t2);font-size:13px">${open?'▲':'▼'}</span>
+          </div>
+        </div>
+        ${open?`<div class="prg-body">${ids.map(id=>{
+          const ex=EX[id];const pr=prs[id];
+          return`<div class="prc-row">
+            <div class="prc-main" onclick="this.nextElementSibling.classList.toggle('open')">
+              <span class="prc-name">${ex.n}</span>
+              <span class="prc-date">${pr.date}</span>
+              <span class="prc-val">🏆 ${pr.w}${u}×${pr.r}</span>
+            </div>
+            <div class="prc-actions">
+              <button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button>
+              <button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">🗑 Delete</button>
+            </div>
+          </div>`;
+        }).join('')}</div>`:''}
+      </div>`;
+    }).join('');
+    return searchBar+groupHTML;
+  })()
+}
 
 <div class="sec-hdr">📋 Workout History</div>
 ${!history.length
