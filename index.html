@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.56';
+const APP_VERSION='1.57';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.57',d:'Fix: "Refresh with new weather" now always fetches fresh data and never drops days',det:'Two fixes. (1) Clicking "Refresh with new weather" was still returning a stale cached result if you had refreshed in the last 3 hours — including bad cached results from before the v1.56 fix. The explicit refresh button now always bypasses the weather cache and forces a fresh API call. (2) buildWeek now has a safety net: if the weather array arrives with fewer than 7 days for any reason, it pads the missing days from the existing plan or a neutral placeholder, so a partial result can never produce a short week.'},
   {v:'1.56',d:'Fix: refreshing plan mid-week no longer drops past days from the week view',det:'When you refreshed the plan on Wednesday, Monday and Tuesday disappeared. Root cause: the Open-Meteo weather API only returns forecast data from today onwards — so looking up Monday on a Wednesday returned nothing, and the plan was built starting from Wednesday. Fixed by building all 7 days from the Monday start date individually, falling back to the existing plan\'s weather data for any past day (or a neutral placeholder if there is no prior data). Refreshing on any day of the week now always produces a complete Mon–Sun week.'},
   {v:'1.55',d:'Bodyweight exercise images: 14 of 18 now show real demos instead of placeholders',det:'Added a second image source (wger.de) for exercises missing from the free-exercise-db. Push-Up, Diamond Push-Up, Inverted Row, Donkey Kick now pull from wger.de. Bicycle Crunch and Floor Leg Raise have 2-frame animations. Combined with the 8 already fixed in v1.54, 14 of the 18 bodyweight exercises now show real images. The remaining 4 (Pike Push-Up, Wall Sit, Side Plank, Burpee) have no suitable image in either database and show styled muscle-group placeholders. The image loader now supports both free-exercise-db folder paths and direct wger.de URLs.'},
   {v:'1.54',d:'"At home today" moved to each workout day — now per-day, instant, no regenerate needed',det:'"Training from home this week?" has been redesigned. Instead of a week-wide toggle on the Plan tab that required a separate Regenerate tap, there is now a compact "Training at home today?" row on each individual gym day screen. Tap it and the exercises switch to bodyweight immediately — no second step. Tap it again to switch back to gym exercises. It only affects that one day. Also fixed: 8 of the 18 bodyweight exercises now show real demo images (Decline Push-Up, Superman, Bodyweight Squat, Jump Squat, Bodyweight Lunge, Single-Leg Glute Bridge, Mountain Climber, Crunch) — the remaining 10 show styled muscle-group placeholders since those specific movements are not in the exercise image database.'},
@@ -2019,11 +2020,12 @@ function sameDay(a,b){return fd(a)===fd(b);}
 function shortD(d){return `${DNAMES[d.getDay()]} ${d.getDate()} ${MNAMES[d.getMonth()]}`;}
 
 /* ── WEATHER ── */
-async function fetchWeather(lat,lon,startStr){
+async function fetchWeather(lat,lon,startStr,force=false){
   // Cache per week-start + coarse location for 3 hours — avoids re-hitting the API on every regenerate
+  // force=true (explicit user refresh) bypasses the cache so stale mid-week results don't persist
   const ck='weather_'+startStr+'_'+lat.toFixed(2)+'_'+lon.toFixed(2);
   const cached=DB.get(ck,null);
-  if(cached&&cached.t&&(Date.now()-cached.t)<10800000&&Array.isArray(cached.d))return cached.d;
+  if(!force&&cached&&cached.t&&(Date.now()-cached.t)<10800000&&Array.isArray(cached.d))return cached.d;
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,weathercode&timezone=auto&forecast_days=16`;
   const r=await fetch(url);if(!r.ok)throw new Error();
   const data=await r.json();const d=data.daily;
@@ -2091,6 +2093,13 @@ function buildWeek(wdays){
   const profile=DB.get('user_profile',{});
   // Honour the user's training-days-per-week setting (default 4, range 3-6)
   const targetDays=Math.min(6,Math.max(3,profile.days||4));
+  // Safety net: if wdays is ever short (e.g. stale cache), pad to 7 full days
+  while(wdays.length<7){
+    const i=wdays.length;
+    const dateStr=fd(addDays(S.weekStart,i));
+    const existing=DB.get(DB.pk(S.weekStart),null)?.find(x=>x.date===dateStr);
+    wdays.push(existing?.weather||{date:dateStr,tmax:15,tmin:5,rain:0,wind:10,code:1,score:0});
+  }
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
   const rankedAsc=[...ranked].reverse(); // worst weather first — used to pick rest days
 
@@ -4526,7 +4535,7 @@ function genPlan(){
   if(btn){btn.textContent='📡 Fetching weather…';btn.disabled=true;}
   navigator.geolocation.getCurrentPosition(async pos=>{
     try{
-      const wdays=await fetchWeather(pos.coords.latitude,pos.coords.longitude,fd(S.weekStart));
+      const wdays=await fetchWeather(pos.coords.latitude,pos.coords.longitude,fd(S.weekStart),true);
       const plan=buildWeek(wdays);
       DB.set(DB.pk(S.weekStart),plan);
       render();
