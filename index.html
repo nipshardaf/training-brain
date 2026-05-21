@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.48';
+const APP_VERSION='1.49';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.49',d:'Plan mode labels clarified — Outdoor + Gym, Indoor + Gym, Gym only',det:'The three plan modes have been renamed to be self-explanatory. "Use weather" is now "Outdoor + Gym" — it schedules outdoor cardio on the best weather days and gym on the rest. "Indoor only" is now "Indoor + Gym" — trainer or Zwift sessions indoors plus gym, weather ignored. "No biking" / "Gym only" keeps the same meaning but is now clearly labelled everywhere: the plan tab selector, the generate/regenerate buttons, the empty state, and the ride preference section in Settings. All three labels are consistent across every part of the app.'},
   {v:'1.48',d:'Goals and settings no longer re-ask after sign-in — login now syncs both ways',det:'Every sign-in (Google, username/password, PIN unlock, and iOS PWA auto-restore) now runs a load-then-push cycle: it pulls the latest data from Firebase first, then immediately pushes any local data that Firebase is missing back up. This fixes the root cause of goals, activities, and Strava reappearing after reinstall or signing in on a new device — the profile was stored locally but never made it to Firebase because the sync only ran on explicit data changes. Now the first login after any gap automatically closes that gap.'},
   {v:'1.47',d:'Bodyweight exercises added; "Home week" toggle skips the gym without changing your profile',det:'18 new bodyweight exercises added across all session types: push-ups (standard, decline, diamond), pike push-up, inverted row, superman, bodyweight squat, jump squat, bodyweight lunge, single-leg glute bridge, donkey kick, wall sit, mountain climber, bicycle crunch, side plank, floor leg raise, crunch, and burpee. Each has full coaching cues and Traditional Chinese translation. Every slot in every workout type now includes bodyweight alternatives — when gym equipment is unavailable (e.g. home gym profile), the app automatically falls back to bodyweight versions without you having to do anything. The new "Training from home this week?" toggle on the Plan tab forces bodyweight-only session generation for that week only, without permanently changing your gym profile — tap it again or shift to a different week to turn it off. A purple "Home week" badge appears on each gym-day screen so you know the mode is active.'},
   {v:'1.46',d:'"Gym only" replaces "No biking"; plan now respects your training-days-per-week setting',det:'The third plan mode was renamed from "No biking" to "Gym only" — a much clearer description of what it actually does. More importantly, the weekly plan generator now honours the training-days-per-week setting from your profile (3–6 days). Previously every mode hard-coded 6 active days regardless of what you set. Now: Gym only = your chosen number of gym days, worst-weather days become rest. With rides = 2 ride days + (target days − 2) gym days + rest. For example, a 4-day user on "Use weather" gets 2 rides + 2 gym + 3 rest instead of 2 rides + 4 gym + 1 rest. The "Gym only" option also now appears in the Ride preference section of Settings so you can switch without going back to the Plan tab. Cycling-specific options (Use weather / Indoor only) are hidden on the Plan tab for users who have no cycling activity selected.'},
@@ -2798,13 +2799,13 @@ ${(()=>{const hw=DB.get('home_week_'+fd(S.weekStart),false);return`<div onclick=
   <div style="background:${hw?'var(--acc)':'var(--s2)'};border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:${hw?'#fff':'var(--t2)'};flex-shrink:0">${hw?'On':'Off'}</div>
 </div>`;})()}
 ${rReviewCard()}
-${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'📡',l:'Use weather'},{v:'indoor',i:'🏠',l:'Indoor only'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
+${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
 <div class="day-list">
   ${plan.map(d=>rDayRow(d,today)).join('')}
 </div>
 ${tabs}
-<button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🔄 Refresh with new weather':'🔄 Regenerate plan'}</button>
+<button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🌤️ Refresh with new weather':'🔄 Regenerate plan'}</button>
 `:(()=>{
   const _np=DB.get('user_profile',null);
   const _hasProfile=_np&&(_np.activities||[]).length>0;
@@ -2842,11 +2843,11 @@ ${tabs}
 </div>`;
   }
   return`<div class="empty-wrap">
-  <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'📡'}</div>
+  <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'🌤️'}</div>
   <div class="empty-title">Ready to generate your plan</div>
   <div style="font-size:13px;color:var(--t2);margin-bottom:16px;text-align:center;line-height:1.6">Choose your preference below then tap Generate — the app builds your full week in seconds.</div>
   ${tabs}
-  <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'📡 Generate with weather forecast':p==='indoor'?'🏠 Generate (indoor rides)':'🏋️ Generate (gym only)'}</button>
+  <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'🌤️ Generate (outdoor + gym)':p==='indoor'?'🏠 Generate (indoor + gym)':'🏋️ Generate (gym only)'}</button>
 </div>`;
 })();})()}
 <div class="bnav">
@@ -3786,27 +3787,27 @@ ${(()=>{
   const p=DB.get('bike_pref','weather');
   return`<div class="sec-hdr">🚴 Ride preference</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should rides be planned when cycling is in your week?</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should your week be structured when cycling is in your activities?</div>
   <div style="display:flex;flex-direction:column;gap:8px">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
       <input type="radio" name="bike_pref" value="weather" ${p==='weather'?'checked':''} onchange="DB.set('bike_pref','weather');render()" style="accent-color:var(--acc)">
       <div>
-        <div style="font-weight:700;font-size:13px">Use weather forecast</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:1px">Schedules outdoor rides on good weather days automatically</div>
+        <div style="font-weight:700;font-size:13px">🌤️ Outdoor + Gym</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Outdoor cardio on good weather days · gym on the rest</div>
       </div>
     </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='indoor'?'var(--acc)':'var(--bord)'};background:${p==='indoor'?'rgba(124,58,237,.08)':'transparent'}">
       <input type="radio" name="bike_pref" value="indoor" ${p==='indoor'?'checked':''} onchange="DB.set('bike_pref','indoor');render()" style="accent-color:var(--acc)">
       <div>
-        <div style="font-weight:700;font-size:13px">Always indoor</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:1px">Trainer / Zwift only — weather is ignored</div>
+        <div style="font-weight:700;font-size:13px">🏠 Indoor + Gym</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Trainer / Zwift cardio · gym on the rest · weather ignored</div>
       </div>
     </label>
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='none'?'var(--acc)':'var(--bord)'};background:${p==='none'?'rgba(124,58,237,.08)':'transparent'}">
       <input type="radio" name="bike_pref" value="none" ${p==='none'?'checked':''} onchange="DB.set('bike_pref','none');render()" style="accent-color:var(--acc)">
       <div>
-        <div style="font-weight:700;font-size:13px">Gym only</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:1px">Skip cardio this week — gym sessions fill the week</div>
+        <div style="font-weight:700;font-size:13px">🏋️ Gym only</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Skip cardio entirely — gym sessions fill the week</div>
       </div>
     </label>
   </div>
