@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.59';
+const APP_VERSION='1.60';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -3630,13 +3630,24 @@ function completeWk(){
 function rPRs(){
   const prs=DB.get('prs',{});
   const prKeys=Object.keys(prs);
-  // Scan last 90 days for logs
+  // Scan last 90 days for logs + Strava rides
   const history=[];
   for(let i=0;i<90;i++){
     const d=addDays(new Date(),-i);
+    const ds=fd(d);
     const log=DB.get(DB.lk(d),null);
-    if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push(log);
+    if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push({...log,date:log.date||ds});
   }
+  const _hCutoff=fd(addDays(new Date(),-90));
+  const _hRideSet=new Set(['Ride','VirtualRide','EBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  (DB.get('strava_activities',[])||[]).filter(a=>{
+    const ds=(a.start_date_local||'').slice(0,10);
+    return ds>=_hCutoff&&(_hRideSet.has(a.type)||_hRideSet.has(a.sport_type));
+  }).forEach(a=>{
+    const ds=(a.start_date_local||'').slice(0,10);
+    history.push({_strava:true,date:ds,name:a.name,dist:+((a.distance||0)/1000).toFixed(1),dur:Math.round((a.moving_time||0)/60),hr:a.average_heartrate?Math.round(a.average_heartrate):null,watts:a.average_watts?Math.round(a.average_watts):null,elev:a.total_elevation_gain?Math.round(a.total_elevation_gain):null,type:a.sport_type||a.type});
+  });
+  history.sort((a,b)=>b.date.localeCompare(a.date));
   const profile=DB.get('user_profile',null);
   const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
@@ -3721,6 +3732,20 @@ ${!prKeys.length
 ${!history.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">${_T('h_no_workouts')}</div>`
   :history.map((log,hi)=>{
+    if(log._strava){
+      const distStr=log.dist?`${log.dist} km`:'';
+      const durStr=log.dur?`${log.dur} min`:'';
+      const hrStr=log.hr?` · ❤️ ${log.hr} bpm`:'';
+      const wattsStr=log.watts?` · ⚡ ${log.watts}W`:'';
+      const elevStr=log.elev?` · ↗ ${log.elev}m`:'';
+      const summaryStr=[distStr,durStr].filter(Boolean).join(' · ')+hrStr+wattsStr+elevStr;
+      return`<div class="hist-row" onclick="togHist(${hi})">
+  <div class="hist-date">${log.date} · 🟠 Strava</div>
+  <div class="hist-type" style="color:#0891b2">${_icon('ride-day.png','🚴',16)} ${log.name||'Ride'}</div>
+  <div class="hist-exs">${summaryStr||'No data'}</div>
+  <div class="hist-detail" id="hd${hi}"></div>
+</div>`;
+    }
     const wi=WI[log.type]||WI.REST;
     const exsDone=log.exercises.filter(e=>e.sets.some(s=>s.done));
     const totalSets=log.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0);
