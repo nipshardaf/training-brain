@@ -685,8 +685,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.37';
+const APP_VERSION='1.38';
 const CHANGELOG=[
+  {v:'1.38',d:'Fixed the Swap Workout sheet showing raw code instead of workout names',det:'After workout labels were made translatable (lazy functions), the "Change workout for this day" sheet was still rendering them directly — so it showed text like ()=>_T(\'wt_push\') instead of "Push". The swap sheet now calls the label and description functions correctly, matching every other screen.'},
   {v:'1.37',d:'Chinese language polish — history screen translated, overcrowding fixes, layout class added',det:'The Workout History screen is now fully translated (Completed, exercise/set counts, set rows). Added a lang-zh class on the page root when Traditional Chinese is active, with CSS rules that slightly reduce font sizes, allow exercise card titles to wrap to two lines instead of truncating, tighten button padding, and shrink the bottom-nav labels so nothing overflows. The My Training tab label was shortened to 訓練. Language preference now syncs to the cloud, so it restores correctly after signing in on a new device. Exercise-name and coach-message translation are still to come.'},
   {v:'1.36',d:'Weekly AI Review added — a Sunday training analysis covering 8 weeks of data',det:'Every Sunday a card appears on the Plan tab offering a weekly review. Tapping Generate sends your last 8 weeks of gym sessions, ride data (Strava or manually logged), all-time PRs and the current plan to the AI coach. It returns four sections: an honest performance summary, progressive overload targets for next week, recovery flags, and one focus goal. The result is cached per week and synced to the cloud, so reopening the app the same Sunday never re-calls the API. An optional "Email me this summary" button delivers it via EmailJS once you add your email and EmailJS keys in Settings. Fully bilingual.'},
   {v:'1.35',d:'Strava sync now pulls 8 weeks of ride history (was 30 days) to power the upcoming weekly AI review',det:'The Strava activity sync window was extended from 30 to 56 days, and the page size raised to 100 activities, so the app always holds a full 8 weeks of ride data — distance, duration, average heart rate and average power are all included in each activity. This history feeds the weekly AI review. Existing behaviour (per-day ride matching, plan auto-adapt) is unaffected; it simply has more data to work with.'},
@@ -3764,7 +3765,7 @@ function openSwap(ds){
   modal.innerHTML=`<div class="swap-ov" onclick="closeSwap()"></div>
 <div class="swap-sheet">
   <div class="swap-title">Change workout for this day</div>
-  ${Object.entries(WI).map(([t,w])=>`<button class="swap-opt" onclick="doSwap('${ds}','${t}')">${w.i} ${w.l}<span>${w.d}</span></button>`).join('')}
+  ${Object.entries(WI).map(([t,w])=>`<button class="swap-opt" onclick="doSwap('${ds}','${t}')">${w.i} ${typeof w.l==='function'?w.l():w.l}<span>${typeof w.d==='function'?w.d():w.d}</span></button>`).join('')}
   <button class="swap-cancel" onclick="closeSwap()">Cancel</button>
 </div>`;
   document.body.appendChild(modal);
