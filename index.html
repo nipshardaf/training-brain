@@ -648,6 +648,8 @@ function filterSlot(slot){
 
 /* ── ICON HELPER — PNG with emoji fallback ── */
 function _icon(f,e,s){s=s||18;return`<img src="/training-brain/assets/icons/${f}" width="${s}" height="${s}" style="vertical-align:middle;display:inline-block;object-fit:contain" onerror="this.outerHTML='${e}'">`;}
+/* ── HTML-escape helper for untrusted user text ── */
+function _esc(s){return String(s==null?'':s).replace(/[<>&"]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;'}[c]));}
 
 /* ── WORKOUT METADATA ── */
 const WI = {
@@ -670,8 +672,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.33';
+const APP_VERSION='1.34';
 const CHANGELOG=[
+  {v:'1.34',d:'Manual ride logging added for cyclists who haven\'t connected Strava',det:'On any ride day, users without a Strava connection now see a "Log this ride" button. Tapping it opens a form to record duration, distance, average heart rate, perceived effort (RPE) and free-text notes. Logged rides are saved alongside gym sessions, sync to the cloud automatically, and display in a summary card that can be edited later. This ride data also feeds the upcoming weekly AI review. Strava-connected users are unaffected — their rides still pull in automatically. Fully bilingual (English / 繁體中文).'},
   {v:'1.33',d:'Custom PNG icons replace emoji throughout the app — workout types, nav tabs, activities, logo',det:'All major emoji icons replaced with purpose-built PNG graphics: each gym workout type (Push/Pull/Legs/Upper Pump) has its own icon, cycling and ride days use a proper bicycle image, rest days show the mobility graphic, activity chips in Settings use the corresponding sport icons, and nav tabs use the branded icon set. The app logo symbol appears in the lock screen and screen headers. Emoji fallbacks activate automatically if an icon fails to load, so the app always looks correct even offline.'},
   {v:'1.32',d:'New users now see a 3-step welcome guide on the Plan tab instead of a blank "no plan" state',det:'When someone opens the app for the first time without a profile, the Plan tab now shows a friendly welcome screen with three numbered steps: set up your profile, generate your first plan, and start training. Step 1 is highlighted with a call-to-action button; steps 2 and 3 are greyed out until reached. Once a profile exists, the tab shows the standard "Ready to generate your plan" state with the preference tabs and Generate button.'},
   {v:'1.31',d:'Exercise "Coach" button renamed to "Tips" — more accurate label for hardcoded guidance',det:'The Coach button on each exercise opened a hardcoded tips panel with connection cues, setup notes, rep execution and what to avoid — not live AI coaching. Renamed to Tips with a 💡 icon to set the right expectation. The AI Coach section at the top of each workout day is the actual real-time coaching.'},
@@ -753,6 +756,12 @@ const TRANS={
     no_history:'No workouts logged in the last 90 days',
     shift_toast:'✅ Week shifted — every muscle group covered',
     added_toast:'✅ {act} added to your plan',removed_toast:'{act} removed from your plan',
+    cancel:'Cancel',
+    rl_title:'Log this ride',rl_edit:'Edit',rl_logged:'Your logged ride',
+    rl_dur:'Duration',rl_dist:'Distance',rl_hr:'Avg heart rate',rl_rpe:'Perceived effort',rl_notes:'Notes',
+    rl_min:'min',rl_km:'km',rl_bpm:'bpm',rl_save:'Save ride',
+    rl_notes_ph:'How did it feel? Route, weather…',rl_saved_toast:'✅ Ride logged',
+    rl_need_dur:'Enter at least a ride duration',
     lang_en:'English',lang_zh:'繁體中文',
   },
   zh:{
@@ -790,6 +799,12 @@ const TRANS={
     no_history:'過去 90 天內未有訓練記錄',
     shift_toast:'✅ 本週已調整 — 所有肌肉群均已涵蓋',
     added_toast:'✅ 已加入{act}',removed_toast:'已移除{act}',
+    cancel:'取消',
+    rl_title:'記錄這次騎行',rl_edit:'編輯',rl_logged:'你記錄的騎行',
+    rl_dur:'時長',rl_dist:'距離',rl_hr:'平均心率',rl_rpe:'自覺強度',rl_notes:'備註',
+    rl_min:'分鐘',rl_km:'公里',rl_bpm:'bpm',rl_save:'儲存騎行',
+    rl_notes_ph:'感覺如何？路線、天氣…',rl_saved_toast:'✅ 已記錄騎行',
+    rl_need_dur:'請至少輸入騎行時長',
     lang_en:'English',lang_zh:'繁體中文',
   }
 };
@@ -2646,8 +2661,30 @@ function rRideCard(dp){
     ${actual.average_watts?`<div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg W</div></div>`:''}
     <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>
   </div>
-  ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${actual.name}"</div>`:''}
+  ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
 </div>`:'';
+  // Manual ride log — shown for users who haven't connected Strava
+  const stravaConnected=!!DB.get('strava_token',null);
+  const manual=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null)?.ride;
+  let manualHtml='';
+  if(!stravaConnected){
+    if(manual&&manual.dur!=null){
+      const cell=(v,lbl)=>v!=null?`<div style="flex:1;min-width:62px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${v}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">${lbl}</div></div>`:'';
+      manualHtml=`<div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ ${_T('rl_logged')}</div>
+    <button onclick="openRideLog('${dp.date}')" style="background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer">${_T('rl_edit')}</button>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap">
+    ${cell(manual.dist,_T('rl_km'))}${cell(manual.dur,_T('rl_min'))}${cell(manual.hr,_T('rl_bpm'))}${cell(manual.rpe,'RPE')}
+  </div>
+  ${manual.notes?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(manual.notes)}"</div>`:''}
+</div>`;
+    }else{
+      manualHtml=`<button onclick="openRideLog('${dp.date}')" style="width:100%;background:var(--s2);border:1px dashed rgba(120,80,255,.35);border-radius:13px;color:var(--al);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:13px">📝 ${_T('rl_title')}</button>`;
+    }
+  }
+  const hasLogged=actual||(manual&&manual.dur!=null);
   return`<div class="ride-card" style="text-align:left">
 <div style="text-align:center;margin-bottom:14px">
   <span class="ride-icon">${_icon('ride-day.png',indoor?'🚲':'🚴',52)}</span>
@@ -2659,7 +2696,8 @@ function rRideCard(dp){
   </div>
 </div>
 ${actualHtml}
-${actual?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">📋 Today's plan</div>`:''}
+${manualHtml}
+${hasLogged?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">📋 Today's plan</div>`:''}
 <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:13px">
   ${s.blocks.map(b=>`<div style="display:flex;gap:11px;align-items:flex-start;background:var(--s2);border-radius:12px;padding:11px 13px">
     <span style="font-size:12px;font-weight:800;color:#60a5fa;background:rgba(59,130,246,.12);border-radius:8px;padding:5px 8px;flex-shrink:0;min-width:66px;text-align:center">${b.t}</span>
@@ -2677,6 +2715,57 @@ function rRestCard(){
 <div class="rest-sub">Muscles grow during rest. Today you earn tomorrow's gains.</div>
 <div class="mob-list">${MOBILITY.map(m=>`<div class="mob-item"><span>${m.i}</span><span>${m.t}</span></div>`).join('')}</div>
 </div>`;
+}
+
+/* ── MANUAL RIDE LOG (for users who haven't connected Strava) ── */
+function openRideLog(ds){
+  const log=DB.get(DB.lk(new Date(ds+'T12:00:00')),null);
+  const r=(log&&log.ride)||{};
+  const num=(id,label,unit,val,extra)=>`<div style="margin-bottom:11px">
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">${label}${unit?' · '+unit:''}</label>
+    <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" ${extra||''}
+      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:16px;font-weight:700;padding:11px 13px;outline:none;font-family:inherit;-webkit-appearance:none"></div>`;
+  const modal=document.createElement('div');
+  modal.className='swap-modal';modal.id='ride-log-modal';
+  modal.innerHTML=`<div class="swap-ov" onclick="closeRideLog()"></div>
+<div class="swap-sheet">
+  <div class="swap-title">${r.dur!=null?_T('rl_edit')+' · '+_T('rl_logged'):_T('rl_title')}</div>
+  ${num('rl-dur',_T('rl_dur'),_T('rl_min'),r.dur)}
+  ${num('rl-dist',_T('rl_dist'),_T('rl_km'),r.dist)}
+  ${num('rl-hr',_T('rl_hr'),_T('rl_bpm'),r.hr)}
+  ${num('rl-rpe',_T('rl_rpe'),'1–10',r.rpe,'min="1" max="10"')}
+  <div style="margin-bottom:13px">
+    <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">${_T('rl_notes')}</label>
+    <textarea id="rl-notes" rows="2" placeholder="${_T('rl_notes_ph')}"
+      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:14px;padding:11px 13px;outline:none;font-family:inherit;resize:none;-webkit-appearance:none">${_esc(r.notes||'')}</textarea>
+  </div>
+  <button class="btn btn-p" onclick="saveRideLog('${ds}')">${_T('rl_save')}</button>
+  <button class="swap-cancel" onclick="closeRideLog()" style="margin-top:7px">${_T('cancel')}</button>
+</div>`;
+  document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('on'));
+}
+function closeRideLog(){
+  const m=document.getElementById('ride-log-modal');
+  if(m){m.classList.remove('on');setTimeout(()=>m.remove(),300);}
+}
+function saveRideLog(ds){
+  const num=id=>{const el=document.getElementById(id);if(!el||el.value==='')return null;const v=parseFloat(el.value);return isNaN(v)?null:v;};
+  const dur=num('rl-dur');
+  if(dur==null){showToast(_T('rl_need_dur'),'var(--amb)');return;}
+  const ride={
+    dur,dist:num('rl-dist'),hr:num('rl-hr'),rpe:num('rl-rpe'),
+    notes:(document.getElementById('rl-notes')?.value||'').trim(),
+    logged:new Date().toISOString(),
+  };
+  const lk=DB.lk(new Date(ds+'T12:00:00'));
+  const log=DB.get(lk,null)||{};
+  log.ride=ride;
+  DB.set(lk,log);
+  closeRideLog();
+  syncUp();
+  render();
+  showToast(_T('rl_saved_toast'),'var(--grn)');
 }
 
 /* ── LOG SCREEN ── */
