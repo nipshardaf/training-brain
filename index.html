@@ -789,10 +789,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.43';
+const APP_VERSION='1.44';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.44',d:'Friendlier ride-log message — explains Strava syncs on its own and may just need time',det:'The hint on the manual ride log was reworded. The old wording ("Strava has no ride logged for today") sounded like the ride would never sync. It now makes clear that a connected Strava ride syncs in automatically once Strava finishes processing it — so you can skip the form — and that manual entry is there if you want it tracked right away. For users without Strava, the message is more encouraging about logging to keep progress moving.'},
   {v:'1.43',d:'Ride logging is now inline on the ride card (no pop-up); Weekly Review set to "coming soon"',det:'The manual ride log no longer opens a separate screen. The duration, distance, average heart rate, perceived effort and notes fields now sit directly on the ride card and save as you type — with a short note explaining that rides sync automatically once Strava is connected. The Weekly Review email setup in Settings is temporarily shown as "coming soon" while the email backend is being finished; it will be switched back on alongside the Feedback feature.'},
   {v:'1.42',d:'Import now accepts CSV files — restore workouts, rides and PRs from a CSV export',det:'The Restore button previously only accepted the JSON backup. It now also reads the CSV produced by Export CSV: it parses workout sets, rides and personal records back into the app, matching exercise names in English or Chinese. CSV import merges into your existing data rather than wiping it, and preserves any fields the CSV does not carry. Rows whose exercise name is not recognised are skipped and reported. The JSON backup is still the recommended full backup (it also carries your plan and settings); CSV import is handy for restoring training records specifically.'},
   {v:'1.41',d:'Performance — weather cached, AI coach recovers from failures, exercise images cached offline',det:'Three optimisations. (1) The AI coach previously marked its daily batch as "done" before the network call returned — so a single failed request disabled AI coaching for the rest of the day. It now only marks the batch done after a successful response, with an in-memory guard against duplicate concurrent calls. (2) Weather is cached for 3 hours per week and location, so regenerating your plan no longer re-hits the weather API every time. (3) The service worker now caches exercise demo images from the free-exercise-db CDN — they load instantly on repeat views and work fully offline (previously cross-origin "opaque" responses were skipped by the cache).'},
@@ -890,8 +891,8 @@ const TRANS={
     rl_min:'min',rl_km:'km',rl_bpm:'bpm',rl_save:'Save ride',
     rl_notes_ph:'How did it feel? Route, weather…',rl_saved_toast:'✅ Ride logged',
     rl_need_dur:'Enter at least a ride duration',
-    rl_hint_nostrava:'Connect Strava in Settings to track rides automatically — or log this one manually below.',
-    rl_hint_strava:'Strava has no ride logged for today — enter the details manually below.',
+    rl_hint_nostrava:'Log today\'s ride below to keep your progress moving 🚴 — or connect Strava in Settings and rides sync in on their own.',
+    rl_hint_strava:'Strava is connected 🟠 — this ride will sync in automatically once Strava finishes processing it, so you can skip the form. In a hurry? Log it manually below.',
     wr_card_title:'Your weekly review is ready',
     wr_card_sub:'Tap to generate your 8-week training analysis',
     wr_ready_title:'Weekly review ready',
@@ -966,8 +967,8 @@ const TRANS={
     rl_min:'分鐘',rl_km:'公里',rl_bpm:'bpm',rl_save:'儲存騎行',
     rl_notes_ph:'感覺如何？路線、天氣…',rl_saved_toast:'✅ 已記錄騎行',
     rl_need_dur:'請至少輸入騎行時長',
-    rl_hint_nostrava:'在設定中連接 Strava 可自動追蹤騎行 — 或在下方手動記錄這次騎行。',
-    rl_hint_strava:'Strava 今天沒有騎行記錄 — 請在下方手動輸入詳情。',
+    rl_hint_nostrava:'在下方記錄今天的騎行，讓你的進度持續向前 🚴 — 或在設定中連接 Strava，騎行就會自動同步。',
+    rl_hint_strava:'Strava 已連接 🟠 — 這次騎行在 Strava 處理完成後會自動同步進來，不必手動填寫。趕時間？可在下方手動記錄。',
     wr_card_title:'你的每週回顧已準備好',
     wr_card_sub:'點擊生成你的 8 週訓練分析',
     wr_ready_title:'每週回顧已就緒',
