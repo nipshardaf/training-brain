@@ -655,10 +655,15 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.15';
+const APP_VERSION='1.20';
 const CHANGELOG=[
-  {v:'1.15',d:'Goals are now multi-select, gender question added to onboarding, skip option on every step'},
-  {v:'1.14',d:'Strava shows a success toast after connecting + rest day swap now offers to rebalance your week'},
+  {v:'1.20',d:'Progress and Settings split into separate tabs — cleaner navigation'},
+  {v:'1.19',d:'App loads faster — service worker caching for instant return visits, Firebase scripts deferred'},
+  {v:'1.18',d:'Strava auto-syncs on app open if last sync was over 1 hour ago — no manual tap needed'},
+  {v:'1.17',d:'Edit PR sheet spacing fixed — better padding and breathing room around inputs'},
+  {v:'1.16',d:'Rest day swap now offers to move the workout to another rest day to keep your weekly goal on track'},
+  {v:'1.15',d:'Goals are now multi-select; biological sex question added to onboarding; skip option on every step'},
+  {v:'1.14',d:'Strava connect now shows a success toast with ride count; error toast if connection fails'},
   {v:'1.13',d:'Goals onboarding — set your activities and goal; non-cyclists no longer get bike days in their plan'},
   {v:'1.12',d:'Coach Says fetches all 4 mood notes in one API call — switching energy is now instant with zero extra calls'},
   {v:'1.11',d:'Coach Says skips the API entirely for new users with no training data — hardcoded tips shown instead'},
@@ -2189,7 +2194,7 @@ async function saveToCloud(manual=false){
   try{
     await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:new Date().toISOString()});
     DB.set('fb_last_sync',new Date().toISOString());
-    if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>Synced just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button>`;render();}
+    if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>☁️ Backed up just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button>`;render();}
   }catch(_){}
 }
 
@@ -2280,8 +2285,8 @@ function rWeek(){
 </div>
 ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit Guest →</button></div>`:''}
 ${pat
-  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'Not synced yet':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:'Synced '+lastSync.slice(0,10)}</span><button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Sync now</button></div>`
-  :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">⚠️ Saving locally only — data lost if Safari is cleared</span><button onclick="go('prs')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
+  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'☁️ Not backed up yet':syncAge<2?'☁️ Backed up just now':syncAge<60?`☁️ Backed up ${syncAge}m ago`:'☁️ Backed up '+lastSync.slice(0,10)}</span><button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button></div>`
+  :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">⚠️ Saving locally only — sign in to back up your data</span><button onclick="go('settings')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
 }
 
 <div class="week-nav">
