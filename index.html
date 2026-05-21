@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.62';
+const APP_VERSION='1.63';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -2898,12 +2898,12 @@ function rDayRow(day,today){
 <div class="dr-l">
   <div class="dr-day">${DNAMES[date.getDay()]} ${date.getDate()}</div>
   <div class="dr-type" style="color:${showStravaOverride?'#0891b2':wi.c}">${showStravaOverride?_icon('ride-day.png','🚴',16)+' '+(stravaRide.name||'Ride'):wi.i+' '+(typeof wi.l==='function'?wi.l():wi.l)}</div>
-  <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min · 🟠 Strava':(typeof wi.d==='function'?wi.d():wi.d)}</div>
+  <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min':(typeof wi.d==='function'?wi.d():wi.d)}</div>
 </div>
 <div class="dr-r">
   <div class="dr-weather">${wIcon(w.code,w.rain)} ${w.tmax}°${w.rain>0?`<span class="dr-rain">${w.rain}mm</span>`:''}</div>
   ${isRide&&!stravaRide?`<div class="vtag ${v.c}">${v.t}</div>`:''}
-  ${stravaRide?'<div class="done-tag" style="background:rgba(252,76,2,.12);color:#fc4c02;border:1px solid rgba(252,76,2,.3)">🟠 Ride</div>':gymDone?'<div class="done-tag">✓ Done</div>':''}
+  ${stravaRide?'<div class="done-tag" style="background:rgba(252,76,2,.12);color:#fc4c02;border:1px solid rgba(252,76,2,.3)">🟠 Logged · Strava</div>':gymDone?'<div class="done-tag">✓ Done</div>':''}
   ${isToday&&!done?'<div class="today-tag">Today</div>':''}
   <button class="swap-btn" onclick="event.stopPropagation();openSwap('${day.date}')">Swap ↕</button>
 </div>
