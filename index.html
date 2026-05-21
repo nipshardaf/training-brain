@@ -667,8 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.23';
+const APP_VERSION='1.24';
 const CHANGELOG=[
+  {v:'1.24',d:'Skipping a gym day now cascades the full week — each session shifts down so every muscle group is still covered'},
   {v:'1.23',d:'Activity chips now show an ⓘ info button explaining what each activity covers; renamed to Cardio & Classes'},
   {v:'1.22',d:'Smarter swap rebalancing — skipping a workout now offers to replace an upcoming session so no muscle group gets dropped'},
   {v:'1.21',d:'Your Activities card moved to My Training tab — activities and goals now live together'},
@@ -3248,6 +3249,7 @@ function openSwap(ds){
   requestAnimationFrame(()=>modal.classList.add('on'));
 }
 function closeSwap(){const m=document.getElementById('swap-modal');if(m)m.remove();}
+let _pendingCascade=null;
 function doSwap(ds,newType){
   const mon=getMon(new Date(ds+'T12:00:00'));
   const pk=DB.pk(mon);
@@ -3255,47 +3257,63 @@ function doSwap(ds,newType){
   const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
   const oldType=plan[di].type;
   const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
-  const wasWorkout=[...gymTypes,'RIDE','RUN','CARDIO'].includes(oldType);
+  const wasGym=gymTypes.includes(oldType);
   const goingToRest=newType==='REST';
   plan[di].type=newType;
   plan[di].exercises=gymTypes.includes(newType)?genSession(newType):null;
   DB.set(pk,plan);
   closeSwap();syncUp();render();
-  // If swapping a workout TO rest, offer rebalancing options for remaining days
-  if(wasWorkout&&goingToRest){
+  // Cascade shift: missed gym workout bubbles through remaining gym days
+  if(wasGym&&goingToRest){
     const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
     const dn=d=>{const dt=new Date(d.date+'T12:00:00');return days[dt.getDay()===0?6:dt.getDay()-1];};
-    const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',RIDE:'Ride',RUN:'Run',CARDIO:'Cardio'};
-    const missed=tl[oldType]||oldType;
-    // Only future days (after the swapped day) that aren't already done
-    const futureDays=plan.filter((d,i)=>i!==di&&d.date>ds);
-    // Option A: rest days → move missed workout there
-    const restOpts=futureDays.filter(d=>d.type==='REST');
-    // Option B: upcoming gym workouts of a DIFFERENT type → offer to replace with missed type
-    const replaceOpts=gymTypes.includes(oldType)?futureDays.filter(d=>gymTypes.includes(d.type)&&d.type!==oldType):[];
-    if(restOpts.length===0&&replaceOpts.length===0)return;
-    let options='';
-    restOpts.forEach(d=>{
-      options+=`<button class="swap-opt" onclick="doRebalanceSwap('${d.date}','${oldType}');closeRebalance()">${dn(d)} <span>Move ${missed} here · was rest day</span></button>`;
-    });
-    replaceOpts.forEach(d=>{
-      options+=`<button class="swap-opt" onclick="doRebalanceSwap('${d.date}','${oldType}');closeRebalance()">${dn(d)} — ${tl[d.type]||d.type} <span>Replace with ${missed}</span></button>`;
-    });
+    const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump'};
+    // Future gym days in date order
+    const futureGym=plan.filter((d,i)=>i!==di&&d.date>ds&&gymTypes.includes(d.type))
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    if(futureGym.length===0)return;
+    // Cascade: missed goes first, each subsequent gym day shifts one slot down
+    const cascadeTypes=[oldType,...futureGym.map(d=>d.type)];
+    const overflowType=cascadeTypes[futureGym.length];
+    const lastGymDate=futureGym[futureGym.length-1].date;
+    const restForOverflow=plan.find(d=>d.date>lastGymDate&&d.type==='REST');
+    const changes=futureGym.map((d,i)=>({date:d.date,type:cascadeTypes[i]}));
+    if(restForOverflow)changes.push({date:restForOverflow.date,type:overflowType});
+    _pendingCascade={pk,changes};
+    const br='border-bottom:1px solid var(--bord)';
+    let rows=futureGym.map((d,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;${br}"><span style="font-size:13px;font-weight:600;color:var(--t2);min-width:36px">${dn(d)}</span><span style="font-size:13px"><span style="color:var(--t2)">${tl[d.type]}</span> → <span style="color:var(--al);font-weight:700">${tl[cascadeTypes[i]]}</span></span></div>`).join('');
+    if(restForOverflow)rows+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;${br}"><span style="font-size:13px;font-weight:600;color:var(--t2);min-width:36px">${dn(restForOverflow)}</span><span style="font-size:13px"><span style="color:var(--t2)">Rest</span> → <span style="color:var(--al);font-weight:700">${tl[overflowType]}</span></span></div>`;
+    const warn=!restForOverflow?`<div style="font-size:12px;color:var(--amb);margin-top:10px;padding:0 4px">⚠️ ${tl[overflowType]} won't fit this week — no free day left</div>`:'';
     const modal=document.createElement('div');
-    modal.className='swap-modal';
-    modal.id='rebalance-modal';
+    modal.className='swap-modal';modal.id='rebalance-modal';
     modal.innerHTML=`<div class="swap-ov" onclick="closeRebalance()"></div>
 <div class="swap-sheet">
-  <div class="swap-title">You'll miss ${missed} this week</div>
-  <div style="font-size:13px;color:var(--t2);padding:0 4px 12px">Rescue it by moving to a free day, or swap out another workout so nothing gets dropped.</div>
-  ${options}
-  <button class="swap-cancel" onclick="closeRebalance()">Skip ${missed} this week</button>
+  <div class="swap-title">Shift week so nothing gets dropped?</div>
+  <div style="font-size:13px;color:var(--t2);padding:0 4px 12px">${tl[oldType]} cascades into your remaining sessions — every muscle group still covered:</div>
+  ${rows}${warn}
+  <div style="display:flex;gap:8px;margin-top:16px">
+    <button onclick="closeRebalance()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t2);font-size:13px;font-weight:700;padding:12px;cursor:pointer">Skip ${tl[oldType]}</button>
+    <button onclick="applyCascadeRebalance()" style="flex:2;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:700;padding:12px;cursor:pointer">Apply shift ✓</button>
+  </div>
 </div>`;
     document.body.appendChild(modal);
     requestAnimationFrame(()=>modal.classList.add('on'));
   }
 }
-function closeRebalance(){const m=document.getElementById('rebalance-modal');if(m)m.remove();}
+function closeRebalance(){_pendingCascade=null;const m=document.getElementById('rebalance-modal');if(m)m.remove();}
+function applyCascadeRebalance(){
+  if(!_pendingCascade)return;
+  const{pk,changes}=_pendingCascade;
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const plan=DB.get(pk,null);if(!plan)return;
+  changes.forEach(({date,type})=>{
+    const i=plan.findIndex(d=>d.date===date);
+    if(i!==-1){plan[i].type=type;plan[i].exercises=gymTypes.includes(type)?genSession(type):null;}
+  });
+  DB.set(pk,plan);_pendingCascade=null;
+  closeRebalance();syncUp();render();
+  showToast('✅ Week shifted — every muscle group covered','var(--grn)');
+}
 function showActInfo(k){
   const info={
     gym:{i:'🏋️',t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
@@ -3316,17 +3334,6 @@ function showActInfo(k){
   document.body.appendChild(el);
   requestAnimationFrame(()=>el.classList.add('on'));
 }
-function doRebalanceSwap(ds,workoutType){
-  const mon=getMon(new Date(ds+'T12:00:00'));
-  const pk=DB.pk(mon);
-  const plan=DB.get(pk,null);if(!plan)return;
-  const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
-  plan[di].type=workoutType;
-  plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(workoutType)?genSession(workoutType):null;
-  DB.set(pk,plan);syncUp();render();
-  showToast(`✅ ${workoutType} moved — weekly goal still on track`,'var(--grn)');
-}
-
 /* ── EXERCISE SWAP (busy machine / in-session) ── */
 
 function getAlternatives(exId,type){
