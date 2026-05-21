@@ -789,8 +789,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.42';
+const APP_VERSION='1.43';
+// Feature flags — flip to true once the backend setup is finished
+const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.43',d:'Ride logging is now inline on the ride card (no pop-up); Weekly Review set to "coming soon"',det:'The manual ride log no longer opens a separate screen. The duration, distance, average heart rate, perceived effort and notes fields now sit directly on the ride card and save as you type — with a short note explaining that rides sync automatically once Strava is connected. The Weekly Review email setup in Settings is temporarily shown as "coming soon" while the email backend is being finished; it will be switched back on alongside the Feedback feature.'},
   {v:'1.42',d:'Import now accepts CSV files — restore workouts, rides and PRs from a CSV export',det:'The Restore button previously only accepted the JSON backup. It now also reads the CSV produced by Export CSV: it parses workout sets, rides and personal records back into the app, matching exercise names in English or Chinese. CSV import merges into your existing data rather than wiping it, and preserves any fields the CSV does not carry. Rows whose exercise name is not recognised are skipped and reported. The JSON backup is still the recommended full backup (it also carries your plan and settings); CSV import is handy for restoring training records specifically.'},
   {v:'1.41',d:'Performance — weather cached, AI coach recovers from failures, exercise images cached offline',det:'Three optimisations. (1) The AI coach previously marked its daily batch as "done" before the network call returned — so a single failed request disabled AI coaching for the rest of the day. It now only marks the batch done after a successful response, with an in-memory guard against duplicate concurrent calls. (2) Weather is cached for 3 hours per week and location, so regenerating your plan no longer re-hits the weather API every time. (3) The service worker now caches exercise demo images from the free-exercise-db CDN — they load instantly on repeat views and work fully offline (previously cross-origin "opaque" responses were skipped by the cache).'},
   {v:'1.40',d:'CSV export, manual ride logging fix, cleaner language labels, and a Feedback section preview',det:'Export data now offers a readable CSV (open it in Excel or Sheets to see every workout set, ride and PR as a plain table) alongside the existing JSON backup used for restore. Manual ride logging now appears on any ride day that Strava did not auto-capture — previously it was hidden entirely whenever a Strava account was connected, so connected users could not log a ride Strava missed. The language switcher no longer shows the stray "GB" / "HK" letters (unsupported flag emoji) before English / 繁體中文. A Feedback & Wishlist section was added to Settings as a coming-soon preview.'},
@@ -887,6 +890,8 @@ const TRANS={
     rl_min:'min',rl_km:'km',rl_bpm:'bpm',rl_save:'Save ride',
     rl_notes_ph:'How did it feel? Route, weather…',rl_saved_toast:'✅ Ride logged',
     rl_need_dur:'Enter at least a ride duration',
+    rl_hint_nostrava:'Connect Strava in Settings to track rides automatically — or log this one manually below.',
+    rl_hint_strava:'Strava has no ride logged for today — enter the details manually below.',
     wr_card_title:'Your weekly review is ready',
     wr_card_sub:'Tap to generate your 8-week training analysis',
     wr_ready_title:'Weekly review ready',
@@ -905,6 +910,7 @@ const TRANS={
     wr_generated_on:'Generated',
     wr_settings_hdr:'📊 Weekly Review',
     wr_settings_sub:'Get an AI analysis of your training emailed to you each Sunday.',
+    wr_soon:'An AI analysis of your training, delivered every Sunday — being set up now.',
     wr_your_email:'Your email',
     wr_emailjs_hdr:'EmailJS setup (for email delivery)',
     wr_emailjs_help:'Create a free account at emailjs.com, add an email service and a template containing {{to_email}} and {{summary}} fields, then paste the three IDs below.',
@@ -960,6 +966,8 @@ const TRANS={
     rl_min:'分鐘',rl_km:'公里',rl_bpm:'bpm',rl_save:'儲存騎行',
     rl_notes_ph:'感覺如何？路線、天氣…',rl_saved_toast:'✅ 已記錄騎行',
     rl_need_dur:'請至少輸入騎行時長',
+    rl_hint_nostrava:'在設定中連接 Strava 可自動追蹤騎行 — 或在下方手動記錄這次騎行。',
+    rl_hint_strava:'Strava 今天沒有騎行記錄 — 請在下方手動輸入詳情。',
     wr_card_title:'你的每週回顧已準備好',
     wr_card_sub:'點擊生成你的 8 週訓練分析',
     wr_ready_title:'每週回顧已就緒',
@@ -978,6 +986,7 @@ const TRANS={
     wr_generated_on:'生成於',
     wr_settings_hdr:'📊 每週回顧',
     wr_settings_sub:'每個星期日把 AI 對你訓練的分析電郵給你。',
+    wr_soon:'每個星期日為你提供 AI 訓練分析 — 功能設定中。',
     wr_your_email:'你的電郵',
     wr_emailjs_hdr:'EmailJS 設定（用於電郵寄送）',
     wr_emailjs_help:'在 emailjs.com 建立免費帳戶，新增電郵服務和包含 {{to_email}} 與 {{summary}} 欄位的範本，然後在下方貼上三個 ID。',
@@ -2863,25 +2872,31 @@ function rRideCard(dp){
   </div>
   ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
 </div>`:'';
-  // Manual ride log — always available as a fallback when Strava has no activity for this day
+  // Manual ride log — inline form, shown when Strava has no activity for this day
   const manual=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null)?.ride;
   let manualHtml='';
   if(!actual){
-    if(manual&&manual.dur!=null){
-      const cell=(v,lbl)=>v!=null?`<div style="flex:1;min-width:62px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${v}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">${lbl}</div></div>`:'';
-      manualHtml=`<div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ ${_T('rl_logged')}</div>
-    <button onclick="openRideLog('${dp.date}')" style="background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer">${_T('rl_edit')}</button>
+    const r=manual||{};
+    const stravaConnected=!!DB.get('strava_token',null);
+    const hint=stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
+    const fld=(id,label,unit,val)=>`<div>
+      <label style="display:block;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}${unit?' · '+unit:''}</label>
+      <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" oninput="rideField('${dp.date}','${id.slice(3)}',this.value)"
+        style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:15px;font-weight:700;padding:9px 11px;outline:none;font-family:inherit;-webkit-appearance:none"></div>`;
+    manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:13px 14px;margin-bottom:13px">
+  <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px">📝 ${_T('rl_title')}</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:11px">${hint}</div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
+    ${fld('rl-dur',_T('rl_dur'),_T('rl_min'),r.dur)}
+    ${fld('rl-dist',_T('rl_dist'),_T('rl_km'),r.dist)}
+    ${fld('rl-hr',_T('rl_hr'),_T('rl_bpm'),r.hr)}
+    ${fld('rl-rpe',_T('rl_rpe'),'1–10',r.rpe)}
   </div>
-  <div style="display:flex;gap:10px;flex-wrap:wrap">
-    ${cell(manual.dist,_T('rl_km'))}${cell(manual.dur,_T('rl_min'))}${cell(manual.hr,_T('rl_bpm'))}${cell(manual.rpe,'RPE')}
-  </div>
-  ${manual.notes?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(manual.notes)}"</div>`:''}
+  <textarea id="rl-notes" rows="2" placeholder="${_T('rl_notes_ph')}" oninput="rideField('${dp.date}','notes',this.value)"
+    style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:9px 11px;outline:none;font-family:inherit;resize:none;-webkit-appearance:none;margin-bottom:9px">${_esc(r.notes||'')}</textarea>
+  <button onclick="saveRideLogInline('${dp.date}')" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:11px;cursor:pointer">${_T('rl_save')}</button>
+  ${r.dur!=null?`<div style="font-size:10px;color:var(--grn);text-align:center;margin-top:7px;font-weight:600">✓ ${_T('rl_logged')}</div>`:''}
 </div>`;
-    }else{
-      manualHtml=`<button onclick="openRideLog('${dp.date}')" style="width:100%;background:var(--s2);border:1px dashed rgba(120,80,255,.35);border-radius:13px;color:var(--al);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:13px">📝 ${_T('rl_title')}</button>`;
-    }
   }
   const hasLogged=actual||(manual&&manual.dur!=null);
   return`<div class="ride-card" style="text-align:left">
@@ -2916,52 +2931,19 @@ function rRestCard(){
 </div>`;
 }
 
-/* ── MANUAL RIDE LOG (for users who haven't connected Strava) ── */
-function openRideLog(ds){
-  const log=DB.get(DB.lk(new Date(ds+'T12:00:00')),null);
-  const r=(log&&log.ride)||{};
-  const num=(id,label,unit,val,extra)=>`<div style="margin-bottom:11px">
-    <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">${label}${unit?' · '+unit:''}</label>
-    <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" ${extra||''}
-      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:16px;font-weight:700;padding:11px 13px;outline:none;font-family:inherit;-webkit-appearance:none"></div>`;
-  const modal=document.createElement('div');
-  modal.className='swap-modal';modal.id='ride-log-modal';
-  modal.innerHTML=`<div class="swap-ov" onclick="closeRideLog()"></div>
-<div class="swap-sheet">
-  <div class="swap-title">${r.dur!=null?_T('rl_edit')+' · '+_T('rl_logged'):_T('rl_title')}</div>
-  ${num('rl-dur',_T('rl_dur'),_T('rl_min'),r.dur)}
-  ${num('rl-dist',_T('rl_dist'),_T('rl_km'),r.dist)}
-  ${num('rl-hr',_T('rl_hr'),_T('rl_bpm'),r.hr)}
-  ${num('rl-rpe',_T('rl_rpe'),'1–10',r.rpe,'min="1" max="10"')}
-  <div style="margin-bottom:13px">
-    <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:5px">${_T('rl_notes')}</label>
-    <textarea id="rl-notes" rows="2" placeholder="${_T('rl_notes_ph')}"
-      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:14px;padding:11px 13px;outline:none;font-family:inherit;resize:none;-webkit-appearance:none">${_esc(r.notes||'')}</textarea>
-  </div>
-  <button class="btn btn-p" onclick="saveRideLog('${ds}')">${_T('rl_save')}</button>
-  <button class="swap-cancel" onclick="closeRideLog()" style="margin-top:7px">${_T('cancel')}</button>
-</div>`;
-  document.body.appendChild(modal);
-  requestAnimationFrame(()=>modal.classList.add('on'));
-}
-function closeRideLog(){
-  const m=document.getElementById('ride-log-modal');
-  if(m){m.classList.remove('on');setTimeout(()=>m.remove(),300);}
-}
-function saveRideLog(ds){
-  const num=id=>{const el=document.getElementById(id);if(!el||el.value==='')return null;const v=parseFloat(el.value);return isNaN(v)?null:v;};
-  const dur=num('rl-dur');
-  if(dur==null){showToast(_T('rl_need_dur'),'var(--amb)');return;}
-  const ride={
-    dur,dist:num('rl-dist'),hr:num('rl-hr'),rpe:num('rl-rpe'),
-    notes:(document.getElementById('rl-notes')?.value||'').trim(),
-    logged:new Date().toISOString(),
-  };
+/* ── MANUAL RIDE LOG — inline on the ride card, live-saved as you type ── */
+function rideField(ds,key,val){
   const lk=DB.lk(new Date(ds+'T12:00:00'));
   const log=DB.get(lk,null)||{};
-  log.ride=ride;
+  log.ride=log.ride||{};
+  if(key==='notes'){log.ride.notes=val;}
+  else{const n=parseFloat(val);log.ride[key]=(val===''||isNaN(n))?null:n;}
+  log.ride.logged=new Date().toISOString();
   DB.set(lk,log);
-  closeRideLog();
+}
+function saveRideLogInline(ds){
+  const ride=DB.get(DB.lk(new Date(ds+'T12:00:00')),null)?.ride;
+  if(!ride||ride.dur==null){showToast(_T('rl_need_dur'),'var(--amb)');return;}
   syncUp();
   render();
   showToast(_T('rl_saved_toast'),'var(--grn)');
@@ -2969,6 +2951,7 @@ function saveRideLog(ds){
 
 /* ── WEEKLY AI REVIEW ── */
 function rReviewCard(){
+  if(!FEATURE_WEEKLY_REVIEW)return'';
   if(S.guest)return'';
   const curMon=getMon(new Date());
   if(fd(S.weekStart)!==fd(curMon))return''; // only on the current week
@@ -3591,6 +3574,28 @@ ${!history.length
 </div>`;
 }
 
+/* ── SETTINGS: WEEKLY REVIEW SECTION ── */
+function rSettingsWeeklyReview(){
+  if(!FEATURE_WEEKLY_REVIEW){
+    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:16px 15px;margin-bottom:10px;text-align:center">
+  <div style="font-size:13px;font-weight:800;color:var(--al);margin-bottom:5px">🚧 ${_T('coming_soon')}</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.55">${_T('wr_soon')}</div>
+</div>`;
+  }
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:12px">${_T('wr_settings_sub')}</div>
+  <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">${_T('wr_your_email')}</label>
+  <input type="email" value="${_esc(DB.get('review_email',''))}" placeholder="you@example.com" onchange="DB.set('review_email',this.value.trim());syncUp()"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:14px;padding:10px 12px;outline:none;font-family:inherit;-webkit-appearance:none">
+  <details style="margin-top:12px">
+    <summary style="font-size:12px;font-weight:700;color:var(--al);cursor:pointer">⚙️ ${_T('wr_emailjs_hdr')}</summary>
+    <div style="font-size:11px;color:var(--t2);line-height:1.5;margin:9px 0 10px">${_T('wr_emailjs_help')}</div>
+    ${[['emailjs_service','Service ID'],['emailjs_template','Template ID'],['emailjs_key','Public Key']].map(([k,lbl])=>`<input type="text" value="${_esc(DB.get(k,''))}" placeholder="${lbl}" onchange="DB.set('${k}',this.value.trim());syncUp()"
+      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:9px 12px;outline:none;font-family:inherit;margin-bottom:8px;-webkit-appearance:none">`).join('')}
+  </details>
+</div>`;
+}
+
 /* ── SETTINGS SCREEN ── */
 function rSettings(){
   const hasPIN=!!DB.get('pin',null);
@@ -3607,18 +3612,7 @@ function rSettings(){
 </div>
 
 <div class="sec-hdr">${_T('wr_settings_hdr')}</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:12px">${_T('wr_settings_sub')}</div>
-  <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">${_T('wr_your_email')}</label>
-  <input type="email" value="${_esc(DB.get('review_email',''))}" placeholder="you@example.com" onchange="DB.set('review_email',this.value.trim());syncUp()"
-    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:14px;padding:10px 12px;outline:none;font-family:inherit;-webkit-appearance:none">
-  <details style="margin-top:12px">
-    <summary style="font-size:12px;font-weight:700;color:var(--al);cursor:pointer">⚙️ ${_T('wr_emailjs_hdr')}</summary>
-    <div style="font-size:11px;color:var(--t2);line-height:1.5;margin:9px 0 10px">${_T('wr_emailjs_help')}</div>
-    ${[['emailjs_service','Service ID'],['emailjs_template','Template ID'],['emailjs_key','Public Key']].map(([k,lbl])=>`<input type="text" value="${_esc(DB.get(k,''))}" placeholder="${lbl}" onchange="DB.set('${k}',this.value.trim());syncUp()"
-      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:9px 12px;outline:none;font-family:inherit;margin-bottom:8px;-webkit-appearance:none">`).join('')}
-  </details>
-</div>
+${rSettingsWeeklyReview()}
 
 <div class="sec-hdr">${_T('gym_profile')}</div>
 ${(()=>{
