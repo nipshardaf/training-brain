@@ -789,8 +789,9 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.39';
+const APP_VERSION='1.40';
 const CHANGELOG=[
+  {v:'1.40',d:'CSV export, manual ride logging fix, cleaner language labels, and a Feedback section preview',det:'Export data now offers a readable CSV (open it in Excel or Sheets to see every workout set, ride and PR as a plain table) alongside the existing JSON backup used for restore. Manual ride logging now appears on any ride day that Strava did not auto-capture — previously it was hidden entirely whenever a Strava account was connected, so connected users could not log a ride Strava missed. The language switcher no longer shows the stray "GB" / "HK" letters (unsupported flag emoji) before English / 繁體中文. A Feedback & Wishlist section was added to Settings as a coming-soon preview.'},
   {v:'1.39',d:'Chinese translation expanded — all 61 exercise names, form cues, coach messages, and the workout day screen',det:'All 61 exercises now show proper Traditional Chinese names (硬舉, 深蹲, 臥推, 引體向上, etc.) everywhere they appear — day screen, log, history, PRs and swap sheets. The 💡 form-cue tip on every exercise card is now translated. The "Coach says" pre-workout messages are fully translated for every energy level. The workout day screen UI is now translated too: the Exercises heading, Animate / Tutorial / collapse buttons, Busy? and Log sets buttons, set/rep badges, the back and swap buttons, and the log-workout button.'},
   {v:'1.38',d:'Fixed the Swap Workout sheet showing raw code instead of workout names',det:'After workout labels were made translatable (lazy functions), the "Change workout for this day" sheet was still rendering them directly — so it showed text like ()=>_T(\'wt_push\') instead of "Push". The swap sheet now calls the label and description functions correctly, matching every other screen.'},
   {v:'1.37',d:'Chinese language polish — history screen translated, overcrowding fixes, layout class added',det:'The Workout History screen is now fully translated (Completed, exercise/set counts, set rows). Added a lang-zh class on the page root when Traditional Chinese is active, with CSS rules that slightly reduce font sizes, allow exercise card titles to wrap to two lines instead of truncating, tighten button padding, and shrink the bottom-nav labels so nothing overflows. The My Training tab label was shortened to 訓練. Language preference now syncs to the cloud, so it restores correctly after signing in on a new device. Exercise-name and coach-message translation are still to come.'},
@@ -911,6 +912,9 @@ const TRANS={
     sets_unit:'sets',reps_unit:'reps',
     log_workout:'Log This Workout',continue_log:'Continue Logging',view_log:'View Log',
     suggested:'suggested',
+    exp_csv:'Export CSV',exp_backup:'Backup (.json)',exp_restore:'Restore from backup',
+    fb_hdr:'💬 Feedback & Wishlist',coming_soon:'Coming soon',
+    fb_soon:'Submit bug reports, request features, and boost the ideas you want to see most.',
     lang_en:'English',lang_zh:'繁體中文',
   },
   zh:{
@@ -981,6 +985,9 @@ const TRANS={
     sets_unit:'組',reps_unit:'下',
     log_workout:'記錄這次訓練',continue_log:'繼續記錄',view_log:'查看記錄',
     suggested:'建議',
+    exp_csv:'匯出 CSV',exp_backup:'備份 (.json)',exp_restore:'從備份還原',
+    fb_hdr:'💬 意見與願望清單',coming_soon:'即將推出',
+    fb_soon:'提交錯誤回報、建議新功能，並為你最想要的點子加分。',
     lang_en:'English',lang_zh:'繁體中文',
   }
 };
@@ -2844,11 +2851,10 @@ function rRideCard(dp){
   </div>
   ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
 </div>`:'';
-  // Manual ride log — shown for users who haven't connected Strava
-  const stravaConnected=!!DB.get('strava_token',null);
+  // Manual ride log — always available as a fallback when Strava has no activity for this day
   const manual=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null)?.ride;
   let manualHtml='';
-  if(!stravaConnected){
+  if(!actual){
     if(manual&&manual.dur!=null){
       const cell=(v,lbl)=>v!=null?`<div style="flex:1;min-width:62px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${v}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">${lbl}</div></div>`:'';
       manualHtml=`<div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
@@ -3736,8 +3742,11 @@ ${S.fbUser
       <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
     </div>`}
 <div class="data-btns">
-  <button class="btn btn-s" onclick="exportData()">⬇️ Export data</button>
-  <button class="btn btn-s" onclick="importData()">⬆️ Import data</button>
+  <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
+  <button class="btn btn-s" onclick="exportData()">💾 ${_T('exp_backup')}</button>
+</div>
+<div class="data-btns" style="margin-top:8px;grid-template-columns:1fr">
+  <button class="btn btn-s" onclick="importData()">⬆️ ${_T('exp_restore')}</button>
 </div>
 ${hasPIN?`<div class="data-btns" style="margin-top:8px">
   <button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>
@@ -3745,8 +3754,14 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
 
 <div class="sec-hdr">${_T('language')}</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:6px;margin-bottom:10px;display:flex;gap:4px">
-  <button onclick="DB.set('lang','en');render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='en'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='en'?'#fff':'var(--t2)'}">🇬🇧 English</button>
-  <button onclick="DB.set('lang','zh');render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='zh'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='zh'?'#fff':'var(--t2)'}">🇭🇰 繁體中文</button>
+  <button onclick="DB.set('lang','en');syncUp();render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='en'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='en'?'#fff':'var(--t2)'}">English</button>
+  <button onclick="DB.set('lang','zh');syncUp();render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='zh'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='zh'?'#fff':'var(--t2)'}">繁體中文</button>
+</div>
+
+<div class="sec-hdr">${_T('fb_hdr')}</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:16px 15px;margin-bottom:10px;text-align:center">
+  <div style="font-size:13px;font-weight:800;color:var(--al);margin-bottom:5px">🚧 ${_T('coming_soon')}</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.55">${_T('fb_soon')}</div>
 </div>
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
@@ -4180,6 +4195,44 @@ function exportData(){
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
   a.href=url;a.download=`training-brain-${fd(new Date())}.json`;
+  document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+}
+
+/* ── CSV EXPORT — human-readable training records ── */
+function exportCSV(){
+  const u=unit();
+  const cell=v=>{v=String(v==null?'':v);return /[",\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};
+  const rows=[['Date','Type','Exercise','Set','Weight ('+u+')','Reps','Notes']];
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k.startsWith('log_'))keys.push(k);}
+  keys.sort();
+  keys.forEach(k=>{
+    const log=DB.get(k,null);if(!log)return;
+    const date=k.slice(4);
+    (log.exercises||[]).forEach(e=>{
+      const ex=EX[e.id];const name=ex?ex.n:e.id;
+      (e.sets||[]).filter(s=>s.done).forEach((s,i)=>{
+        rows.push([date,'Workout',name,i+1,s.w||'',s.r||'','']);
+      });
+    });
+    if(log.ride&&log.ride.dur!=null){
+      const r=log.ride;
+      const notes=[r.hr!=null?r.hr+' bpm':'',r.rpe!=null?'RPE '+r.rpe:'',r.notes||''].filter(Boolean).join(' · ');
+      rows.push([date,'Ride','Cycling','',r.dist!=null?r.dist+' km':'',r.dur+' min',notes]);
+    }
+  });
+  const prs=DB.get('prs',{});
+  Object.entries(prs).forEach(([id,p])=>{
+    const ex=EX[id];const name=ex?ex.n:id;
+    rows.push([p.date||'','Personal Record',name,'',p.w||'',p.r||'','All-time best']);
+  });
+  const csv=rows.map(r=>r.map(cell).join(',')).join('\r\n');
+  // BOM so Excel reads UTF-8 (Chinese exercise names) correctly
+  const blob=new Blob(['﻿'+csv],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=`training-brain-${fd(new Date())}.csv`;
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
