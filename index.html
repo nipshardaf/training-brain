@@ -363,6 +363,25 @@ const EX = {
   arch_raise:  {n:'Arch Raise',          g:'foot',     t:'I',sets:3,reps:'12–15',rpe:'4',  m:'Arch · Intrinsic Foot',   p:null},
   toe_spread:  {n:'Toe Spread & Hold',   g:'foot',     t:'I',sets:3,reps:'10×5s', rpe:'3', m:'Intrinsic Foot',          p:null},
   heel_raise:  {n:'Heel Raise (arch)',   g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Arch · Calves',           p:null,                                      uni:true},
+  // ── Bodyweight / home exercises ────────────────────────────────────────────
+  pushup:       {n:'Push-Up',              g:'chest',    t:'C',sets:4,reps:'10–15',rpe:'6',  m:'Chest · Triceps',         p:null, bw:true},
+  decline_pu:   {n:'Decline Push-Up',      g:'chest',    t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Upper Chest',             p:null, bw:true},
+  diamond_pu:   {n:'Diamond Push-Up',      g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:null, bw:true},
+  pike_pu:      {n:'Pike Push-Up',         g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders · Triceps',     p:null, bw:true},
+  inverted_row: {n:'Inverted Row',         g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back · Biceps',           p:null, bw:true},
+  superman:     {n:'Superman',             g:'hback_h',  t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Lower Back · Glutes',     p:null, bw:true},
+  bw_squat:     {n:'Bodyweight Squat',     g:'quad',     t:'C',sets:3,reps:'15–20',rpe:'5',  m:'Quads · Glutes',          p:null, bw:true},
+  jump_squat:   {n:'Jump Squat',           g:'quad',     t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Quads · Glutes',          p:null, bw:true},
+  bw_lunge:     {n:'Bodyweight Lunge',     g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Quads · Glutes',          p:null, bw:true, uni:true},
+  sl_glute_bridge:{n:'Single-Leg Glute Bridge',g:'ham',  t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Glutes · Hamstrings',     p:null, bw:true, uni:true},
+  donkey_kick:  {n:'Donkey Kick',          g:'ham',      t:'I',sets:3,reps:'15/leg',rpe:'5', m:'Glutes',                  p:null, bw:true, uni:true},
+  wall_sit:     {n:'Wall Sit',             g:'quad',     t:'I',sets:3,reps:'45s',   rpe:'6', m:'Quads',                   p:null, bw:true},
+  mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:null, bw:true},
+  bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:null, bw:true},
+  side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:null, bw:true, uni:true},
+  leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:null, bw:true},
+  crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:null, bw:true},
+  burpee:       {n:'Burpee',               g:'core',     t:'C',sets:3,reps:'10–15', rpe:'8', m:'Full Body',               p:null, bw:true},
 };
 
 /* ── EXERCISE NAMES — Traditional Chinese ── */
@@ -382,6 +401,12 @@ const EX_ZH={
   plank:'平板支撐',hang_raise:'懸吊舉腿',ab_wheel:'健腹輪',cable_crunch:'繩索捲腹',
   mach_crunch:'機械捲腹',short_foot:'縮足運動',towel_scrunch:'毛巾抓握',arch_raise:'足弓提升',
   toe_spread:'腳趾張開保持',heel_raise:'提踵（足弓）',
+  pushup:'伏地挺身',decline_pu:'下斜伏地挺身',diamond_pu:'鑽石伏地挺身',pike_pu:'倒V伏地挺身',
+  inverted_row:'仰臥划船',superman:'超人式',
+  bw_squat:'徒手深蹲',jump_squat:'跳躍深蹲',bw_lunge:'徒手弓步',
+  sl_glute_bridge:'單腿臀橋',donkey_kick:'驢踢腿',wall_sit:'靠牆靜蹲',
+  mountain_climber:'登山者',bicycle_crunch:'單車捲腹',side_plank:'側板支撐',
+  leg_raise_floor:'仰臥舉腿',crunch:'捲腹',burpee:'波比跳',
 };
 // Snapshot original English names so the language can switch both ways
 const EX_EN_NAMES={};
@@ -396,36 +421,39 @@ function applyExLang(){
 
 /* ── SESSION SLOT TEMPLATES ── */
 const SLOTS = {
+  // Each slot lists gym exercises first (equipment-prioritised), BW alternatives at the end.
+  // filterSlot picks the best available option — BW exercises surface automatically when
+  // gym equipment is not present or when home-week mode is active.
   PUSH:[
-    ['bb_bench','db_bench'],
-    ['incline_bb','incline_db','cable_fly','pec_deck'],
-    ['ohp','db_spress','arnold'],
+    ['bb_bench','db_bench','pushup'],
+    ['incline_bb','incline_db','cable_fly','pec_deck','decline_pu'],
+    ['ohp','db_spress','arnold','pike_pu'],
     ['lat_raise','cable_lat'],
-    ['tri_push','skull','tri_oh','dips'],
+    ['tri_push','skull','tri_oh','dips','diamond_pu'],
   ],
   PULL:[
-    ['pullup','lat_pull'],
-    ['bb_row','tbar_row'],
-    ['db_row','cable_row'],
-    ['face_pull','rear_fly'],
+    ['pullup','lat_pull','inverted_row'],
+    ['bb_row','tbar_row','inverted_row'],
+    ['db_row','cable_row','inverted_row'],
+    ['face_pull','rear_fly','superman'],
     ['bb_curl','db_curl','preacher','cable_curl','incline_curl'],
     ['hammer','db_curl','preacher','incline_curl'],
   ],
   LEGS:[
-    ['bb_squat','front_squat','hack_squat','goblet_squat','bss','lunge','step_up'],
-    ['rdl','deadlift','hip_thrust','glute_bridge','nordic_curl'],
-    ['leg_press','leg_ext','bss','lunge','step_up'],
-    ['leg_curl','seated_leg_curl','leg_ext'],
+    ['bb_squat','front_squat','hack_squat','goblet_squat','bss','lunge','step_up','bw_squat','jump_squat','bw_lunge'],
+    ['rdl','deadlift','hip_thrust','glute_bridge','nordic_curl','sl_glute_bridge'],
+    ['leg_press','leg_ext','bss','lunge','step_up','wall_sit','bw_squat'],
+    ['leg_curl','seated_leg_curl','leg_ext','nordic_curl','donkey_kick'],
     ['calf_raise','seated_calf','single_calf'],
-    ['plank','hang_raise','ab_wheel','cable_crunch','mach_crunch'],
+    ['plank','hang_raise','ab_wheel','cable_crunch','mach_crunch','mountain_climber','bicycle_crunch','side_plank','leg_raise_floor','crunch'],
   ],
   UPPER_PUMP:[
-    ['incline_db','cable_fly','pec_deck','db_bench'],
-    ['db_spress','arnold'],
+    ['incline_db','cable_fly','pec_deck','db_bench','pushup','decline_pu'],
+    ['db_spress','arnold','pike_pu'],
     ['lat_raise','cable_lat'],
-    ['lat_pull','cable_row'],
+    ['lat_pull','cable_row','inverted_row'],
     ['hammer','preacher','cable_curl','incline_curl'],
-    ['tri_push','tri_oh','skull'],
+    ['tri_push','tri_oh','skull','diamond_pu'],
   ],
 };
 
@@ -445,6 +473,12 @@ const EX_EQUIP={
   single_calf:['bodyweight'],plank:['bodyweight'],hang_raise:['pullup_bar'],ab_wheel:['ab_wheel'],
   cable_crunch:['cable'],mach_crunch:['machine'],short_foot:['bodyweight'],towel_scrunch:['bodyweight'],
   arch_raise:['bodyweight'],toe_spread:['bodyweight'],heel_raise:['bodyweight'],
+  pushup:['bodyweight'],decline_pu:['bodyweight'],diamond_pu:['bodyweight'],pike_pu:['bodyweight'],
+  inverted_row:['bodyweight'],superman:['bodyweight'],
+  bw_squat:['bodyweight'],jump_squat:['bodyweight'],bw_lunge:['bodyweight'],
+  sl_glute_bridge:['bodyweight'],donkey_kick:['bodyweight'],wall_sit:['bodyweight'],
+  mountain_climber:['bodyweight'],bicycle_crunch:['bodyweight'],side_plank:['bodyweight'],
+  leg_raise_floor:['bodyweight'],crunch:['bodyweight'],burpee:['bodyweight'],
 };
 
 /* ── COACHING CUES ── */
@@ -505,6 +539,24 @@ const EX_CUES={
   ab_wheel:'Keep core braced throughout. Don\'t let hips sag at full extension.',
   cable_crunch:'Round your spine — this is not a hip flexor exercise. Crunch down, feel abs shorten.',
   mach_crunch:'Slow and deliberate. Hold at max contraction. Breathe out on the way down.',
+  pushup:'Hands just outside shoulder width, elbows at 45°. Lower chest to floor, squeeze chest hard at the top.',
+  decline_pu:'Feet elevated on a chair or step — shifts load to upper chest. Core braced, full range of motion.',
+  diamond_pu:'Index fingers and thumbs form a diamond under your chest. Elbows track back — heavy tricep emphasis.',
+  pike_pu:'Hips high in an inverted V. Lower crown of head toward floor, drive up. Shoulder-dominant movement.',
+  inverted_row:'Lie under a table or bar at waist height. Pull chest to bar, squeeze shoulder blades at the top. Body stays straight.',
+  superman:'Lie face down. Lift arms, chest and legs simultaneously. Hold 2s at the top — feel lower back and glutes.',
+  bw_squat:'Arms forward for balance. Drive knees out, chest up, sit to parallel or below. Focus on control and depth.',
+  jump_squat:'Squat to parallel, then explode upward. Land softly with knees bent — absorb the impact on the way down.',
+  bw_lunge:'Long stride, front knee tracks over foot, back knee nears the floor. Push off front heel to return.',
+  sl_glute_bridge:'One foot flat on floor, other leg raised. Drive hip up and squeeze glute hard at the top. 12 reps per side.',
+  donkey_kick:'On all fours, hips square. Kick straight back and up — all glute, not lower back. Slow and controlled.',
+  wall_sit:'Back flat against wall, thighs parallel to floor. Hold position. The burn is normal — breathe and push through.',
+  mountain_climber:'Plank position. Drive knees to chest alternately in a running motion. Keep hips level — don\'t bounce.',
+  bicycle_crunch:'Elbow to opposite knee, other leg fully extended. Slow and deliberate — no momentum, no neck strain.',
+  side_plank:'Elbow directly under shoulder, hips lifted. Body in one straight line. 30s per side.',
+  leg_raise_floor:'Hands under lower back for support. Keep legs straight, lower slowly without letting them touch the floor.',
+  crunch:'Hands lightly behind head, elbows wide. Curl upper back up — focus on abs shortening, not pulling your neck.',
+  burpee:'Hands down, feet back, chest to floor (or push-up), feet forward, stand, jump with arms overhead. Keep pace.',
 };
 
 /* ── EXERCISE CUES — Traditional Chinese ── */
@@ -565,6 +617,24 @@ const EX_CUES_ZH={
   ab_wheel:'全程繃緊核心。完全伸展時勿讓髖部下沉。',
   cable_crunch:'弓起脊椎 — 這不是髖屈肌動作。向下捲起，感受腹肌縮短。',
   mach_crunch:'緩慢而刻意。最大收縮處停留，向下時呼氣。',
+  pushup:'雙手略寬於肩，手肘45°，胸口下降至地面，頂部用力夾緊胸肌。',
+  decline_pu:'雙腳置於椅子或台階上，負荷轉移至上胸。繃緊核心，完整活動範圍。',
+  diamond_pu:'食指與拇指在胸下方形成菱形，手肘後撐 — 強力訓練三頭肌。',
+  pike_pu:'臀部高舉呈倒V形，頭頂下降至地面再推起，以肩部為主的動作。',
+  inverted_row:'仰臥於腰高桌子或橫桿下方。胸口拉至桿上，夾緊肩胛骨，身體保持筆直。',
+  superman:'俯臥，同時舉起雙臂、胸口和雙腿，頂部保持2秒，感受下背和臀部收縮。',
+  bw_squat:'雙臂前伸保持平衡，膝蓋外推，挺胸，蹲至平行或以下，專注控制和深度。',
+  jump_squat:'蹲至平行後爆發向上跳躍，落地時膝蓋彎曲吸收衝擊。',
+  bw_lunge:'大步距，前膝對齊腳掌，後膝近地面，以前腳跟蹬地返回。',
+  sl_glute_bridge:'一腳踏平地面，另一腳抬起，推髖向上夾緊臀部，每側12下。',
+  donkey_kick:'四肢跪地，髖部保持方正，筆直向後上踢 — 靠臀部而非下背，緩慢受控。',
+  wall_sit:'背部貼牆，大腿與地面平行，保持姿勢，痠痛感正常 — 持續呼吸，堅持到底。',
+  mountain_climber:'平板支撐姿勢，雙膝交替快速提向胸口，保持髖部水平，勿彈跳。',
+  bicycle_crunch:'手肘碰對側膝蓋，另一腿完全伸直，緩慢刻意 — 不借力，勿拉扯頸部。',
+  side_plank:'手肘在肩正下方，臀部抬起，從頭到腳保持一直線，每側30秒。',
+  leg_raise_floor:'雙手置於下背支撐，雙腿伸直，緩慢下放但不觸地。',
+  crunch:'雙手輕放頸後，手肘向外，捲起上背 — 感受腹肌縮短，勿拉扯頸部。',
+  burpee:'雙手放地，腳後跳，胸口觸地（或伏地挺身），腳前跳，站起，跳躍舉臂，保持節奏。',
 };
 // Snapshot original English cues so the language can switch both ways
 const EX_CUES_EN={};
@@ -632,7 +702,25 @@ short_foot:{CONNECT:'Think of "shortening" your foot by drawing the ball toward 
 towel_scrunch:{CONNECT:'Feel each toe working individually to scrunch the towel — this builds coordinated strength in all the small muscles of the foot.',SETUP:'Sit barefoot with a towel flat under your foot; scrunch the towel toward you using only your toes and ball of foot.',REP:'Scrunch towel toward you, hold for 2s, release fully. Complete all reps, then switch feet.',AVOID:'Lifting your heel to help — keep it flat on the floor, working only toes and ball of foot.'},
 arch_raise:{CONNECT:'Feel the entire medial arch lifting as a unit — this isometric hold strengthens the spring-like function of your arch for running and standing.',SETUP:'Stand barefoot, feet hip-width; keep all toes and heel in contact with the floor throughout.',REP:'Lift the arch of each foot without lifting toes or heel. Hold for 5s. This feels very subtle and tiring — that\'s correct.',AVOID:'Supinating the whole foot (rolling to the outside) — movement should come from lifting the arch, not shifting weight to the outer edge.'},
 toe_spread:{CONNECT:'Try to spread your toes as wide as possible and hold — most people can\'t initially, as this exercise restores natural toe splay for better balance.',SETUP:'Sit or stand barefoot; try to spread all toes away from each other, especially the big toe away from the others.',REP:'Spread toes as wide as possible, hold for 5s; release, repeat. Work on moving your big toe independently from the others.',AVOID:'Curling your toes as you spread — focus on lateral spreading while keeping toes straight.'},
-heel_raise:{CONNECT:'Think of your arch as a spring you\'re loading — this exercise trains the whole posterior chain from arch to Achilles to calf.',SETUP:'Stand with full foot contact, barefoot or minimal shoes; slow controlled rise throughout.',REP:'Rise onto ball of foot slowly in 3s, hold 1s at the top, lower in 3s. Single leg version doubles the load and reveals imbalances.',AVOID:'Rolling to the outside of your foot on the way up — keep weight centered through the big toe ball of foot.'}
+heel_raise:{CONNECT:'Think of your arch as a spring you\'re loading — this exercise trains the whole posterior chain from arch to Achilles to calf.',SETUP:'Stand with full foot contact, barefoot or minimal shoes; slow controlled rise throughout.',REP:'Rise onto ball of foot slowly in 3s, hold 1s at the top, lower in 3s. Single leg version doubles the load and reveals imbalances.',AVOID:'Rolling to the outside of your foot on the way up — keep weight centered through the big toe ball of foot.'},
+pushup:{CONNECT:'Squeeze your hands as if trying to screw them into the floor — this external rotation cue activates lats and keeps elbows at the right angle.',SETUP:'Hands just outside shoulder width, fingers spread, body a straight plank from head to heels; brace core and glutes.',REP:'Lower chest to floor in 3s with elbows at 45° to body, lightly touch the floor, then drive up and squeeze chest at the top.',AVOID:'Letting hips sag or piking upward — keep a rigid plank throughout. If you can\'t maintain form, do knee push-ups instead.'},
+decline_pu:{CONNECT:'Feel the upper chest (clavicular pec) doing the work — the elevated feet shift the pressing angle to target this hard-to-hit area.',SETUP:'Place feet on a chair or bench 30–45 cm high, hands just outside shoulder width on the floor.',REP:'Lower chest to the floor with control, pause 1s at the bottom stretch, press back up with force.',AVOID:'Letting the lower back sag under the added difficulty — brace core aggressively throughout.'},
+diamond_pu:{CONNECT:'Feel the triceps long head stretching on the way down — this variation is one of the best bodyweight tricep builders.',SETUP:'Index fingers and thumbs form a diamond directly under your sternum; elbows point backward.',REP:'Lower until chest nearly touches hands (elbows track straight back, not flaring), then drive back to full lockout.',AVOID:'Flaring elbows outward — they must track backward to keep triceps dominant and shoulder safe.'},
+pike_pu:{CONNECT:'Push your shoulders away from your ears as you press — this keeps the delts under tension and prevents trap takeover.',SETUP:'Start in a downward-dog position with hips high and feet hip-width; hands shoulder-width on the floor.',REP:'Bend elbows to lower crown toward floor in 3s, then push floor away to return. Elbows point out to the sides.',AVOID:'Losing the inverted-V hip position — the more vertical your torso gets, the more shoulder-dominant it becomes (that\'s the goal).'},
+inverted_row:{CONNECT:'Squeeze your shoulder blades together hard at the top — this rear-delt and rhomboid activation is exactly what most people miss from pulling work.',SETUP:'Set a bar or table edge at hip height; hang underneath with straight arms, body in a plank, heels on floor.',REP:'Pull chest to bar by driving elbows back and down, hold 1s at top, lower in 3s. Adjust angle (more upright = easier).',AVOID:'Breaking at the hips to make it easier — keep a straight line from head to heels throughout.'},
+superman:{CONNECT:'Think of reaching long in both directions at the same time — this full-extension cue maximises the back-line activation.',SETUP:'Lie face down, arms extended overhead, legs straight; tense everything before you lift.',REP:'Simultaneously raise arms, chest and legs off the floor, hold 2s at the top, lower slowly. Breathe out on the way up.',AVOID:'Only raising arms without lifting the chest — you need thoracic extension (upper back arching) to get the real benefit.'},
+bw_squat:{CONNECT:'Push your knees out over your little toes — this cue activates glutes and keeps knees from caving in.',SETUP:'Feet hip to shoulder-width, toes slightly out; arms extended forward to counterbalance.',REP:'Sit back and down to parallel or below, keeping chest up. Pause 1s at the bottom, drive through heels to stand.',AVOID:'Rising up on your toes — if heels lift, widen your stance or work on ankle mobility.'},
+jump_squat:{CONNECT:'Think of the ground as a trampoline — maximum force into the floor on every rep produces maximum height.',SETUP:'Feet shoulder-width, toes slightly out; stay light on your feet between reps.',REP:'Squat to parallel, then explode upward as powerfully as possible. Land toe-ball-heel with knees bent to absorb impact.',AVOID:'Shallow quarter-squats — get to parallel on every rep for the full quad and glute stimulus.'},
+bw_lunge:{CONNECT:'Think of lowering your back knee straight down, not driving your front knee forward — this shifts load to glutes and away from the knee joint.',SETUP:'Stand tall, step forward with a long stride so back knee nearly touches the floor.',REP:'Lower back knee toward floor in a controlled drop, front shin stays vertical; push off front heel to return.',AVOID:'Letting the front knee cave inward — drive the knee out over the second toe throughout.'},
+sl_glute_bridge:{CONNECT:'Drive through the heel of your planted foot and squeeze the working glute hard — this is the max-isolation glute exercise.',SETUP:'Lie on your back, one foot flat on floor near glutes, other leg raised with knee extended; arms flat at sides.',REP:'Press through planted heel to lift hips until fully extended, hold 2s squeezing glute, lower slowly in 3s.',AVOID:'Arching your lower back to get extra height — the range comes from hip extension, not lumbar extension.'},
+donkey_kick:{CONNECT:'Imagine pressing your heel toward the ceiling — this cue keeps the movement in the glute and prevents lower-back compensation.',SETUP:'Hands under shoulders, knees under hips; brace core to prevent any hip rotation.',REP:'Keeping knee bent at 90°, kick leg back and up until thigh is parallel to floor, hold 1s, lower slowly.',AVOID:'Rotating the hip or arching the lower back to get higher — if your back arches, that\'s hip flexor tightness, not glute strength.'},
+wall_sit:{CONNECT:'Imagine you\'re sitting on an invisible chair — this mental cue helps maintain the 90° thigh-to-shin angle that maximises quad tension.',SETUP:'Back flat against wall, feet hip-width and 60 cm from the wall; slide down until thighs parallel to floor.',REP:'Hold the position with constant tension. Take slow, controlled breaths. Goal: 45–90s with good form.',AVOID:'Placing feet too close to the wall — this creates a forward knee angle that shifts stress to tendons rather than quads.'},
+mountain_climber:{CONNECT:'Think of driving your knee to your opposite elbow — this full-range hip flexion keeps the core working maximally with every rep.',SETUP:'High plank position with hands under shoulders; brace your core as if expecting a punch.',REP:'Drive one knee to chest, immediately return and drive the other — alternating as fast as you can while keeping hips level.',AVOID:'Letting the hips rise into a pike — this shifts work to hip flexors and takes tension off the abs.'},
+bicycle_crunch:{CONNECT:'Focus on rotating your ribcage to meet the incoming knee — not pulling your elbow. This distinction fires the obliques, not the neck.',SETUP:'Lie on back, hands lightly behind head, elbows wide, lower back pressed into the floor.',REP:'Lift shoulder blades, drive one knee in while rotating ribcage toward it, extend the other leg; switch in a controlled rhythm.',AVOID:'Pulling your neck with your hands or using momentum — slow the tempo to 2s per side to feel the obliques working.'},
+side_plank:{CONNECT:'Push the floor away with your supporting elbow — actively pressing creates stability and keeps the shoulder safe.',SETUP:'Lie on your side, elbow directly under shoulder, feet stacked; lift hips so body is a straight line.',REP:'Hold for 30s each side. If too hard, drop to knee-side plank. Build to 60s over time.',AVOID:'Letting hips sag downward or rotate forward — these are the two most common breaks in form.'},
+leg_raise_floor:{CONNECT:'Keep your lower back pressed into the floor throughout — the moment it arches, your hip flexors are doing the work, not your abs.',SETUP:'Lie on back, hands under your lower back or at sides for support; keep legs straight.',REP:'Raise legs to 90°, then lower slowly in 3s until just above the floor. Pause and raise again without touching.',AVOID:'Lowering too fast or all the way to the floor — the hardest part is the controlled descent; that\'s where ab tension lives.'},
+crunch:{CONNECT:'Think of your abs shortening — your lower back stays flat, your upper back peels off the floor. This is not a sit-up.',SETUP:'Lie on back, knees bent, feet flat; hands lightly behind head with elbows wide.',REP:'Curl upper back off the floor until shoulder blades clear, hold 1s at the top, lower in 2s. Exhale on the way up.',AVOID:'Pulling your neck with your hands or trying to sit all the way up — the range is small and intentional.'},
+burpee:{CONNECT:'Think of it as four movements in sequence: get down, push-up, get up, jump. Stay controlled rather than sloppy and fast.',SETUP:'Stand with feet hip-width; have enough space to lie flat.',REP:'Crouch, plant hands, jump feet back to plank, perform one push-up, jump feet to hands, stand and jump with arms overhead.',AVOID:'Skipping the push-up or the full jump — these are what make it a full-body power exercise rather than just a floor shuffle.'}
 };
 
 function calcToday(id,prs,energy,u){
@@ -746,7 +834,13 @@ function exAvail(id){
   const needed=EX_EQUIP[id]||[];
   return needed.every(e=>eq.has(e));
 }
-function filterSlot(slot){
+function filterSlot(slot,bwOnly=false){
+  if(bwOnly){
+    // Home-week mode: prefer bodyweight-tagged exercises
+    const bw=slot.filter(id=>EX[id]?.bw&&exAvail(id));
+    if(bw.length)return bw;
+    // No BW option in this slot — fall through to normal equipment filter
+  }
   const filtered=slot.filter(id=>exAvail(id));
   return filtered.length>0?filtered:slot;
 }
@@ -789,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.46';
+const APP_VERSION='1.47';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.47',d:'Bodyweight exercises added; "Home week" toggle skips the gym without changing your profile',det:'18 new bodyweight exercises added across all session types: push-ups (standard, decline, diamond), pike push-up, inverted row, superman, bodyweight squat, jump squat, bodyweight lunge, single-leg glute bridge, donkey kick, wall sit, mountain climber, bicycle crunch, side plank, floor leg raise, crunch, and burpee. Each has full coaching cues and Traditional Chinese translation. Every slot in every workout type now includes bodyweight alternatives — when gym equipment is unavailable (e.g. home gym profile), the app automatically falls back to bodyweight versions without you having to do anything. The new "Training from home this week?" toggle on the Plan tab forces bodyweight-only session generation for that week only, without permanently changing your gym profile — tap it again or shift to a different week to turn it off. A purple "Home week" badge appears on each gym-day screen so you know the mode is active.'},
   {v:'1.46',d:'"Gym only" replaces "No biking"; plan now respects your training-days-per-week setting',det:'The third plan mode was renamed from "No biking" to "Gym only" — a much clearer description of what it actually does. More importantly, the weekly plan generator now honours the training-days-per-week setting from your profile (3–6 days). Previously every mode hard-coded 6 active days regardless of what you set. Now: Gym only = your chosen number of gym days, worst-weather days become rest. With rides = 2 ride days + (target days − 2) gym days + rest. For example, a 4-day user on "Use weather" gets 2 rides + 2 gym + 3 rest instead of 2 rides + 4 gym + 1 rest. The "Gym only" option also now appears in the Ride preference section of Settings so you can switch without going back to the Plan tab. Cycling-specific options (Use weather / Indoor only) are hidden on the Plan tab for users who have no cycling activity selected.'},
   {v:'1.45',d:'Goals, Strava and bike plan now survive reinstalls and sign-outs',det:'Profile data (goals, activities, training days, experience level) and the Strava token were never included in the Firebase sync — so reinstalling the app or signing out and back in cleared them, causing the goals onboarding sheet to reappear and Strava to disconnect. All of this data is now included in saveToCloud. The goals and bike plan setup sheets also now push to Firebase immediately on save, so the data is backed up the moment you tap Save rather than waiting for the next log entry.'},
   {v:'1.44',d:'Friendlier ride-log message — explains Strava syncs on its own and may just need time',det:'The hint on the manual ride log was reworded. The old wording ("Strava has no ride logged for today") sounded like the ride would never sync. It now makes clear that a connected Strava ride syncs in automatically once Strava finishes processing it — so you can skip the form — and that manual entry is there if you want it tracked right away. For users without Strava, the message is more encouraging about logging to keep progress moving.'},
@@ -2084,11 +2179,12 @@ function buildWeek(wdays){
 
 /* ── SESSION GENERATION ── */
 function genSession(type,energy='okay'){
+  const bwOnly=DB.get('home_week_'+fd(S.weekStart),false);
   const slots=SLOTS[type];
   const recent=DB.get('recent_ex',[]);
   const picked=[];
   for(const candidates of slots){
-    let avail=filterSlot(candidates).filter(id=>!picked.includes(id));
+    let avail=filterSlot(candidates,bwOnly).filter(id=>!picked.includes(id));
     if(!avail.length)continue;
     // Filter by energy level — prefer compound when fresh, isolation when tired/sore
     if(energy==='fresh'){
@@ -2685,6 +2781,14 @@ ${pat
   <div class="week-label">${lbl}</div>
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
+${(()=>{const hw=DB.get('home_week_'+fd(S.weekStart),false);return`<div onclick="toggleHomeWeek()" style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:${hw?'rgba(124,58,237,.1)':'var(--s1)'};border:1px solid ${hw?'var(--acc)':'var(--bord)'};border-radius:12px;margin-bottom:12px;cursor:pointer">
+  <span style="font-size:16px">🏠</span>
+  <div style="flex:1;min-width:0">
+    <div style="font-size:12px;font-weight:700;color:${hw?'var(--al)':'var(--txt)'}">${hw?'Home week active':'Training from home this week?'}</div>
+    <div style="font-size:11px;color:var(--t2);margin-top:1px">${hw?'Exercises use bodyweight — regenerate to apply':'Tap to switch to bodyweight exercises'}</div>
+  </div>
+  <div style="background:${hw?'var(--acc)':'var(--s2)'};border-radius:8px;padding:4px 10px;font-size:11px;font-weight:700;color:${hw?'#fff':'var(--t2)'};flex-shrink:0">${hw?'On':'Off'}</div>
+</div>`;})()}
 ${rReviewCard()}
 ${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'📡',l:'Use weather'},{v:'indoor',i:'🏠',l:'Indoor only'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
@@ -2796,6 +2900,7 @@ function rDay(){
   <div class="hero-name">${typeof wi.d==='function'?wi.d():wi.d}</div>
   <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>
   ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
+  ${DB.get('home_week_'+fd(S.weekStart),false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 Home week</div>`:''}
 </div>
 <div class="sec-lbl">${_T('how_feeling')}</div>
 <div class="egrid">
@@ -4410,6 +4515,15 @@ function genPlan(){
 }
 
 function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;render();}
+
+function toggleHomeWeek(){
+  const key='home_week_'+fd(S.weekStart);
+  const on=!DB.get(key,false);
+  DB.set(key,on);
+  render();
+  if(on)showToast('🏠 Home week on — tap Regenerate to switch exercises','var(--acc)');
+  else showToast('🏠 Home week off — tap Regenerate to restore gym exercises','var(--t2)');
+}
 
 /* ── INIT ── */
 function init(){
