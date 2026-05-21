@@ -789,8 +789,9 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.40';
+const APP_VERSION='1.41';
 const CHANGELOG=[
+  {v:'1.41',d:'Performance — weather cached, AI coach recovers from failures, exercise images cached offline',det:'Three optimisations. (1) The AI coach previously marked its daily batch as "done" before the network call returned — so a single failed request disabled AI coaching for the rest of the day. It now only marks the batch done after a successful response, with an in-memory guard against duplicate concurrent calls. (2) Weather is cached for 3 hours per week and location, so regenerating your plan no longer re-hits the weather API every time. (3) The service worker now caches exercise demo images from the free-exercise-db CDN — they load instantly on repeat views and work fully offline (previously cross-origin "opaque" responses were skipped by the cache).'},
   {v:'1.40',d:'CSV export, manual ride logging fix, cleaner language labels, and a Feedback section preview',det:'Export data now offers a readable CSV (open it in Excel or Sheets to see every workout set, ride and PR as a plain table) alongside the existing JSON backup used for restore. Manual ride logging now appears on any ride day that Strava did not auto-capture — previously it was hidden entirely whenever a Strava account was connected, so connected users could not log a ride Strava missed. The language switcher no longer shows the stray "GB" / "HK" letters (unsupported flag emoji) before English / 繁體中文. A Feedback & Wishlist section was added to Settings as a coming-soon preview.'},
   {v:'1.39',d:'Chinese translation expanded — all 61 exercise names, form cues, coach messages, and the workout day screen',det:'All 61 exercises now show proper Traditional Chinese names (硬舉, 深蹲, 臥推, 引體向上, etc.) everywhere they appear — day screen, log, history, PRs and swap sheets. The 💡 form-cue tip on every exercise card is now translated. The "Coach says" pre-workout messages are fully translated for every energy level. The workout day screen UI is now translated too: the Exercises heading, Animate / Tutorial / collapse buttons, Busy? and Log sets buttons, set/rep badges, the back and swap buttons, and the log-workout button.'},
   {v:'1.38',d:'Fixed the Swap Workout sheet showing raw code instead of workout names',det:'After workout labels were made translatable (lazy functions), the "Change workout for this day" sheet was still rendering them directly — so it showed text like ()=>_T(\'wt_push\') instead of "Push". The swap sheet now calls the label and description functions correctly, matching every other screen.'},
@@ -999,6 +1000,7 @@ const GEMINI_PROXY='https://training-brain-ai.ht9323.workers.dev';
 const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
+const _coachInFlight={}; // in-memory guard against duplicate concurrent batch calls
 // PR group open/closed state (UI only — not persisted)
 const _prGroupOpen={Push:true,Pull:false,Legs:false,Core:false,Other:false};
 // Map EX.g values → display group
@@ -1029,7 +1031,7 @@ async function getAICoach(energy,ct,dp){
   // Check if we already fetched all 4 moods today (avoid duplicate batch call)
   const batchKey='coach_batch_'+date+'_'+(dp?.type||ct);
   if(DB.get(batchKey,false))return coachMsg(energy,ct);
-  DB.set(batchKey,true);
+  if(_coachInFlight[batchKey])return coachMsg(energy,ct);
 
   // Build rich context — skip API entirely if no meaningful data
   const prs=DB.get('prs',{});
@@ -1099,6 +1101,7 @@ OKAY: [note for normal day — hit targets, stay consistent]
 TIRED: [note for low energy — adjust weights, don't skip]
 SORE: [note for sore/recovering — what to reduce or focus on]`;
 
+  _coachInFlight[batchKey]=true;
   try{
     const r=await fetch(GEMINI_PROXY,{
       method:'POST',
@@ -1123,9 +1126,11 @@ SORE: [note for sore/recovering — what to reduce or focus on]`;
           DB.set(ck,msg);
         }
       });
+      DB.set(batchKey,true); // mark the batch done only after a successful fetch — a failed call retries
       return _coachCache[cacheKey]||coachMsg(energy,ct);
     }
   }catch(e){console.warn('AI coach failed:',e);}
+  finally{delete _coachInFlight[batchKey];}
   return coachMsg(energy,ct);
 }
 
@@ -1896,11 +1901,15 @@ function shortD(d){return `${DNAMES[d.getDay()]} ${d.getDate()} ${MNAMES[d.getMo
 
 /* ── WEATHER ── */
 async function fetchWeather(lat,lon,startStr){
+  // Cache per week-start + coarse location for 3 hours — avoids re-hitting the API on every regenerate
+  const ck='weather_'+startStr+'_'+lat.toFixed(2)+'_'+lon.toFixed(2);
+  const cached=DB.get(ck,null);
+  if(cached&&cached.t&&(Date.now()-cached.t)<10800000&&Array.isArray(cached.d))return cached.d;
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,weathercode&timezone=auto&forecast_days=16`;
   const r=await fetch(url);if(!r.ok)throw new Error();
   const data=await r.json();const d=data.daily;
   let si=d.time.indexOf(startStr);if(si<0)si=0;
-  return Array.from({length:7},(_,i)=>({
+  const result=Array.from({length:7},(_,i)=>({
     date:d.time[si+i],
     tmax:Math.round(d.temperature_2m_max[si+i]),
     tmin:Math.round(d.temperature_2m_min[si+i]),
@@ -1909,6 +1918,8 @@ async function fetchWeather(lat,lon,startStr){
     code:d.weathercode[si+i],
     score:bikeScore(d.precipitation_sum[si+i],d.windspeed_10m_max[si+i],d.temperature_2m_max[si+i]),
   }));
+  DB.set(ck,{t:Date.now(),d:result});
+  return result;
 }
 function bikeScore(rain,wind,tmax){
   let s=100;
