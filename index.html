@@ -3460,6 +3460,15 @@ function init(){
   }
   render();
   loadGifDb();
+  // Auto-sync Strava if connected and last sync was >1 hour ago
+  const _stravaTok=DB.get('strava_token',null);
+  if(_stravaTok&&!_stravaCode){
+    const _lastSync=DB.get('strava_last_sync',null);
+    const _hourAgo=Date.now()-60*60*1000;
+    if(!_lastSync||new Date(_lastSync).getTime()<_hourAgo){
+      stravaFetchActivities();
+    }
+  }
   // Unregister any old service workers to prevent stale caching
   if('serviceWorker' in navigator){
     navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(r=>r.unregister()));
