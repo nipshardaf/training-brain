@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.57';
+const APP_VERSION='1.58';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.58',d:'"Sync now" button added to ride card; Garmin ride types now recognised',det:'When Strava is connected but no activity has synced for a ride day yet, the ride log card now shows a "🟠 Sync now · Synced Xm ago" button so you can trigger a fresh Strava fetch without leaving the day screen. Also widened the ride type filter to include GravelRide, MountainBikeRide, EBikeRide and sport_type variants — Garmin can produce any of these and they were previously ignored.'},
   {v:'1.57',d:'Fix: "Refresh with new weather" now always fetches fresh data and never drops days',det:'Two fixes. (1) Clicking "Refresh with new weather" was still returning a stale cached result if you had refreshed in the last 3 hours — including bad cached results from before the v1.56 fix. The explicit refresh button now always bypasses the weather cache and forces a fresh API call. (2) buildWeek now has a safety net: if the weather array arrives with fewer than 7 days for any reason, it pads the missing days from the existing plan or a neutral placeholder, so a partial result can never produce a short week.'},
   {v:'1.56',d:'Fix: refreshing plan mid-week no longer drops past days from the week view',det:'When you refreshed the plan on Wednesday, Monday and Tuesday disappeared. Root cause: the Open-Meteo weather API only returns forecast data from today onwards — so looking up Monday on a Wednesday returned nothing, and the plan was built starting from Wednesday. Fixed by building all 7 days from the Monday start date individually, falling back to the existing plan\'s weather data for any past day (or a neutral placeholder if there is no prior data). Refreshing on any day of the week now always produces a complete Mon–Sun week.'},
   {v:'1.55',d:'Bodyweight exercise images: 14 of 18 now show real demos instead of placeholders',det:'Added a second image source (wger.de) for exercises missing from the free-exercise-db. Push-Up, Diamond Push-Up, Inverted Row, Donkey Kick now pull from wger.de. Bicycle Crunch and Floor Leg Raise have 2-frame animations. Combined with the 8 already fixed in v1.54, 14 of the 18 bodyweight exercises now show real images. The remaining 4 (Pike Push-Up, Wall Sit, Side Plank, Burpee) have no suitable image in either database and show styled muscle-group placeholders. The image loader now supports both free-exercise-db folder paths and direct wger.de URLs.'},
@@ -1579,7 +1580,8 @@ async function stravaFetchActivities(){
     });
     if(!r.ok)throw new Error('activities '+r.status);
     const acts=await r.json();
-    const rides=acts.filter(a=>a.type==='Ride'||a.type==='VirtualRide');
+    const _rideTypes=new Set(['Ride','VirtualRide','EBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const rides=acts.filter(a=>_rideTypes.has(a.type)||_rideTypes.has(a.sport_type));
     DB.set('strava_activities',rides);
     DB.set('strava_last_sync',new Date().toISOString());
     analyzeStravaAdapt(rides); // C: auto-adapt plan based on completion
@@ -3034,13 +3036,19 @@ function rRideCard(dp){
   if(!actual){
     const r=manual||{};
     const stravaConnected=!!DB.get('strava_token',null);
+    const lastSync=DB.get('strava_last_sync',null);
+    const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
+    const syncLabel=syncAge===null?'Never synced':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:`Synced ${Math.round(syncAge/60)}h ago`;
     const hint=stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
     const fld=(id,label,unit,val)=>`<div>
       <label style="display:block;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}${unit?' · '+unit:''}</label>
       <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" oninput="rideField('${dp.date}','${id.slice(3)}',this.value)"
         style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:15px;font-weight:700;padding:9px 11px;outline:none;font-family:inherit;-webkit-appearance:none"></div>`;
     manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:13px 14px;margin-bottom:13px">
-  <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px">📝 ${_T('rl_title')}</div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+    <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.7px">📝 ${_T('rl_title')}</div>
+    ${stravaConnected?`<button onclick="stravaFetchActivities()" style="background:none;border:1px solid rgba(252,76,2,.4);border-radius:8px;color:#fc4c02;font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer">🟠 Sync now · ${syncLabel}</button>`:''}
+  </div>
   <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:11px">${hint}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
     ${fld('rl-dur',_T('rl_dur'),_T('rl_min'),r.dur)}
