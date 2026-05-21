@@ -1,5 +1,5 @@
 // Training Brain service worker — cache-first with background update
-const CACHE = 'tb-v2';
+const CACHE = 'tb-v3';
 const ASSETS = [
   '/training-brain/',
   '/training-brain/index.html',

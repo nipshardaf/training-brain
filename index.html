@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.63';
+const APP_VERSION='1.64';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -1581,7 +1581,7 @@ async function stravaFetchActivities(){
     });
     if(!r.ok)throw new Error('activities '+r.status);
     const acts=await r.json();
-    const _rideTypes=new Set(['Ride','VirtualRide','EBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const _rideTypes=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
     const rides=acts.filter(a=>_rideTypes.has(a.type)||_rideTypes.has(a.sport_type));
     DB.set('strava_activities',rides);
     DB.set('strava_last_sync',new Date().toISOString());
@@ -1646,7 +1646,7 @@ function getRideDuration(which){
 }
 
 function stravaRideOnDate(dateStr){
-  const acts=DB.get('strava_activities',[]);
+  const acts=DB.get('strava_activities',[])||[];
   return acts.find(a=>(a.start_date_local||'').slice(0,10)===dateStr)||null;
 }
 
