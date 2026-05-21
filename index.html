@@ -53,30 +53,9 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) 16px calc(var(--sb) + 88px)}
 
 /* header */
-.hdr{text-align:center;margin-bottom:26px;position:relative}
+.hdr{text-align:center;margin-bottom:18px}
 .hdr h1{font-size:24px;font-weight:800;letter-spacing:-.6px;background:linear-gradient(135deg,#a78bfa,#f472b6 55%,#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
 .hdr-sub{font-size:12px;color:var(--t2);margin-top:3px}
-.ico{width:1.1em;height:1.1em;display:inline-block;vertical-align:-.18em;flex-shrink:0;color:currentColor}
-.ico svg{width:100%;height:100%;display:block}
-.app-brand{display:flex;align-items:center;justify-content:center;gap:9px;min-width:0}
-.app-mark{width:30px;height:30px;border-radius:10px;background:linear-gradient(135deg,rgba(124,58,237,.22),rgba(244,114,182,.16));border:1px solid rgba(167,139,250,.32);display:flex;align-items:center;justify-content:center;color:var(--al);box-shadow:0 8px 24px rgba(124,58,237,.16)}
-.app-mark .ico{width:19px;height:19px}
-.app-copy{display:flex;align-items:center;justify-content:center;gap:0;min-width:0}
-.app-name{font-size:22px;font-weight:900;letter-spacing:-.35px;background:linear-gradient(135deg,#a78bfa,#f472b6 55%,#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;white-space:nowrap}
-.hdr-sub{font-size:11px;color:var(--t2);margin-top:0;white-space:nowrap;position:absolute;left:50%;top:32px;transform:translateX(-50%)}
-.bnav-btn span:first-child{font-size:20px;line-height:1;color:var(--t2);height:22px;display:flex;align-items:center;justify-content:center}
-.bnav-btn.on span:first-child{color:var(--al)}
-.bnav-btn span:first-child .ico{width:21px;height:21px}
-.sec-hdr{display:flex;align-items:center;gap:7px}
-.sec-hdr .ico{width:15px;height:15px;color:var(--al)}
-.empty-icon{color:var(--al);line-height:1}
-.empty-icon .ico{width:54px;height:54px}
-.ride-icon,.rest-emoji{color:var(--al);line-height:1}
-.ride-icon .ico,.rest-emoji .ico{width:52px;height:52px}
-.pr-b .ico{width:12px;height:12px;vertical-align:-.16em}
-.icon-chip .ico{width:22px;height:22px;color:var(--al)}
-.icon-inline{display:inline-flex;align-items:center;gap:5px}
-
 
 /* week nav */
 .week-nav{display:flex;align-items:center;justify-content:space-between;background:var(--s1);border-radius:16px;padding:11px 14px;margin-bottom:14px}
@@ -279,7 +258,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 
 /* lock screen */
 .lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;background:var(--bg)}
-.lock-logo{font-size:64px;margin-bottom:12px;color:var(--al)}
+.lock-logo{font-size:64px;margin-bottom:12px}
 .lock-title{font-size:24px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,#a78bfa,#f472b6 55%,#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px}
 .lock-sub{font-size:13px;color:var(--t2);margin-bottom:28px}
 .pin-dots{display:flex;gap:14px;margin-bottom:28px;align-items:center}
@@ -667,31 +646,17 @@ function filterSlot(slot){
   return filtered.length>0?filtered:slot;
 }
 
-
-const I=(name,body)=>'<span class="ico ico-'+name+'"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+body+'</svg></span>';
-const IC={
-  logo:I('logo','<path d="M8.2 8.6c-.9 0-1.7.7-1.7 1.6 0 .5.2.9.5 1.2-.8.2-1.4.9-1.4 1.8 0 1 .8 1.8 1.8 1.8h1.1v-8H7.9c-1 0-1.8.8-1.8 1.8"/><path d="M15.8 8.6c.9 0 1.7.7 1.7 1.6 0 .5-.2.9-.5 1.2.8.2 1.4.9 1.4 1.8 0 1-.8 1.8-1.8 1.8h-1.1v-8h.6c1 0 1.8.8 1.8 1.8"/><path d="M8.5 12h7M9 6.8c.5-1 1.6-1.8 3-1.8s2.5.8 3 1.8M9 17.2c.5 1 1.6 1.8 3 1.8s2.5-.8 3-1.8"/><path d="M3.5 12h2M18.5 12h2M2.8 9.5v5M21.2 9.5v5"/>'),
-  plan:I('plan','<rect x="4" y="5" width="16" height="15" rx="3"/><path d="M8 3v4M16 3v4M4 10h16M8 14h2M13 14h3M8 17h2"/>'), training:I('training','<path d="M6 17h12M8 17V9l4-4 4 4v8M10 17v-6h4v6"/><path d="M5 11h3M16 11h3"/>'),
-  settings:I('settings','<circle cx="12" cy="12" r="3.5"/><path d="M12 2.8v3M12 18.2v3M4.9 4.9 7 7M17 17l2.1 2.1M2.8 12h3M18.2 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>'), gym:I('gym','<path d="M6 9v6M18 9v6M3.5 10.5v3M20.5 10.5v3M6 12h12"/><path d="M9 7v10M15 7v10"/>'), bike:I('bike','<circle cx="6" cy="17" r="3"/><circle cx="18" cy="17" r="3"/><path d="M6 17l4-8h3l-3 8h4l-3.5-5M13 9h3M14.5 7h2"/>'), run:I('run','<circle cx="13" cy="4.5" r="1.7"/><path d="M9 21l2-5-3-3 3-4 3 2 3 1M12 16l3 5M8 13l-3 2M11 9l-2-2"/>'), cardio:I('cardio','<path d="M4 14c2-2 4-2 6 0s4 2 6 0 3-2 4-1M4 18c2-2 4-2 6 0s4 2 6 0 3-2 4-1"/><path d="M8 10c0-2 1.8-4 4-4s4 2 4 4"/>'),
-  goal:I('goal','<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12l5-5"/>'), trophy:I('trophy','<path d="M8 4h8v4a4 4 0 0 1-8 0V4Z"/><path d="M8 6H5a2 2 0 0 0 2 4h1M16 6h3a2 2 0 0 1-2 4h-1M12 12v5M9 20h6M10 17h4"/>'), history:I('history','<path d="M4 6v5h5"/><path d="M5 11a7 7 0 1 0 2-5"/><path d="M12 8v5l3 2"/>'), ai:I('ai','<rect x="5" y="6" width="14" height="12" rx="3"/><path d="M9 3v3M15 3v3M9 18v3M15 18v3M3 10h2M3 14h2M19 10h2M19 14h2"/><path d="M9.5 12h.01M14.5 12h.01"/>'),
-  home:I('home','<path d="M4 11.5 12 5l8 6.5"/><path d="M6.5 10v9h11v-9"/><path d="M10 19v-5h4v5"/>'), strava:I('strava','<path d="M8 17l4-10 4 10"/><path d="M10.5 14h3M15.5 17l2-5 2 5"/>'), cloud:I('cloud','<path d="M7 18h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.3 2.1A3 3 0 0 0 7 18Z"/>'), check:I('check','<path d="m5 12 4 4L19 6"/>'), alert:I('alert','<path d="M12 4 21 20H3L12 4Z"/><path d="M12 9v4M12 17h.01"/>'), lock:I('lock','<rect x="5" y="10" width="14" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>'), eye:I('eye','<path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="3"/>'),
-  refresh:I('refresh','<path d="M20 6v5h-5"/><path d="M4 18v-5h5"/><path d="M18 10a6.5 6.5 0 0 0-11-3.5L4 9M6 14a6.5 6.5 0 0 0 11 3.5l3-2.5"/>'), plus:I('plus','<path d="M12 5v14M5 12h14"/>'), minus:I('minus','<path d="M5 12h14"/>'), info:I('info','<circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/>'), edit:I('edit','<path d="M4 20h4l11-11a2.1 2.1 0 0 0-3-3L5 17l-1 3Z"/><path d="m14 7 3 3"/>'), trash:I('trash','<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>'),
-  download:I('download','<path d="M12 4v11M8 11l4 4 4-4"/><path d="M5 20h14"/>'), upload:I('upload','<path d="M12 15V4M8 8l4-4 4 4"/><path d="M5 20h14"/>'), key:I('key','<circle cx="8" cy="15" r="4"/><path d="M11 12l8-8M15 8l2 2M17 6l2 2"/>'), signout:I('signout','<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5M21 12H9"/>'),
-  weather:I('weather','<path d="M4 16.5h12a4 4 0 0 0 .7-7.9A5.8 5.8 0 0 0 5.5 11"/><path d="M16 4v2M20 8h2M18.8 5.2l1.4-1.4"/>'), sun:I('sun','<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'), rain:I('rain','<path d="M7 15h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.3 2.1A3 3 0 0 0 7 15Z"/><path d="M8 19l-1 2M12 19l-1 2M16 19l-1 2"/>'), storm:I('storm','<path d="M7 15h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.3 2.1A3 3 0 0 0 7 15Z"/><path d="m13 16-2 4h3l-2 3"/>'), snow:I('snow','<path d="M7 15h10a4 4 0 0 0 .6-8 6 6 0 0 0-11.3 2.1A3 3 0 0 0 7 15Z"/><path d="M12 18v4M10 20h4"/>'), wind:I('wind','<path d="M3 8h12a3 3 0 1 0-3-3M3 13h16a2 2 0 1 1-2 2M3 18h9"/>'), leaf:I('leaf','<path d="M19 5c-7 0-11 4-11 11"/><path d="M5 19c9 0 14-5 14-14-9 0-14 5-14 14Z"/>'),
-  fire:I('fire','<path d="M12 21c3.5-1 6-3.6 6-7 0-3-1.8-5.1-4.4-7.7.1 2.4-.7 3.5-2 4.6.2-2.4-1.1-4.4-3.1-5.9.2 3.8-2.5 5.7-2.5 9 0 3.4 2.5 6 6 7Z"/>'), arm:I('arm','<path d="M7 14c2.5-4 4.5-6 7-6 2 0 3 1.3 3 3v2h-4"/><path d="M5 17c2.2 1.6 5 2 8 2h3a3 3 0 0 0 0-6h-3"/><path d="M8 13l-3 4"/>'), tired:I('tired','<path d="M6 9h4M14 9h4M8 16h8"/><circle cx="12" cy="12" r="9"/>'), sore:I('sore','<path d="M12 3v18M3 12h18"/><circle cx="12" cy="12" r="8"/>'), target:I('target','<circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="2"/>'), setup:I('setup','<path d="M4 7h16M7 7v10M17 7v10M5 17h14"/><path d="M9 11h6"/>'), repeat:I('repeat','<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 0 1 3-3h15"/><path d="M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 0 1-3 3H3"/>'), avoid:I('avoid','<circle cx="12" cy="12" r="9"/><path d="m8 8 8 8M16 8l-8 8"/>'), chart:I('chart','<path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 4-4 3 3 5-7"/>'), search:I('search','<circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/>'), male:I('male','<circle cx="10" cy="14" r="5"/><path d="M14 10l6-6M15 4h5v5"/>'), female:I('female','<circle cx="12" cy="9" r="5"/><path d="M12 14v7M9 18h6"/>'), clock:I('clock','<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'), play:I('play','<path d="M8 5v14l11-7-11-7Z"/>')
-};
-
 /* ── WORKOUT METADATA ── */
 const WI = {
-  PUSH:         {l:'Push',         i:IC.gym,c:'#7c3aed',d:'Chest · Shoulders · Triceps'},
-  PULL:         {l:'Pull',         i:IC.gym,c:'#2563eb',d:'Back · Biceps · Rear Delts'},
-  LEGS:         {l:'Legs',         i:IC.gym,c:'#059669',d:'Quads · Hamstrings · Glutes · Core'},
-  UPPER_PUMP:   {l:'Upper Pump',   i:IC.gym,c:'#d97706',d:'Full Upper Body · High Volume'},
-  LONG_OUTDOOR: {l:'Long Ride',    i:IC.bike,c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
-  SHORT_OUTDOOR:{l:'Short Ride',   i:IC.bike,c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
-  LONG_INDOOR:  {l:'Long Ride',    i:IC.bike,c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
-  SHORT_INDOOR: {l:'Short Ride',   i:IC.bike,c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
-  REST:         {l:'Rest & Mobility',i:IC.leaf,c:'#64748b',d:'Recovery · Stretch'},
+  PUSH:         {l:'Push',         i:'🏋️',c:'#7c3aed',d:'Chest · Shoulders · Triceps'},
+  PULL:         {l:'Pull',         i:'🏋️',c:'#2563eb',d:'Back · Biceps · Rear Delts'},
+  LEGS:         {l:'Legs',         i:'🏋️',c:'#059669',d:'Quads · Hamstrings · Glutes · Core'},
+  UPPER_PUMP:   {l:'Upper Pump',   i:'🏋️',c:'#d97706',d:'Full Upper Body · High Volume'},
+  LONG_OUTDOOR: {l:'Long Ride',    i:'🚴',c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
+  SHORT_OUTDOOR:{l:'Short Ride',   i:'🚴',c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
+  LONG_INDOOR:  {l:'Long Ride',    i:'🚲',c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
+  SHORT_INDOOR: {l:'Short Ride',   i:'🚲',c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
+  REST:         {l:'Rest & Mobility',i:'🌿',c:'#64748b',d:'Recovery · Stretch'},
 };
 
 const COACH = {
@@ -702,10 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.30';
+const APP_VERSION='1.29';
 const CHANGELOG=[
-  {v:'1.30',d:'Sign-up hardened — orphaned accounts prevented, password length validated before attempting',det:'Fixed a gap where Firebase Auth could create an account but the database write immediately after could fail, leaving a user permanently locked out. Now if the database registration fails after auth creation, the auth account is automatically deleted so the user can try again cleanly. Also added an early password length check (minimum 6 chars) before any network call is made.'},
-  {v:'1.29',d:'Full visual system refresh — emoji UI replaced with clean inline SVG icons',det:'Replaced the app header, bottom navigation, activity chips, section headers, workout cards, weather badges, energy selector, onboarding choices, toasts, and settings badges with a consistent inline SVG icon set. The new icons inherit the existing theme colours, keep the offline PWA self-contained, and make Training Brain feel more like a polished fitness app than a web page.'},
+  {v:'1.29',d:'Sign-up hardened — orphaned accounts prevented, password length validated before attempting',det:'Fixed a gap where Firebase Auth could create an account but the database write immediately after could fail, leaving a user permanently locked out. Now if the database registration fails after auth creation, the auth account is automatically deleted so the user can try again cleanly. Also added an early password length check (minimum 6 chars) before any network call is made.'},
   {v:'1.28',d:'Active activity chips now have a − button to remove instantly; "Change my activities" button removed',det:'Each active activity chip (Cycling, Gym & Weights, etc.) now has a red − button on the right to remove it directly. The redundant "Change my activities" button is gone — add and remove are now handled entirely from the chips. The "Set up activities" button only appears when you have no activities at all.'},
   {v:'1.27',d:'Every changelog entry now has expandable detail explaining the logic and reasoning behind the change',det:'Tap any version row in What\'s New to expand a longer explanation of why the change was made, how the logic works, and any relevant context. Useful for understanding what the app actually does under the hood or checking if a specific behaviour was intentional.'},
   {v:'1.26',d:'Tapping + Add on an activity now adds it instantly — no more going through the full setup screen',det:'Each activity chip has its own + Add button. Tapping it immediately writes that activity into your profile and confirms with a green toast. Previously all chips opened the full goals setup screen, which was unnecessary when you just wanted to add one thing. The ⓘ button still opens the info popup independently.'},
@@ -928,11 +892,11 @@ async function openExCoach(id){
 
   function renderSections(text){
     const defs=[
-      {k:'CONNECT', icon:IC.target, label:'Mind-muscle',  col:'#a78bfa', bg:'rgba(167,139,250,.1)'},
-      {k:'SETUP',   icon:IC.setup, label:'Setup',        col:'#60a5fa', bg:'rgba(96,165,250,.1)'},
-      {k:'REP',     icon:IC.repeat, label:'The rep',       col:'#fb923c', bg:'rgba(251,146,60,.1)'},
-      {k:'AVOID',   icon:IC.avoid, label:'Avoid this',   col:'#f87171', bg:'rgba(248,113,113,.1)'},
-      {k:'TODAY',   icon:IC.chart, label:'Your next set', col:'#34d399', bg:'rgba(52,211,153,.1)'},
+      {k:'CONNECT', icon:'🎯', label:'Mind-muscle',  col:'#a78bfa', bg:'rgba(167,139,250,.1)'},
+      {k:'SETUP',   icon:'⚙️', label:'Setup',        col:'#60a5fa', bg:'rgba(96,165,250,.1)'},
+      {k:'REP',     icon:'🔁', label:'The rep',       col:'#fb923c', bg:'rgba(251,146,60,.1)'},
+      {k:'AVOID',   icon:'❌', label:'Avoid this',   col:'#f87171', bg:'rgba(248,113,113,.1)'},
+      {k:'TODAY',   icon:'📈', label:'Your next set', col:'#34d399', bg:'rgba(52,211,153,.1)'},
     ];
     const keys=defs.map(d=>d.k).join('|');
     const parsed={};
@@ -1006,21 +970,21 @@ function openGoalsSetup(isEdit=false,startStep=1){
   let selGender=cur.gender||null; // null = not answered (totally optional)
 
   const goals=[
-    {v:'muscle',     i:IC.arm, l:'Build muscle & strength', d:'Prioritise lifting, progressive overload'},
-    {v:'lose_weight',i:IC.fire, l:'Lose weight',             d:'Cardio + weights, calorie-burning focus'},
-    {v:'fitness',    i:IC.check, l:'General fitness',          d:'Stay active, balanced mix of everything'},
-    {v:'endurance',  i:IC.bike, l:'Endurance / event prep',  d:'Build aerobic base, train for an event'},
-    {v:'performance',i:IC.trophy, l:'Sport performance',       d:'Power, speed, and sport-specific training'},
+    {v:'muscle',     i:'💪', l:'Build muscle & strength', d:'Prioritise lifting, progressive overload'},
+    {v:'lose_weight',i:'🔥', l:'Lose weight',             d:'Cardio + weights, calorie-burning focus'},
+    {v:'fitness',    i:'⚡', l:'General fitness',          d:'Stay active, balanced mix of everything'},
+    {v:'endurance',  i:'🚴', l:'Endurance / event prep',  d:'Build aerobic base, train for an event'},
+    {v:'performance',i:'🏆', l:'Sport performance',       d:'Power, speed, and sport-specific training'},
   ];
   const acts=[
-    {v:'gym',    i:IC.gym, l:'Gym / Weights'},
-    {v:'cycling',i:IC.bike, l:'Cycling'},
-    {v:'running',i:IC.run, l:'Running'},
-    {v:'cardio', i:IC.cardio, l:'Cardio & Classes'},
+    {v:'gym',    i:'🏋️', l:'Gym / Weights'},
+    {v:'cycling',i:'🚴', l:'Cycling'},
+    {v:'running',i:'🏃', l:'Running'},
+    {v:'cardio', i:'🏊', l:'Cardio & Classes'},
   ];
   const genders=[
-    {v:'male',   i:IC.male, l:'Male'},
-    {v:'female', i:IC.female, l:'Female'},
+    {v:'male',   i:'♂️', l:'Male'},
+    {v:'female', i:'♀️', l:'Female'},
   ];
 
   const sheet=document.createElement('div');
@@ -1077,8 +1041,8 @@ function openGoalsSetup(isEdit=false,startStep=1){
       ${on?'<div style="font-size:11px;color:var(--al);margin-top:2px">✓ selected</div>':''}
     </div>`}).join('')}
   </div>
-  ${selActs.has('running')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">Running tracking is coming soon — you can log runs manually for now</div>`:''}
-  ${selActs.has('cardio')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">Cardio & Classes can be logged as free notes — full planning coming soon</div>`:''}
+  ${selActs.has('running')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🏃 Running tracking is coming soon — you can log runs manually for now</div>`:''}
+  ${selActs.has('cardio')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🏊 Cardio & Classes can be logged as free notes — full planning coming soon</div>`:''}
   <div style="display:flex;gap:8px">
     <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
     <button onclick="gsNext()" style="flex:2;background:${selActs.size>0?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selActs.size>0?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
@@ -1140,7 +1104,7 @@ function openGoalsSetup(isEdit=false,startStep=1){
       else if(DB.get('bike_pref','none')==='none')DB.set('bike_pref','weather');
       sheet.remove();
       render();
-      if(!isEdit)setTimeout(()=>showToast('Plan ready! Tap Plan to see your week','var(--grn)'),300);
+      if(!isEdit)setTimeout(()=>showToast('🚀 Plan ready! Tap Plan to see your week','var(--grn)'),300);
     };
   }
   gsRender();
@@ -1172,10 +1136,10 @@ async function stravaExchangeCode(code){
     await stravaFetchActivities();
     const rides=DB.get('strava_activities',[]);
     const name=data.athlete?.firstname?` — hey ${data.athlete.firstname}!`:'';
-    showToast(`Strava connected${name} ${rides.length} ride${rides.length!==1?'s':''} synced`,'var(--grn)');
+    showToast(`✅ Strava connected${name} ${rides.length} ride${rides.length!==1?'s':''} synced`,'var(--grn)');
   }catch(e){
     console.warn('Strava exchange failed:',e);
-    showToast('Strava connection failed — try again','var(--red)');
+    showToast('⚠️ Strava connection failed — try again','var(--red)');
   }
 }
 
@@ -1283,9 +1247,9 @@ function openBikeSetup(){
   const cur=DB.get('bike_setup',{dur:45,goal:'base'});
   const curEv=DB.get('bike_event',null);
   const durOpts=[20,30,45,60,90];
-  const goalOpts=[{v:'base',l:'Build base',d:'Long steady rides, build aerobic engine'},
-                  {v:'event',l:'Train for event',d:'Progressive overload toward a target'},
-                  {v:'active',l:'Stay active',d:'Shorter rides, low stress, keep moving'}];
+  const goalOpts=[{v:'base',l:'🏗 Build base',d:'Long steady rides, build aerobic engine'},
+                  {v:'event',l:'🎯 Train for event',d:'Progressive overload toward a target'},
+                  {v:'active',l:'🏃 Stay active',d:'Shorter rides, low stress, keep moving'}];
   let selDur=cur.dur;
   let selGoal=cur.goal||'base';
   let evEnabled=!!curEv;
@@ -1320,7 +1284,7 @@ function openBikeSetup(){
       ${evEnabled?'<span style="color:#fff;font-size:11px;font-weight:900">✓</span>':''}
     </div>
     <div>
-      <div style="font-size:13px;font-weight:700">${IC.goal} I'm training for a specific event</div>
+      <div style="font-size:13px;font-weight:700">🎯 I'm training for a specific event</div>
       <div style="font-size:11px;color:var(--t2)">Plan peaks on race day, tapers the week before</div>
     </div>
   </div>
@@ -1545,12 +1509,12 @@ function getRideSession(type){
 }
 
 const MOBILITY=[
-  {i:IC.leaf,t:'Hip flexor stretch — 60s each side'},
-  {i:IC.repeat,t:'Cat-cow — 10 reps slow, each spinal segment'},
-  {i:IC.run,t:'Pigeon pose — 90s each side'},
-  {i:IC.setup,t:'Thoracic foam rolling — 3 min'},
-  {i:IC.arm,t:'Shoulder cross-body stretch — 45s each'},
-  {i:IC.run,t:'15 min walk outside: blood flow + sunlight'},
+  {i:'🧘',t:'Hip flexor stretch — 60s each side'},
+  {i:'🔄',t:'Cat-cow — 10 reps slow, each spinal segment'},
+  {i:'🦵',t:'Pigeon pose — 90s each side'},
+  {i:'💆',t:'Thoracic foam rolling — 3 min'},
+  {i:'🤸',t:'Shoulder cross-body stretch — 45s each'},
+  {i:'🚶',t:'15 min walk outside: blood flow + sunlight'},
 ];
 
 /* ── ENERGY SWAP MAPS ── */
@@ -1599,10 +1563,10 @@ function applyEnergySwap(exs,energy){
 /* ── ENERGY PROFILES ── */
 // sets/reps/rpe override per energy; mult = fraction of PR weight to suggest
 const ENERGY_PROFILE={
-  fresh:{sets:5, reps:'3–5',   rpe:'9',   mult:0.90, label:'Strength — heavy weight, low reps'},
+  fresh:{sets:5, reps:'3–5',   rpe:'9',   mult:0.90, label:'💪 Strength — heavy weight, low reps'},
   okay: {sets:null,reps:null,  rpe:null,  mult:0.80, label:''},
-  tired:{sets:3, reps:'10–15', rpe:'7',   mult:0.65, label:'Volume — moderate weight, higher reps'},
-  sore: {sets:2, reps:'15–20', rpe:'5',   mult:0.55, label:'Recovery — light weight, blood flow only'},
+  tired:{sets:3, reps:'10–15', rpe:'7',   mult:0.65, label:'😪 Volume — moderate weight, higher reps'},
+  sore: {sets:2, reps:'15–20', rpe:'5',   mult:0.55, label:'🤕 Recovery — light weight, blood flow only'},
 };
 function energyTargets(exId,energy){
   const prof=ENERGY_PROFILE[energy]||ENERGY_PROFILE.okay;
@@ -1669,9 +1633,9 @@ function bikeScore(rain,wind,tmax){
   return Math.max(0,Math.round(s));
 }
 function wIcon(code,rain){
-  if(rain>5)return IC.rain;if(rain>1)return IC.rain;
-  if(code>=95)return IC.storm;if(code>=80)return IC.rain;if(code>=71)return IC.snow;
-  if(code>=51)return IC.rain;if(code>=3)return IC.cloud;if(code>=1)return IC.cloud;return IC.sun;
+  if(rain>5)return'🌧';if(rain>1)return'🌦';
+  if(code>=95)return'⛈';if(code>=80)return'🌧';if(code>=71)return'❄️';
+  if(code>=51)return'🌦';if(code>=3)return'☁️';if(code>=1)return'⛅';return'☀️';
 }
 function verdict(score){
   if(score>=75)return{t:'Great day to ride',c:'vg'};
@@ -1821,20 +1785,20 @@ const _animTimers={};
 
 // Muscle group placeholder styles for exercises with p:null
 const G_PH={
-  chest:   {bg:'linear-gradient(135deg,#7c3aed,#a855f7)',i:IC.gym},
-  shoulder:{bg:'linear-gradient(135deg,#0891b2,#06b6d4)',i:IC.arm},
-  sdelt:   {bg:'linear-gradient(135deg,#0e7490,#0891b2)',i:IC.arm},
-  tri:     {bg:'linear-gradient(135deg,#6d28d9,#8b5cf6)',i:IC.arm},
-  vback:   {bg:'linear-gradient(135deg,#1d4ed8,#3b82f6)',i:IC.gym},
-  hback_h: {bg:'linear-gradient(135deg,#1e40af,#2563eb)',i:IC.gym},
-  hback:   {bg:'linear-gradient(135deg,#1e3a8a,#1d4ed8)',i:IC.gym},
-  rdelt:   {bg:'linear-gradient(135deg,#0e7490,#0891b2)',i:IC.arm},
-  bi:      {bg:'linear-gradient(135deg,#7c3aed,#a78bfa)',i:IC.arm},
-  quad:    {bg:'linear-gradient(135deg,#059669,#34d399)',i:IC.run},
-  ham:     {bg:'linear-gradient(135deg,#065f46,#059669)',i:IC.run},
-  calf:    {bg:'linear-gradient(135deg,#047857,#10b981)',i:IC.run},
-  core:    {bg:'linear-gradient(135deg,#b45309,#f59e0b)',i:IC.arm},
-  foot:    {bg:'linear-gradient(135deg,#92400e,#d97706)',i:IC.run},
+  chest:   {bg:'linear-gradient(135deg,#7c3aed,#a855f7)',i:'🏋️'},
+  shoulder:{bg:'linear-gradient(135deg,#0891b2,#06b6d4)',i:'💪'},
+  sdelt:   {bg:'linear-gradient(135deg,#0e7490,#0891b2)',i:'💪'},
+  tri:     {bg:'linear-gradient(135deg,#6d28d9,#8b5cf6)',i:'💪'},
+  vback:   {bg:'linear-gradient(135deg,#1d4ed8,#3b82f6)',i:'🏋️'},
+  hback_h: {bg:'linear-gradient(135deg,#1e40af,#2563eb)',i:'🏋️'},
+  hback:   {bg:'linear-gradient(135deg,#1e3a8a,#1d4ed8)',i:'🏋️'},
+  rdelt:   {bg:'linear-gradient(135deg,#0e7490,#0891b2)',i:'💪'},
+  bi:      {bg:'linear-gradient(135deg,#7c3aed,#a78bfa)',i:'💪'},
+  quad:    {bg:'linear-gradient(135deg,#059669,#34d399)',i:'🦵'},
+  ham:     {bg:'linear-gradient(135deg,#065f46,#059669)',i:'🦵'},
+  calf:    {bg:'linear-gradient(135deg,#047857,#10b981)',i:'🦶'},
+  core:    {bg:'linear-gradient(135deg,#b45309,#f59e0b)',i:'💪'},
+  foot:    {bg:'linear-gradient(135deg,#92400e,#d97706)',i:'🦶'},
 };
 
 function loadGifDb(){
@@ -1860,7 +1824,7 @@ function loadExImg(img){
   if(!entry){
     // No image path — show styled placeholder immediately
     const ex=EX[xid];
-    const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:IC.arm};
+    const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:'💪'};
     if(ph)ph.innerHTML=`<div style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:40px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div></div>`;
     return;
   }
@@ -1869,7 +1833,7 @@ function loadExImg(img){
   t.onerror=()=>{
     // Path wrong — fall back to styled placeholder
     const ex=EX[xid];
-    const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:IC.arm};
+    const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:'💪'};
     if(ph)ph.innerHTML=`<div style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:40px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div></div>`;
   };
   t.src=entry.f0;
@@ -1899,10 +1863,10 @@ function openVid(xid){
   const ytSearch='https://www.youtube.com/results?search_query='+q;
   // Build search suggestions for different channels
   const searches=[
-    {label:IC.search+' YouTube Search',url:ytSearch},
-    {label:IC.play+' Jeff Nippard',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Jeff Nippard '+ex.n)},
-    {label:IC.play+' Alan Thrall',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Alan Thrall '+ex.n)},
-    {label:IC.play+' AthleanX',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('AthleanX '+ex.n)},
+    {label:'🔍 YouTube Search',url:ytSearch},
+    {label:'📺 Jeff Nippard',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Jeff Nippard '+ex.n)},
+    {label:'📺 Alan Thrall',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Alan Thrall '+ex.n)},
+    {label:'📺 AthleanX',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('AthleanX '+ex.n)},
   ];
   const modal=document.createElement('div');
   modal.id='vid-modal';
@@ -1962,7 +1926,7 @@ function rLock(){
   if(S.lockMode==='choose'){
     const isNew=S._authNew||false;
     return`<div class="lock-wrap">
-<div class="lock-logo">${IC.logo}</div>
+<div class="lock-logo">🧠</div>
 <div class="lock-title">Training Brain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
 <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px" autocomplete="off">
@@ -1983,14 +1947,14 @@ function rLock(){
        </div>`
   }
   <div style="text-align:center;margin-top:2px">
-    <button onclick="enterGuest()" style="background:none;border:none;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;padding:8px 20px">${IC.eye} Continue as Guest</button>
+    <button onclick="enterGuest()" style="background:none;border:none;color:var(--t2);font-size:13px;font-weight:600;cursor:pointer;padding:8px 20px">👁 Continue as Guest</button>
   </div>
 </div>
 </div>`;}
   // Firebase config setup screen
   if(S.lockMode==='fb_setup'){
     return`<div class="lock-wrap" style="padding:28px 20px;justify-content:flex-start;padding-top:60px">
-<div style="font-size:44px;margin-bottom:10px;color:var(--al)">${IC.cloud}</div>
+<div style="font-size:44px;margin-bottom:10px">☁️</div>
 <div class="lock-title" style="margin-bottom:6px">Connect cloud storage</div>
 <div class="lock-sub" style="max-width:320px;margin-bottom:22px;line-height:1.8">One-time setup — takes about 5 minutes. After this, create your account and sign in with just an email and password.</div>
 <div style="width:100%;max-width:340px;text-align:left">
@@ -2008,7 +1972,7 @@ function rLock(){
     <span style="display:block;line-height:1.8">3. You'll see a block of code — copy everything between the <strong style="color:var(--acc)">{</strong> and <strong style="color:var(--acc)">}</strong> of <code>firebaseConfig</code></span>
     <span style="display:block;margin-top:6px;padding:8px 10px;background:var(--s2);border-radius:8px;font-family:monospace;font-size:11px;color:var(--al);line-height:1.7">apiKey: "...",<br>authDomain: "...",<br>projectId: "...",<br>...</span>
     <span style="display:block;margin-top:6px;line-height:1.8">4. Click <strong style="color:var(--txt)">Continue to console</strong></span>
-    <span style="display:block;margin-top:4px;color:var(--amb);font-size:11px">${IC.alert} Already registered and missed the config? Go to <strong>Project Settings</strong> (⚙️ gear icon, top left) → <strong>Your apps</strong> → the config is there.</span>
+    <span style="display:block;margin-top:4px;color:var(--amb);font-size:11px">⚠️ Already registered and missed the config? Go to <strong>Project Settings</strong> (⚙️ gear icon, top left) → <strong>Your apps</strong> → the config is there.</span>
   </div>
 
   <div style="background:var(--s1);border-radius:14px;padding:14px 15px;margin-bottom:10px;font-size:12px;color:var(--t2)">
@@ -2025,18 +1989,18 @@ function rLock(){
 
   <strong style="color:var(--txt);font-size:13px;display:block;margin-bottom:6px">Paste your firebaseConfig here:</strong>
   <textarea id="fb-cfg-input" placeholder='{&#10;  apiKey: "AIza...",&#10;  authDomain: "your-app.firebaseapp.com",&#10;  projectId: "your-app",&#10;  storageBucket: "your-app.appspot.com",&#10;  messagingSenderId: "123...",&#10;  appId: "1:123..."&#10;}' style="width:100%;height:140px;background:var(--s1);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:12px;padding:12px;font-family:monospace;resize:none;outline:none;margin-bottom:10px"></textarea>
-  <button class="btn btn-p" onclick="saveFBConfig()" style="margin-bottom:8px">${IC.cloud} Save & Continue</button>
+  <button class="btn btn-p" onclick="saveFBConfig()" style="margin-bottom:8px">🔗 Save & Continue</button>
   <button class="btn btn-s" onclick="skipGistSetup()">Skip — save on device only</button>
 </div>
 </div>`;}
   // "One last step" screen after new PIN creation
   if(S.lockMode==='github_setup'){
     return`<div class="lock-wrap">
-<div style="font-size:52px;margin-bottom:12px;color:var(--al)">${IC.cloud}</div>
+<div style="font-size:52px;margin-bottom:12px">☁️</div>
 <div class="lock-title">Save your data online</div>
 <div class="lock-sub" style="max-width:290px;margin-bottom:28px;line-height:1.7">Connect your Google account so workouts are saved online — never lost if you clear Safari.</div>
 <div style="width:100%;max-width:280px;display:flex;flex-direction:column;gap:12px">
-  <button class="btn btn-p" onclick="connectAndEnter()" style="font-size:15px;padding:16px">${IC.cloud} Sign in with Google</button>
+  <button class="btn btn-p" onclick="connectAndEnter()" style="font-size:15px;padding:16px">🔗 Sign in with Google</button>
   <button class="btn btn-s" onclick="skipGistSetup()" style="font-size:13px;padding:12px;color:var(--t2)">Skip — save on this device only</button>
 </div>
 </div>`;}
@@ -2045,7 +2009,7 @@ function rLock(){
   const titles={unlock:'Enter your PIN',setup:'Create a PIN',confirm:'Confirm PIN'};
   const subs={unlock:'',setup:'Choose a 4-digit PIN to protect your data',confirm:'Enter the same PIN again'};
   return`<div class="lock-wrap">
-<div class="lock-logo">${IC.logo}</div>
+<div class="lock-logo">🧠</div>
 <div class="lock-title" style="margin-bottom:6px">${titles[mode]}</div>
 ${subs[mode]?`<div class="lock-sub" style="margin-bottom:22px">${subs[mode]}</div>`:'<div style="margin-bottom:22px"></div>'}
 <div class="pin-dots" id="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot" id="pd${i}"></div>`).join('')}</div>
@@ -2108,7 +2072,7 @@ function lockApp(){S.authed=false;S.guest=false;_pinBuf='';S.lockMode='choose';r
 
 function guestLogBlock(){
   if(!S.guest)return false;
-  showToast('Sign in to save your workouts','#f59e0b');
+  showToast('Sign in to save your workouts 👆','#f59e0b');
   return true;
 }
 
@@ -2203,7 +2167,7 @@ async function doForgotPassword(){
   try{
     const loginEmail=isEmail?raw.toLowerCase():username+'@training-brain.app';
     await _fbAuth.sendPasswordResetEmail(loginEmail);
-    if(errEl){errEl.style.color='var(--grn)';errEl.textContent='Reset link sent — check your inbox.';}
+    if(errEl){errEl.style.color='var(--grn)';errEl.textContent='✅ Reset link sent — check your inbox.';}
   }catch(e){
     if(errEl){errEl.style.color='var(--red)';errEl.textContent=e.code==='auth/user-not-found'?'No account found for that email.':'Error: '+e.message;}
   }
@@ -2229,7 +2193,6 @@ async function doAuth(isNew){
   try{
     let result;
     if(isNew){
-      if(pass.length<6){if(errEl)errEl.textContent='Password must be at least 6 characters.';if(btn){btn.textContent='Create Account';btn.disabled=false;}return;}
       // Check username not taken
       const snap=await _fbDb.ref('usernames/'+username).once('value');
       if(snap.exists()){
@@ -2237,14 +2200,14 @@ async function doAuth(isNew){
         if(btn){btn.textContent='Create Account';btn.disabled=false;}
         return;
       }
+      if(pass.length<6){if(errEl)errEl.textContent='Password must be at least 6 characters.';if(btn){btn.textContent='Create Account';btn.disabled=false;}return;}
       result=await _fbAuth.createUserWithEmailAndPassword(internalEmail,pass);
-      // Store username → uid mapping — if this fails, roll back the auth user to prevent orphaned accounts
+      // Store username → uid mapping — if this fails, roll back auth user to prevent orphaned accounts
       try{
         await _fbDb.ref('usernames/'+username).set({uid:result.user.uid,created:new Date().toISOString()});
         if(recovery)await _fbDb.ref('users/'+result.user.uid+'/profile').set({username,recovery});
         else await _fbDb.ref('users/'+result.user.uid+'/profile').set({username});
       }catch(dbErr){
-        // Roll back: delete the just-created auth user so they can try again cleanly
         try{await result.user.delete();}catch(_){}
         throw dbErr;
       }
@@ -2282,7 +2245,7 @@ async function saveToCloud(manual=false){
   try{
     await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:new Date().toISOString()});
     DB.set('fb_last_sync',new Date().toISOString());
-    if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>${IC.cloud} Backed up just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button>`;render();}
+    if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>☁️ Backed up just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button>`;render();}
   }catch(_){}
 }
 
@@ -2369,13 +2332,14 @@ function rWeek(){
   const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
   return`<div class="screen">
 <div class="hdr" style="position:relative">
-  <div class="app-brand"><span class="app-mark">${IC.logo}</span><div class="app-copy"><div class="app-name">Training Brain</div><div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div></div></div>
-  <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">${IC.lock}</button>
+  <h1>Training Brain</h1>
+  <div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div>
+  <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">🔒</button>
 </div>
-${S.guest?`<div class="guest-bar"><span>${IC.eye} Guest preview — data not saved</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit Guest →</button></div>`:''}
+${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit Guest →</button></div>`:''}
 ${pat
-  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?IC.cloud+' Not backed up yet':syncAge<2?IC.cloud+' Backed up just now':syncAge<60?IC.cloud+' Backed up '+syncAge+'m ago':IC.cloud+' Backed up '+lastSync.slice(0,10)}</span><button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button></div>`
-  :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">${IC.alert} Saving locally only — sign in to back up your data</span><button onclick="go('settings')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
+  ?`<div class="sync-bar"><span><span class="sync-dot"></span>${syncAge===null?'☁️ Not backed up yet':syncAge<2?'☁️ Backed up just now':syncAge<60?`☁️ Backed up ${syncAge}m ago`:'☁️ Backed up '+lastSync.slice(0,10)}</span><button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button></div>`
+  :`<div class="sync-bar" style="border-color:rgba(239,68,68,.25);background:rgba(239,68,68,.06)"><span style="color:#ef4444">⚠️ Saving locally only — sign in to back up your data</span><button onclick="go('settings')" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Fix →</button></div>`
 }
 
 <div class="week-nav">
@@ -2383,23 +2347,23 @@ ${pat
   <div class="week-label">${lbl}</div>
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
-${(()=>{const p=DB.get('bike_pref','weather');const opts=[{v:'weather',i:IC.weather,l:'Use weather'},{v:'indoor',i:IC.home,l:'Indoor only'},{v:'none',i:IC.gym,l:'No biking'}];const tabs=`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`;
+${(()=>{const p=DB.get('bike_pref','weather');const opts=[{v:'weather',i:'📡',l:'Use weather'},{v:'indoor',i:'🏠',l:'Indoor only'},{v:'none',i:'🏋️',l:'No biking'}];const tabs=`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`;
 return plan?`
 <div class="day-list">
   ${plan.map(d=>rDayRow(d,today)).join('')}
 </div>
 ${tabs}
-<button class="btn btn-s" onclick="genPlan()">${p==='weather'?IC.refresh+' Refresh with new weather':IC.refresh+' Regenerate plan'}</button>
+<button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🔄 Refresh with new weather':'🔄 Regenerate plan'}</button>
 `:`<div class="empty-wrap">
-  <div class="empty-icon">${p==='none'?IC.gym:p==='indoor'?IC.home:IC.weather}</div>
+  <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'📡'}</div>
   <div class="empty-title">No plan yet</div>
   ${tabs}
-  <button class="btn btn-p" onclick="genPlan()">${p==='weather'?IC.weather+' Generate with weather forecast':p==='indoor'?IC.home+' Generate (indoor rides)':IC.gym+' Generate (gym only)'}</button>
+  <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'📡 Generate with weather forecast':p==='indoor'?'🏠 Generate (indoor rides)':'🏋️ Generate (gym only)'}</button>
 </div>`;})()}
 <div class="bnav">
-  <button class="bnav-btn on" onclick="go('week')"><span>${IC.plan}</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>${IC.training}</span><span>My Training</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>${IC.settings}</span><span>Settings</span></button>
+  <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>Plan</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
 }
@@ -2424,7 +2388,7 @@ function rDayRow(day,today){
   ${isRide?`<div class="vtag ${v.c}">${v.t}</div>`:''}
   ${done?'<div class="done-tag">✓ Done</div>':''}
   ${isToday&&!done?'<div class="today-tag">Today</div>':''}
-  <button class="swap-btn" onclick="event.stopPropagation();openSwap('${day.date}')">${IC.repeat} Swap</button>
+  <button class="swap-btn" onclick="event.stopPropagation();openSwap('${day.date}')">Swap ↕</button>
 </div>
 </div>`;
 }
@@ -2448,17 +2412,17 @@ function rDay(){
 <div class="day-hdr">
   <button class="back-btn" onclick="go('week')">← Week</button>
   <div class="day-hdr-r">${shortD(S.viewDate)}</div>
-  <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">${IC.repeat} Swap</button>
+  <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">Swap ↕</button>
 </div>
 <div class="day-hero" style="border-color:${wi.c}33">
   <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${wi.l.toUpperCase()}</div>
   <div class="hero-name">${wi.d}</div>
-  <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · ${IC.wind}${w.wind}km/h · ${IC.rain}${w.rain}mm</div>
+  <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>
   ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
 </div>
 <div class="sec-lbl">How are you feeling?</div>
 <div class="egrid">
-  ${eBtn('fresh',IC.fire,'Fresh')}${eBtn('okay',IC.arm,'Okay')}${eBtn('tired',IC.tired,'Tired')}${eBtn('sore',IC.sore,'Sore')}
+  ${eBtn('fresh','🔥','Fresh')}${eBtn('okay','💪','Okay')}${eBtn('tired','😪','Tired')}${eBtn('sore','🤕','Sore')}
 </div>
 <div class="coach${S.energy?' on':''}" id="coach-card">
   <div class="coach-lbl">Coach says</div>
@@ -2524,7 +2488,7 @@ function rExList(dp,log){
   <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 Tutorial</button>
 </div>
 <div class="ex-body">
-  <div class="ex-name">${ex.n}${pr?`<span class="pr-b">${IC.trophy} ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
+  <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
   <div class="ex-bdgs">
     <span class="bdg bs">${tgt.sets} sets</span><span class="bdg br">${tgt.reps} reps</span><span class="bdg bp">RPE ${tgt.rpe}</span>
     ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
@@ -2560,11 +2524,11 @@ function rRideCard(dp){
 </div>`:'';
   return`<div class="ride-card" style="text-align:left">
 <div style="text-align:center;margin-bottom:14px">
-  <span class="ride-icon">${indoor?IC.home:IC.bike}</span>
+  <span class="ride-icon">${indoor?'🚲':'🚴'}</span>
   <div class="ride-lbl" style="margin-bottom:5px">${s.name}</div>
   <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
-    <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${IC.clock} ${s.total} min</span>
+    <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">⏱ ${s.total} min</span>
     <span class="bdg" style="background:${isRec?'rgba(16,185,129,.14)':'rgba(245,158,11,.14)'};color:${isRec?'var(--grn)':'var(--amb)'}">${s.phase}</span>
   </div>
 </div>
@@ -2582,7 +2546,7 @@ ${actual?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transf
 
 function rRestCard(){
   return`<div class="rest-card">
-<span class="rest-emoji">${IC.leaf}</span>
+<span class="rest-emoji">🌿</span>
 <div class="rest-title">Rest &amp; Recover</div>
 <div class="rest-sub">Muscles grow during rest. Today you earn tomorrow's gains.</div>
 <div class="mob-list">${MOBILITY.map(m=>`<div class="mob-item"><span>${m.i}</span><span>${m.t}</span></div>`).join('')}</div>
@@ -2669,7 +2633,7 @@ function rLogEx(le,ei){
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
   return`<div class="log-ex${allDone?' done-ex':''}" id="lex${ei}">
 <div class="log-ex-hdr" onclick="togLogEx(${ei})">
-  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">${IC.trophy} ${pr.w}${unit()}×${pr.r}</span>`:''}${!isOpen&&allDone?summary:''}</div>
+  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}${!isOpen&&allDone?summary:''}</div>
   <button class="wt-adj" style="font-size:13px;padding:4px 7px;width:auto;height:auto;margin-left:4px;flex-shrink:0" onclick="event.stopPropagation();openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄</button>
   <span class="log-ex-prog${allDone?' done':''}" id="prog${ei}">${allDone?'✓ Done':doneSets+'/'+le.sets.length}</span>
   <span class="log-ex-chev${isOpen?' open':''}" id="chev${ei}">▾</span>
@@ -2681,7 +2645,7 @@ function rLogEx(le,ei){
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
     <span class="set-n">${setLabel(si,set)}</span>
     <div class="wt-wrap">
-      <button class="wt-adj" onclick="adjW(${ei},${si},-1)">${IC.minus}</button>
+      <button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button>
       <input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="${wPh}" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
       <button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button>
     </div>
@@ -2762,7 +2726,7 @@ function addSet(ei){
   const div=document.createElement('div');
   div.className='set-row';div.id=`sr${ei}_${si}`;
   div.innerHTML=`<span class="set-n">${si+1}</span>
-    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">${IC.minus}</button><input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
+    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button><input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${last.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">○</button>`;
   body.insertBefore(div,addBtn);
@@ -2782,7 +2746,7 @@ function checkPR(id,weight,reps){
 function prToast(name){
   let t=document.querySelector('.pr-toast');
   if(!t){t=document.createElement('div');t.className='pr-toast';document.body.appendChild(t);}
-  t.textContent=`New Personal Best — ${name}!`;
+  t.textContent=`🏆 New Personal Best — ${name}!`;
   t.classList.add('on');
   clearTimeout(t._tid);
   t._tid=setTimeout(()=>{t.classList.remove('on');},2800);
@@ -2798,7 +2762,7 @@ function deletePR(id){
 <div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+22px);max-width:430px;margin:0 auto;width:100%">
   <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:6px">Delete PR?</div>
-  <div style="font-size:14px;color:var(--t2);margin-bottom:20px">${ex?.n||id} — ${IC.trophy} ${pr.w}${u} × ${pr.r} on ${pr.date}</div>
+  <div style="font-size:14px;color:var(--t2);margin-bottom:20px">${ex?.n||id} — 🏆 ${pr.w}${u} × ${pr.r} on ${pr.date}</div>
   <button onclick="(()=>{const p=DB.get('prs',{});delete p['${id}'];DB.set('prs',p);this.closest('[style*=inset]').remove();render();})()" style="width:100%;background:var(--red);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Yes, delete it</button>
   <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
 </div>`;
@@ -2901,27 +2865,27 @@ function rPRs(){
     if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push(log);
   }
   const profile=DB.get('user_profile',null);
-  const goalLabels={muscle:'Build muscle & strength',lose_weight:'Lose weight',fitness:'General fitness',endurance:'Endurance / event prep',performance:'Sport performance'};
+  const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
-<div class="hdr"><div class="app-brand"><span class="app-mark">${IC.logo}</span><div class="app-copy"><div class="app-name">Training Brain</div><div class="hdr-sub">My Training · PRs · History</div></div></div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">My Training · PRs · History</div></div>
 
-<div class="sec-hdr">${IC.goal} Your goals</div>
+<div class="sec-hdr">🎯 Your goals</div>
 ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-    ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'Muscle & strength',lose_weight:'Lose weight',fitness:'General fitness',endurance:'Endurance',performance:'Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
+    ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
   </div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'Gym',cycling:'Cycling',running:'Running',cardio:'Cardio & Classes'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'Male',female:'Female'}[profile.gender]||''):''}</div>
-  <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">${IC.edit} Edit goals</button>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🏊 Cardio & Classes'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
+  <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
 </div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
   <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
 </div>`}
 
-<div class="sec-hdr">${IC.run} Your Activities</div>
-${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:IC.gym,l:'Gym & Weights'},cycling:{i:IC.bike,l:'Cycling'},running:{i:IC.run,l:'Running'},cardio:{i:IC.cardio,l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span class="icon-chip">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">${IC.info}</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">${IC.minus}</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span class="icon-chip">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">${IC.info}</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">${IC.plus} Set up activities</button>`:''}</div>`;})()}
+<div class="sec-hdr">🏃 Your Activities</div>
+${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🏊',l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>${IC.trophy} Personal Records</span>
+  <span>🏆 Personal Records</span>
   ${prKeys.length?`<span style="font-size:11px;color:var(--t2);font-weight:600">${prKeys.length} total</span>`:''}
 </div>
 ${!prKeys.length
@@ -2966,11 +2930,11 @@ ${!prKeys.length
             <div class="prc-main" onclick="this.nextElementSibling.classList.toggle('open')">
               <span class="prc-name">${ex.n}</span>
               <span class="prc-date">${pr.date}</span>
-              <span class="prc-val">${IC.trophy} ${pr.w}${u}×${pr.r}</span>
+              <span class="prc-val">🏆 ${pr.w}${u}×${pr.r}</span>
             </div>
             <div class="prc-actions">
-              <button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">${IC.edit} Edit</button>
-              <button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">${IC.trash} Delete</button>
+              <button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button>
+              <button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">🗑 Delete</button>
             </div>
           </div>`;
         }).join('')}</div>`:''}
@@ -2980,7 +2944,7 @@ ${!prKeys.length
   })()
 }
 
-<div class="sec-hdr">${IC.history} Workout History</div>
+<div class="sec-hdr">📋 Workout History</div>
 ${!history.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">No workouts logged yet</div>`
   :history.map((log,hi)=>{
@@ -3001,9 +2965,9 @@ ${!history.length
 </div>`;}).join('')}
 
 <div class="bnav">
-  <button class="bnav-btn" onclick="go('week')"><span>${IC.plan}</span><span>Plan</span></button>
-  <button class="bnav-btn on" onclick="go('prs')"><span>${IC.training}</span><span>My Training</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>${IC.settings}</span><span>Settings</span></button>
+  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
+  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
 }
@@ -3012,18 +2976,18 @@ ${!history.length
 function rSettings(){
   const hasPIN=!!DB.get('pin',null);
   return`<div class="screen">
-<div class="hdr"><div class="app-brand"><span class="app-mark">${IC.logo}</span><div class="app-copy"><div class="app-name">Training Brain</div><div class="hdr-sub">Settings · Connected services</div></div></div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Settings · Connected services</div></div>
 
-<div class="sec-hdr">${IC.ai} AI Coach</div>
+<div class="sec-hdr">🤖 AI Coach</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
-    <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">${IC.check} Active</div>
+    <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
   </div>
   <div style="font-size:12px;color:var(--t2);line-height:1.5">Gives you a personalised pre-workout note each day based on your logged sets, PRs, and how you're feeling. Powered by Gemini 2.5 Flash.</div>
 </div>
 
-<div class="sec-hdr">${IC.gym} Gym Profile</div>
+<div class="sec-hdr">🏋️ Gym Profile</div>
 ${(()=>{
   const gid=DB.get('gym_profile',null);
   const isHome=gid==='home';
@@ -3032,7 +2996,7 @@ ${(()=>{
   return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${isHome?'12px':'0'}">
     <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:${!gid?'var(--t2)':'var(--txt)'};margin-bottom:2px">${curGym?curGym.area:isHome?IC.home+' Home Gym':'No gym selected'}</div>
+      <div style="font-size:13px;font-weight:700;color:${!gid?'var(--t2)':'var(--txt)'};margin-bottom:2px">${curGym?curGym.area:isHome?'🏠 Home Gym':'No gym selected'}</div>
       <div style="font-size:11px;color:var(--t2)">${curGym?`${curGym.chain} · ${curGym.city}`:isHome?'Custom equipment':'Tap Change to set your gym'}</div>
     </div>
     <button onclick="openGymPicker()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;flex-shrink:0">Change</button>
@@ -3053,7 +3017,7 @@ ${(()=>{
   const hasCycling=(profile?.activities||[]).includes('cycling');
   if(!hasCycling)return'';
   const p=DB.get('bike_pref','weather');
-  return`<div class="sec-hdr">${IC.bike} Ride preference</div>
+  return`<div class="sec-hdr">🚴 Ride preference</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should rides be planned when cycling is in your week?</div>
   <div style="display:flex;flex-direction:column;gap:8px">
@@ -3079,7 +3043,7 @@ ${(()=>{
 ${(()=>{
   const _cp=DB.get('user_profile',null);
   if(!(_cp?.activities||[]).includes('cycling'))return'';
-  return`<div class="sec-hdr">${IC.bike} Cycling Plan Setup</div>`;
+  return'<div class="sec-hdr">🚴 Cycling Plan Setup</div>';
 })()}
 ${(()=>{
   if(!(DB.get('user_profile',null)?.activities||[]).includes('cycling'))return'';
@@ -3097,59 +3061,59 @@ ${(()=>{
     </div>
     <div style="flex:2;min-width:120px;background:var(--s2);border-radius:10px;padding:10px">
       <div style="font-size:13px;font-weight:700">${goalLabel}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">Adapt factor: ${factor.toFixed(2)}${factor>1?'  up':factor<1?'  down':''}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">Adapt factor: ${factor.toFixed(2)}${factor>1?'  📈':factor<1?'  📉':''}</div>
       ${checked?`<div style="font-size:10px;color:var(--t2)">Last checked: ${checked}</div>`:''}
     </div>
   </div>
   ${ev?.date?`<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px">
     <div>
-      <div style="font-size:13px;font-weight:700;color:var(--al)">${IC.goal} ${ev.dist}${ev.unit||'km'} · ${new Date(ev.date+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric'})}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">${evWeeks>2?evWeeks+' weeks away':evWeeks===2?'Peak week next!':evWeeks===1?'Taper week — event is this week!':'Event week!'}</div>
+      <div style="font-size:13px;font-weight:700;color:var(--al)">🎯 ${ev.dist}${ev.unit||'km'} · ${new Date(ev.date+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric'})}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">${evWeeks>2?evWeeks+' weeks away':evWeeks===2?'Peak week next!':evWeeks===1?'Taper week — event is this week!':'🏁 Event week!'}</div>
     </div>
     <button onclick="DB.set('bike_event',null);render()" style="border:none;background:transparent;color:var(--t2);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
   </div>`:''}
-  <button onclick="openBikeSetup()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--al);font-size:13px;font-weight:700;padding:10px;cursor:pointer">${IC.edit} Edit cycling setup</button>
+  <button onclick="openBikeSetup()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--al);font-size:13px;font-weight:700;padding:10px;cursor:pointer">✏️ Edit cycling setup</button>
 </div>`;
   return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:13px;font-weight:700;margin-bottom:6px">Set up your cycling plan</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Takes 30 seconds. Personalises your ride durations and progression to your current fitness.</div>
-  <button onclick="openBikeSetup()" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:13px;cursor:pointer">${IC.bike} Set up my plan</button>
+  <button onclick="openBikeSetup()" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:13px;cursor:pointer">🚴 Set up my plan</button>
 </div>`;
 })()}
 
-<div class="sec-hdr">${IC.strava} Strava · Garmin Sync</div>
+<div class="sec-hdr">🟠 Strava · Garmin Sync</div>
 ${(()=>{
   const tok=DB.get('strava_token',null);
   const acts=DB.get('strava_activities')||[];
   const lastSync=DB.get('strava_last_sync',null);
   if(tok)return`<div style="background:var(--s1);border:1px solid rgba(252,76,2,.25);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <div style="font-size:28px;line-height:1;color:#fc4c02">${IC.strava}</div>
+    <div style="font-size:28px;line-height:1">🟠</div>
     <div><div style="font-size:14px;font-weight:700">Strava connected</div>
     <div style="font-size:11px;color:var(--t2)">${tok.athlete?.name||'Athlete'} · ${acts.length} ride${acts.length!==1?'s':''} synced</div></div>
   </div>
   ${lastSync?`<div style="font-size:11px;color:var(--t2);margin-bottom:10px">Last sync: ${lastSync.slice(0,16).replace('T',' ')}</div>`:''}
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Ride data (distance, HR, power) appears automatically on your ride day cards. Garmin activities sync to Strava, then here.</div>
   <div class="data-btns">
-    <button class="btn btn-s" onclick="stravaFetchActivities()">${IC.refresh} Sync rides</button>
+    <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Sync rides</button>
     <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
   </div></div>`;
   return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:13px;font-weight:700;margin-bottom:6px">Connect Strava</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Your Garmin auto-syncs to Strava. Once connected, actual ride data (distance, HR, power) shows up right on your ride day cards — no manual logging.</div>
-  <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">${IC.strava} Connect Strava</button>
+  <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">🟠 Connect Strava</button>
 </div>`;
 })()}
 
-<div class="sec-hdr">${IC.cloud} Account & backup</div>
+<div class="sec-hdr">☁️ Account & backup</div>
 ${S.fbUser
   ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
       <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span><br>
       <span style="color:var(--t2)">Last backup: ${(DB.get('fb_last_sync','Never')||'Never').slice(0,16).replace('T',' ')}</span>
     </div>
     <div class="data-btns">
-      <button class="btn btn-s" onclick="saveToCloud(true)">${IC.refresh} Back up now</button>
-      <button class="btn btn-s" onclick="signOut()">${IC.signout} Sign out</button>
+      <button class="btn btn-s" onclick="saveToCloud(true)">🔄 Back up now</button>
+      <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
     </div>`
   :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
       <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
@@ -3157,15 +3121,15 @@ ${S.fbUser
       <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
     </div>`}
 <div class="data-btns">
-  <button class="btn btn-s" onclick="exportData()">${IC.download} Export data</button>
-  <button class="btn btn-s" onclick="importData()">${IC.upload} Import data</button>
+  <button class="btn btn-s" onclick="exportData()">⬇️ Export data</button>
+  <button class="btn btn-s" onclick="importData()">⬆️ Import data</button>
 </div>
 ${hasPIN?`<div class="data-btns" style="margin-top:8px">
-  <button class="btn btn-s" onclick="changePIN()">${IC.key} Reset PIN</button>
+  <button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>
 </div>`:''}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
-  <span>${IC.history} What's new</span>
+  <span>📋 What's new</span>
   <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
@@ -3192,9 +3156,9 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
 </div>
 
 <div class="bnav">
-  <button class="bnav-btn" onclick="go('week')"><span>${IC.plan}</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>${IC.training}</span><span>My Training</span></button>
-  <button class="bnav-btn on" onclick="go('settings')"><span>${IC.settings}</span><span>Settings</span></button>
+  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
+  <button class="bnav-btn on" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
 }
@@ -3240,7 +3204,7 @@ function openGymPicker(){
     );
     if(!results.length){
       list.innerHTML=`<div style="text-align:center;padding:40px 16px;color:var(--t2)">
-        <div style="font-size:28px;margin-bottom:8px;color:var(--al)">${IC.search}</div>
+        <div style="font-size:28px;margin-bottom:8px">🤷</div>
         <div style="font-size:13px;font-weight:600">No gyms found for "${q}"</div>
         <div style="font-size:11px;margin-top:4px">Try a different city or brand name</div>
       </div>`;
@@ -3254,7 +3218,7 @@ function openGymPicker(){
         <div style="width:40px;height:40px;background:var(--s3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🏋️</div>
         <div style="flex:1;min-width:0">
           <div style="font-size:14px;font-weight:700;margin-bottom:2px">${g.area}</div>
-          <div style="font-size:11px;color:var(--t2)">${g.chain} · ${g.city}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.chain} · 📍 ${g.city}</div>
         </div>
         ${sel?'<span style="color:var(--al);flex-shrink:0;font-size:18px">✓</span>':''}
       </div>`;
@@ -3268,7 +3232,7 @@ function openGymPicker(){
 <div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+24px);max-width:430px;margin:0 auto;width:100%;max-height:88vh;display:flex;flex-direction:column">
   <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:14px">Where do you train?</div>
-  <input id="gps-input" type="search" placeholder="Search city, gym or brand…" autocomplete="off"
+  <input id="gps-input" type="search" placeholder="🔍  Search city, gym or brand…" autocomplete="off"
     style="width:100%;background:var(--s2);border:1.5px solid var(--bord);border-radius:13px;color:var(--txt);font-size:14px;padding:13px 16px;outline:none;font-family:inherit;margin-bottom:16px;-webkit-appearance:none;flex-shrink:0">
   <div id="gps-list" style="overflow-y:auto;flex:1;padding-right:2px"></div>
 </div>`;
@@ -3326,7 +3290,7 @@ function doSwap(ds,newType){
       const shifted=futureGym.map((d,i)=>tl[cascadeTypes[i]]).join(' · ');
       DB.set(pk,plan);
       closeSwap();syncUp();render();
-      showToast(`Week shifted: ${shifted}`,'var(--grn)');
+      showToast(`✅ Week shifted: ${shifted}`,'var(--grn)');
       return;
     }
   }
@@ -3342,7 +3306,7 @@ function quickAddActivity(key){
   DB.set('user_profile',profile);
   syncUp();render();
   const labels={gym:'Gym & Weights',cycling:'Cycling',running:'Running',cardio:'Cardio & Classes'};
-  showToast(`${labels[key]||key} added to your plan`,'var(--grn)');
+  showToast(`✅ ${labels[key]||key} added to your plan`,'var(--grn)');
 }
 function removeActivity(key){
   const profile=DB.get('user_profile',{});
@@ -3355,10 +3319,10 @@ function removeActivity(key){
 }
 function showActInfo(k){
   const info={
-    gym:{i:IC.gym,t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
-    cycling:{i:IC.bike,t:'Cycling',d:'Road or trail rides tracked outdoors. Syncs automatically with Strava for speed, distance, elevation and power data.'},
-    running:{i:IC.run,t:'Running',d:'Outdoor runs and treadmill sessions. Syncs with Strava for pace, distance, heart rate and route tracking.'},
-    cardio:{i:IC.cardio,t:'Cardio & Classes',d:'HIIT classes, rowing, elliptical, stair master, swimming, group fitness and more. Sessions logged manually as notes for now — full tracking coming soon.'},
+    gym:{i:'🏋️',t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
+    cycling:{i:'🚴',t:'Cycling',d:'Road or trail rides tracked outdoors. Syncs automatically with Strava for speed, distance, elevation and power data.'},
+    running:{i:'🏃',t:'Running',d:'Outdoor runs and treadmill sessions. Syncs with Strava for pace, distance, heart rate and route tracking.'},
+    cardio:{i:'🏊',t:'Cardio & Classes',d:'HIIT classes, rowing, elliptical, stair master, swimming, group fitness and more. Sessions logged manually as notes for now — full tracking coming soon.'},
   };
   const m=info[k];if(!m)return;
   const el=document.createElement('div');
@@ -3411,7 +3375,7 @@ function openExSwap(exId,exIdx,ds,type){
   modal.innerHTML=`<div class="swap-ov" onclick="closeExSwap()"></div>
 <div class="swap-sheet">
   <div class="swap-title">Swap: ${ex?.n||exId}</div>
-  <input id="swap-search" type="text" placeholder="Search all exercises…" oninput="filterSwap('${exId}',${exIdx},'${ds}','${type}',this.value)"
+  <input id="swap-search" type="text" placeholder="🔍  Search all exercises…" oninput="filterSwap('${exId}',${exIdx},'${ds}','${type}',this.value)"
     style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:15px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:4px;-webkit-appearance:none">
   <div id="swap-results">${suggestions}</div>
   <button class="swap-cancel" onclick="closeExSwap()">Cancel</button>
@@ -3469,7 +3433,7 @@ function showExLogModal(le,ei,ds){
   modal.innerHTML=`<div class="swap-ov" onclick="closeExLog('${ds}')"></div>
 <div class="swap-sheet">
   <div class="swap-title">${ex.n}</div>
-  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">${IC.trophy} PR: ${pr.w}${unit()}×${pr.r}</span></div>`:''}
+  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${pr.w}${unit()}×${pr.r}</span></div>`:''}
   <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
   ${unitBar()}
   <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
@@ -3484,7 +3448,7 @@ function showExLogModal(le,ei,ds){
 function exLogRow(ei,si,set){
   return`<div class="set-row${set.done?' s-done':''}" id="elr${ei}_${si}">
     <span class="set-n">${setLabel(si,set)}</span>
-    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">${IC.minus}</button><input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="—" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
+    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button><input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="—" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="elk${ei}_${si}" onclick="exLogTog(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`;
@@ -3610,9 +3574,9 @@ function importData(){
         const data=JSON.parse(ev.target.result);
         let count=0;
         Object.entries(data).forEach(([k,v])=>{if(!k.startsWith('_')){DB.set(k,v);count++;}});
-        alert(`Restored ${count} records successfully!`);
+        alert(`✅ Restored ${count} records successfully!`);
         render();
-      }catch{alert('Could not read file — make sure it\'s a Training Brain backup.');}
+      }catch{alert('❌ Could not read file — make sure it\'s a Training Brain backup.');}
     };
     reader.readAsText(file);
   };
@@ -3633,7 +3597,7 @@ function genPlan(){
     return;
   }
   const btn=document.querySelector('.btn-p,.btn-s');
-  if(btn){btn.textContent='Fetching weather…';btn.disabled=true;}
+  if(btn){btn.textContent='📡 Fetching weather…';btn.disabled=true;}
   navigator.geolocation.getCurrentPosition(async pos=>{
     try{
       const wdays=await fetchWeather(pos.coords.latitude,pos.coords.longitude,fd(S.weekStart));
