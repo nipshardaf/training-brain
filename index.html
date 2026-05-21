@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.47';
+const APP_VERSION='1.48';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.48',d:'Goals and settings no longer re-ask after sign-in — login now syncs both ways',det:'Every sign-in (Google, username/password, PIN unlock, and iOS PWA auto-restore) now runs a load-then-push cycle: it pulls the latest data from Firebase first, then immediately pushes any local data that Firebase is missing back up. This fixes the root cause of goals, activities, and Strava reappearing after reinstall or signing in on a new device — the profile was stored locally but never made it to Firebase because the sync only ran on explicit data changes. Now the first login after any gap automatically closes that gap.'},
   {v:'1.47',d:'Bodyweight exercises added; "Home week" toggle skips the gym without changing your profile',det:'18 new bodyweight exercises added across all session types: push-ups (standard, decline, diamond), pike push-up, inverted row, superman, bodyweight squat, jump squat, bodyweight lunge, single-leg glute bridge, donkey kick, wall sit, mountain climber, bicycle crunch, side plank, floor leg raise, crunch, and burpee. Each has full coaching cues and Traditional Chinese translation. Every slot in every workout type now includes bodyweight alternatives — when gym equipment is unavailable (e.g. home gym profile), the app automatically falls back to bodyweight versions without you having to do anything. The new "Training from home this week?" toggle on the Plan tab forces bodyweight-only session generation for that week only, without permanently changing your gym profile — tap it again or shift to a different week to turn it off. A purple "Home week" badge appears on each gym-day screen so you know the mode is active.'},
   {v:'1.46',d:'"Gym only" replaces "No biking"; plan now respects your training-days-per-week setting',det:'The third plan mode was renamed from "No biking" to "Gym only" — a much clearer description of what it actually does. More importantly, the weekly plan generator now honours the training-days-per-week setting from your profile (3–6 days). Previously every mode hard-coded 6 active days regardless of what you set. Now: Gym only = your chosen number of gym days, worst-weather days become rest. With rides = 2 ride days + (target days − 2) gym days + rest. For example, a 4-day user on "Use weather" gets 2 rides + 2 gym + 3 rest instead of 2 rides + 4 gym + 1 rest. The "Gym only" option also now appears in the Ride preference section of Settings so you can switch without going back to the Plan tab. Cycling-specific options (Use weather / Indoor only) are hidden on the Plan tab for users who have no cycling activity selected.'},
   {v:'1.45',d:'Goals, Strava and bike plan now survive reinstalls and sign-outs',det:'Profile data (goals, activities, training days, experience level) and the Strava token were never included in the Firebase sync — so reinstalling the app or signing out and back in cleared them, causing the goals onboarding sheet to reappear and Strava to disconnect. All of this data is now included in saveToCloud. The goals and bike plan setup sheets also now push to Firebase immediately on save, so the data is backed up the moment you tap Save rather than waiting for the next log entry.'},
@@ -2472,7 +2473,7 @@ function updatePinDots(){
 function checkPin(){
   const saved=DB.get('pin',null);
   if(saved){
-    if(_pinBuf===saved){S.authed=true;_pinBuf='';syncDown().then(()=>render());render();}
+    if(_pinBuf===saved){S.authed=true;_pinBuf='';syncDown().then(()=>{syncUp();render();});render();}
     else{errPin();_pinBuf='';}
   } else {
     if(S.lockMode==='setup'){
@@ -2563,7 +2564,12 @@ function initFirebase(){
         S.fbUser={uid:user.uid,name:username,email:user.email,username};
         DB.set('fb_user',S.fbUser);
         // Auto-unlock if no PIN set — user already authenticated
-        if(!S.authed&&!DB.get('pin',null)){S.authed=true;render();}
+        // Also run a load→sync cycle so any local-only data (e.g. user_profile set
+        // before v1.45) gets pushed up to Firebase, and Firebase data is fresh.
+        if(!S.authed&&!DB.get('pin',null)){
+          S.authed=true;render();
+          loadFromCloud().then(()=>{syncUp();render();});
+        }
       }
     });
     return true;
@@ -2579,6 +2585,7 @@ async function signInGoogle(){
     DB.set('fb_user',S.fbUser);
     S.authed=true;S.lockMode='choose';
     await loadFromCloud();
+    syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
     render();
   }catch(e){
     if(e.code!=='auth/popup-closed-by-user')alert('Sign-in failed: '+e.message);
@@ -2649,6 +2656,7 @@ async function doAuth(isNew){
     S._authNew=false;
     S.authed=true;S.lockMode='choose';
     await loadFromCloud();
+    syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
     render();
   }catch(e){
     const msgs={
