@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.52';
+const APP_VERSION='1.53';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.53',d:'Settings Account section layout fixes — no empty space, clearer button labels',det:'"Sign out" no longer sits in a half-empty two-column row. "Backup (.json)" renamed to "Download backup" — the .json detail was meaningless to most people.'},
   {v:'1.52',d:'iPhone home screen icon updated to the current app logo',det:'The apple-touch-icon (the icon shown when you add Training Brain to your iPhone home screen) was still the original placeholder. It now uses the same logo shown inside the app. To see the update: remove the existing home screen shortcut and re-add it via Safari → Share → Add to Home Screen.'},
   {v:'1.51',d:'Backup status now lives inside the Account card in Settings',det:'The backup status row (green dot, "Backed up X ago", "Back up now") is now grouped inside the Account card under Settings → Account & Backup, separated by a subtle divider below the signed-in name. It was previously floating as a standalone bar at the top of Settings. This keeps all account and backup actions in one place.'},
   {v:'1.49',d:'Plan mode labels clarified — Outdoor + Gym, Indoor + Gym, Gym only',det:'The three plan modes have been renamed to be self-explanatory. "Use weather" is now "Outdoor + Gym" — it schedules outdoor cardio on the best weather days and gym on the rest. "Indoor only" is now "Indoor + Gym" — trainer or Zwift sessions indoors plus gym, weather ignored. "No biking" / "Gym only" keeps the same meaning but is now clearly labelled everywhere: the plan tab selector, the generate/regenerate buttons, the empty state, and the ride preference section in Settings. All three labels are consistent across every part of the app.'},
@@ -1022,7 +1023,7 @@ const TRANS={
     sets_unit:'sets',reps_unit:'reps',
     log_workout:'Log This Workout',continue_log:'Continue Logging',view_log:'View Log',
     suggested:'suggested',
-    exp_csv:'Export CSV',exp_backup:'Backup (.json)',exp_restore:'Restore from backup',
+    exp_csv:'Export CSV',exp_backup:'Download backup',exp_restore:'Restore from backup',
     fb_hdr:'💬 Feedback & Wishlist',coming_soon:'Coming soon',
     fb_soon:'Submit bug reports, request features, and boost the ideas you want to see most.',
     lang_en:'English',lang_zh:'繁體中文',
@@ -1098,7 +1099,7 @@ const TRANS={
     sets_unit:'組',reps_unit:'下',
     log_workout:'記錄這次訓練',continue_log:'繼續記錄',view_log:'查看記錄',
     suggested:'建議',
-    exp_csv:'匯出 CSV',exp_backup:'備份 (.json)',exp_restore:'從備份還原',
+    exp_csv:'匯出 CSV',exp_backup:'下載備份',exp_restore:'從備份還原',
     fb_hdr:'💬 意見與願望清單',coming_soon:'即將推出',
     fb_soon:'提交錯誤回報、建議新功能，並為你最想要的點子加分。',
     lang_en:'English',lang_zh:'繁體中文',
@@ -3886,7 +3887,7 @@ ${S.fbUser
         <button onclick="syncUp(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer;padding:0">Back up now</button>
       </div>
     </div>
-    <div class="data-btns">
+    <div class="data-btns" style="grid-template-columns:1fr">
       <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
     </div>`
   :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
