@@ -24,9 +24,9 @@
   <link rel="apple-touch-icon" sizes="180x180" href="apple-touch-icon.png">
   <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22Training%20Brain%22%2C%22short_name%22%3A%22Training%20Brain%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%2309090f%22%2C%22theme_color%22%3A%22%2309090f%22%2C%22icons%22%3A%5B%7B%22src%22%3A%22apple-touch-icon.png%22%2C%22sizes%22%3A%22180x180%22%2C%22type%22%3A%22image%2Fpng%22%7D%5D%7D">
   <title>Training Brain</title>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
 <style>
 *,::before,::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -3469,12 +3469,14 @@ function init(){
       stravaFetchActivities();
     }
   }
-  // Unregister any old service workers to prevent stale caching
+  // Register service worker for cache-first loading (instant on return visits)
   if('serviceWorker' in navigator){
-    navigator.serviceWorker.getRegistrations().then(regs=>regs.forEach(r=>r.unregister()));
+    navigator.serviceWorker.register('/training-brain/sw.js')
+      .catch(e=>console.warn('SW register failed:',e));
   }
 }
-init();
+// Firebase scripts are deferred — DOMContentLoaded fires after them, so init() is safe here
+document.addEventListener('DOMContentLoaded', init);
 </script>
 </body>
 </html>
