@@ -3142,20 +3142,21 @@ function openGymPicker(){
     const list=document.getElementById('gps-list');
     if(!list)return;
     if(!term){
-      // No search — show prompt + Home Gym option only
       const sel=gid==='home';
       list.innerHTML=`
-        <div style="text-align:center;padding:32px 16px 20px;color:var(--t2)">
-          <div style="font-size:28px;margin-bottom:8px">🔍</div>
-          <div style="font-size:13px;font-weight:600">Start typing your city or gym name</div>
-          <div style="font-size:11px;margin-top:4px">e.g. "Newmarket", "GoodLife", "YMCA"</div>
+        <div style="background:var(--s2);border-radius:13px;padding:16px;text-align:center;margin-bottom:20px;color:var(--t2)">
+          <div style="font-size:13px;font-weight:600;color:var(--txt);margin-bottom:4px">Search above to find your gym</div>
+          <div style="font-size:12px">Try "Newmarket", "GoodLife" or "YMCA"</div>
         </div>
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);margin-bottom:8px">Or choose</div>
+        <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:10px">Don't go to a gym?</div>
         <div onclick="DB.set('gym_profile','home');document.getElementById('gym-picker').remove();render()"
-          style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'rgba(124,58,237,.08)':'var(--s2)'};cursor:pointer;margin-bottom:4px">
-          <span style="font-size:22px">🏠</span>
-          <div><div style="font-size:14px;font-weight:700">Home Gym</div><div style="font-size:11px;color:var(--t2)">Choose your own equipment</div></div>
-          ${sel?'<span style="color:var(--al);margin-left:auto">✓</span>':''}
+          style="display:flex;align-items:center;gap:14px;padding:16px;border-radius:14px;border:2px solid ${sel?'var(--acc)':'var(--acc)'};background:${sel?'rgba(124,58,237,.15)':'rgba(124,58,237,.07)'};cursor:pointer">
+          <div style="width:44px;height:44px;background:var(--acc);border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">🏠</div>
+          <div style="flex:1">
+            <div style="font-size:15px;font-weight:800;color:var(--txt)">Home Gym</div>
+            <div style="font-size:12px;color:var(--t2);margin-top:2px">Pick your equipment — barbell, dumbbells, cables…</div>
+          </div>
+          ${sel?'<span style="color:var(--al);font-size:18px">✓</span>':'<span style="color:var(--al);font-size:13px;font-weight:700">Select →</span>'}
         </div>`;
       return;
     }
@@ -3173,17 +3174,17 @@ function openGymPicker(){
       </div>`;
       return;
     }
-    list.innerHTML=`<div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:600">${results.length} result${results.length!==1?'s':''} for "${q}"</div>`+
+    list.innerHTML=`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;font-weight:600">${results.length} location${results.length!==1?'s':''} found</div>`+
     results.map(({k,g})=>{
       const sel=gid===k;
       return`<div onclick="DB.set('gym_profile','${k}');document.getElementById('gym-picker').remove();render()"
-        style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:13px;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'rgba(124,58,237,.08)':'var(--s2)'};cursor:pointer;margin-bottom:6px">
-        <span style="font-size:20px">🏋️</span>
+        style="display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:14px;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'rgba(124,58,237,.08)':'var(--s2)'};cursor:pointer;margin-bottom:8px">
+        <div style="width:40px;height:40px;background:var(--s3);border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">🏋️</div>
         <div style="flex:1;min-width:0">
-          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g.area}</div>
-          <div style="font-size:11px;color:var(--t2)">${g.chain} · ${g.city}</div>
+          <div style="font-size:14px;font-weight:700;margin-bottom:2px">${g.area}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.chain} · 📍 ${g.city}</div>
         </div>
-        ${sel?'<span style="color:var(--al);flex-shrink:0">✓</span>':''}
+        ${sel?'<span style="color:var(--al);flex-shrink:0;font-size:18px">✓</span>':''}
       </div>`;
     }).join('');
   }
@@ -3192,12 +3193,12 @@ function openGymPicker(){
   sheet.id='gym-picker';
   sheet.style.cssText='position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;justify-content:flex-end';
   sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.55);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
-<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:18px 16px calc(var(--sb)+18px);max-width:430px;margin:0 auto;width:100%;max-height:88vh;display:flex;flex-direction:column">
-  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 14px"></div>
-  <div style="font-size:17px;font-weight:800;margin-bottom:12px">Select Your Gym</div>
-  <input id="gps-input" type="search" placeholder="City, gym name or brand…" autocomplete="off"
-    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:14px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:12px;-webkit-appearance:none;flex-shrink:0">
-  <div id="gps-list" style="overflow-y:auto;flex:1"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+24px);max-width:430px;margin:0 auto;width:100%;max-height:88vh;display:flex;flex-direction:column">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:14px">Where do you train?</div>
+  <input id="gps-input" type="search" placeholder="🔍  Search city, gym or brand…" autocomplete="off"
+    style="width:100%;background:var(--s2);border:1.5px solid var(--bord);border-radius:13px;color:var(--txt);font-size:14px;padding:13px 16px;outline:none;font-family:inherit;margin-bottom:16px;-webkit-appearance:none;flex-shrink:0">
+  <div id="gps-list" style="overflow-y:auto;flex:1;padding-right:2px"></div>
 </div>`;
   document.body.appendChild(sheet);
 
