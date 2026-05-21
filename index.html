@@ -2717,12 +2717,12 @@ function editPR(id){
   const sheet=document.createElement('div');
   sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end;';
   sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
-<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:24px 24px calc(var(--sb)+26px);max-width:430px;margin:0 auto;width:100%">
-  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 20px"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+28px);max-width:430px;margin:0 auto;width:100%">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:4px">Edit PR</div>
-  <div style="font-size:13px;color:var(--t2);margin-bottom:20px">${ex?.n||id}</div>
+  <div style="font-size:13px;color:var(--t2);margin-bottom:22px">${ex?.n||id}</div>
 
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:6px">
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
     <div>
       <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Weight (${u})</div>
       <input id="pr-edit-w" type="number" value="${pr.w}" inputmode="decimal"
