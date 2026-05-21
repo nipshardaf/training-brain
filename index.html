@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.64';
+const APP_VERSION='1.65';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -2890,8 +2890,8 @@ function rDayRow(day,today){
   const w=day.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(day.type);
   const v=verdict(w.score);
-  // If a Strava ride happened on a non-ride plan day, show ride info instead
-  const showStravaOverride=stravaRide&&!isRide;
+  // If a Strava ride was recorded, always show the ride name and stats
+  const showStravaOverride=!!stravaRide;
   const distStr=stravaRide?+((stravaRide.distance||0)/1000).toFixed(1):0;
   const durStr=stravaRide?Math.round((stravaRide.moving_time||0)/60):0;
   return`<div class="day-row${isToday?' is-today':''}${(done||isPast)?' is-done':''}" onclick="openDay('${day.date}')">
