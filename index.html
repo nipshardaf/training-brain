@@ -789,7 +789,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.44';
+const APP_VERSION='1.45';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -1303,6 +1303,7 @@ function openGoalsSetup(isEdit=false,startStep=1){
     DB.set('user_profile',profile);
     if(!selActs.has('cycling'))DB.set('bike_pref','none');
     else if(DB.get('bike_pref','none')==='none')DB.set('bike_pref','weather');
+    syncUp();
     sheet.remove();
     render();
   }
@@ -1403,6 +1404,7 @@ function openGoalsSetup(isEdit=false,startStep=1){
       DB.set('user_profile',profile);
       if(!selActs.has('cycling'))DB.set('bike_pref','none');
       else if(DB.get('bike_pref','none')==='none')DB.set('bike_pref','weather');
+      syncUp();
       sheet.remove();
       render();
       if(!isEdit)setTimeout(()=>showToast('🚀 Plan ready! Tap Plan to see your week','var(--grn)'),300);
@@ -1675,6 +1677,7 @@ function openBikeSetup(){
     } else {
       DB.set('bike_event',null);
     }
+    syncUp();
     sheet.remove();
     render();
   };
@@ -2546,7 +2549,8 @@ async function doAuth(isNew){
 async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest)return;
   const data={};
-  const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key'];
+  const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+    'user_profile','strava_token','strava_activities','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
