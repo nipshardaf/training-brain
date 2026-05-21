@@ -655,8 +655,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.14';
+const APP_VERSION='1.15';
 const CHANGELOG=[
+  {v:'1.15',d:'Goals are now multi-select, gender question added to onboarding, skip option on every step'},
   {v:'1.14',d:'Strava shows a success toast after connecting + rest day swap now offers to rebalance your week'},
   {v:'1.13',d:'Goals onboarding — set your activities and goal; non-cyclists no longer get bike days in their plan'},
   {v:'1.12',d:'Coach Says fetches all 4 mood notes in one API call — switching energy is now instant with zero extra calls'},
@@ -740,12 +741,17 @@ async function getAICoach(energy,ct,dp){
   }
 
   const profile=DB.get('user_profile',null);
-  const goalDesc={muscle:'build muscle and strength',lose_weight:'lose weight and recomp',fitness:'general fitness',endurance:'endurance and event prep',performance:'sport performance'}[profile?.goal]||'general fitness';
+  const _goalMap={muscle:'build muscle and strength',lose_weight:'lose weight and recomp',fitness:'general fitness',endurance:'endurance and event prep',performance:'sport performance'};
+  const _goals=profile?.goals?.length?profile.goals:(profile?.goal?[profile.goal]:[]);
+  const goalDesc=_goals.length?_goals.map(g=>_goalMap[g]||g).join(' + '):'general fitness';
+  const genderNote=profile?.gender?`- Sex: ${profile.gender}`:'';
+  const levelNote=profile?.level?`- Experience: ${profile.level}`:'- Experience: intermediate';
   const prompt=`You are a no-nonsense personal trainer. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences max — specific, direct, no fluff. You have real performance data — use it. Reference exercises, weights, and completion rates by name.
 
 Athlete data:
 - Main goal: ${goalDesc}
-- Experience: ${profile?.level||'intermediate'}
+${levelNote}
+${genderNote}
 - Workout: ${dp?.type||ct}
 - Sessions completed this week: ${weekSessions}
 - Last ${dp?.type||ct}: ${lastDone}
@@ -907,17 +913,18 @@ Rules: 1–2 sentences per section. Under 200 words total. Be precise and direct
 function openGoalsSetup(isEdit=false){
   const cur=DB.get('user_profile',{});
   let step=1;
-  let selGoal=cur.goal||null;
+  let selGoals=new Set(cur.goals||( cur.goal?[cur.goal]:[] ));
   let selActs=new Set(cur.activities||[]);
   let selDays=cur.days||4;
   let selLevel=cur.level||'intermediate';
+  let selGender=cur.gender||null; // null = not answered (totally optional)
 
   const goals=[
-    {v:'muscle',  i:'💪', l:'Build muscle & strength', d:'Prioritise lifting, progressive overload'},
-    {v:'lose_weight',i:'🔥',l:'Lose weight',          d:'Cardio + weights, calorie-burning focus'},
-    {v:'fitness', i:'⚡', l:'General fitness',         d:'Stay active, balanced mix of everything'},
-    {v:'endurance',i:'🚴',l:'Endurance / event prep', d:'Build aerobic base, train for an event'},
-    {v:'performance',i:'🏆',l:'Sport performance',    d:'Power, speed, and sport-specific training'},
+    {v:'muscle',     i:'💪', l:'Build muscle & strength', d:'Prioritise lifting, progressive overload'},
+    {v:'lose_weight',i:'🔥', l:'Lose weight',             d:'Cardio + weights, calorie-burning focus'},
+    {v:'fitness',    i:'⚡', l:'General fitness',          d:'Stay active, balanced mix of everything'},
+    {v:'endurance',  i:'🚴', l:'Endurance / event prep',  d:'Build aerobic base, train for an event'},
+    {v:'performance',i:'🏆', l:'Sport performance',       d:'Power, speed, and sport-specific training'},
   ];
   const acts=[
     {v:'gym',    i:'🏋️', l:'Gym / Weights'},
@@ -925,15 +932,35 @@ function openGoalsSetup(isEdit=false){
     {v:'running',i:'🏃', l:'Running'},
     {v:'cardio', i:'🪜', l:'Other cardio'},
   ];
+  const genders=[
+    {v:'male',   i:'♂️', l:'Male'},
+    {v:'female', i:'♀️', l:'Female'},
+  ];
 
   const sheet=document.createElement('div');
   sheet.id='goals-sheet';
   sheet.style.cssText='position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;justify-content:flex-end';
 
-  function render(){
+  function gsSkipAll(){
+    // Save with whatever's selected so far (even empty) and mark onboarded
+    const goals_arr=[...selGoals];
+    const profile={
+      goals:goals_arr,goal:goals_arr[0]||null,
+      activities:[...selActs],days:selDays,level:selLevel,
+      gender:selGender,onboarded:true
+    };
+    DB.set('user_profile',profile);
+    if(!selActs.has('cycling'))DB.set('bike_pref','none');
+    else if(DB.get('bike_pref','none')==='none')DB.set('bike_pref','weather');
+    sheet.remove();
+    render();
+  }
+
+  function gsRender(){
     const s1=step===1,s2=step===2,s3=step===3;
+    const skipRow=`<div style="text-align:center;margin-top:14px"><button onclick="gsSkipAll()" style="background:none;border:none;color:var(--t2);font-size:13px;cursor:pointer;padding:4px 12px;text-decoration:underline">${isEdit?'Cancel':'Skip for now'}</button></div>`;
     sheet.innerHTML=`
-<div onclick="${isEdit?'this.parentElement.remove()':''}" style="flex:1;background:rgba(0,0,0,.${isEdit?'5':'7'})"></div>
+<div onclick="${isEdit?'gsSkipAll()':''}" style="flex:1;background:rgba(0,0,0,.${isEdit?'5':'7'})"></div>
 <div style="background:var(--s1);border-radius:22px 22px 0 0;padding:22px 18px calc(env(safe-area-inset-bottom,0px)+28px);max-height:92vh;overflow-y:auto">
   <div style="width:36px;height:4px;background:var(--bord);border-radius:2px;margin:0 auto 6px"></div>
   <div style="display:flex;gap:6px;justify-content:center;margin-bottom:20px">
@@ -941,24 +968,27 @@ function openGoalsSetup(isEdit=false){
   </div>
 
   ${s1?`
-  <div style="font-size:18px;font-weight:800;margin-bottom:4px">What's your main goal?</div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">This shapes how your plan is built and what your coach focuses on</div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">What are your goals?</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Pick as many as you like — your plan and coach will balance them</div>
   <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">
-    ${goals.map(g=>`<div onclick="gsGoal('${g.v}')" id="gsg-${g.v}" style="padding:13px 14px;border-radius:14px;border:2px solid ${selGoal===g.v?'var(--acc)':'var(--bord)'};background:${selGoal===g.v?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;display:flex;align-items:center;gap:12px">
+    ${goals.map(g=>{const on=selGoals.has(g.v);return`<div onclick="gsGoal('${g.v}')" style="padding:13px 14px;border-radius:14px;border:2px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;display:flex;align-items:center;gap:12px">
       <span style="font-size:22px">${g.i}</span>
-      <div><div style="font-size:14px;font-weight:700;color:${selGoal===g.v?'var(--al)':'var(--txt)'}">${g.l}</div><div style="font-size:11px;color:var(--t2);margin-top:1px">${g.d}</div></div>
-    </div>`).join('')}
+      <div style="flex:1"><div style="font-size:14px;font-weight:700;color:${on?'var(--al)':'var(--txt)'}">${g.l}</div><div style="font-size:11px;color:var(--t2);margin-top:1px">${g.d}</div></div>
+      ${on?'<span style="color:var(--al);font-size:18px;flex-shrink:0">✓</span>':''}
+    </div>`}).join('')}
   </div>
-  <button onclick="gsNext()" style="width:100%;background:${selGoal?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selGoal?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
+  <button onclick="gsNext()" style="width:100%;background:${selGoals.size>0?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selGoals.size>0?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
+  ${skipRow}
   `:''}
 
   ${s2?`
   <div style="font-size:18px;font-weight:800;margin-bottom:4px">What do you do?</div>
   <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Select all that apply — your plan only includes what you actually do</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:24px">
-    ${acts.map(a=>{const on=selActs.has(a.v);return`<div onclick="gsAct('${a.v}')" id="gsa-${a.v}" style="padding:14px;border-radius:14px;border:2px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;text-align:center">
+    ${acts.map(a=>{const on=selActs.has(a.v);return`<div onclick="gsAct('${a.v}')" style="padding:14px;border-radius:14px;border:2px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;text-align:center">
       <div style="font-size:26px;margin-bottom:4px">${a.i}</div>
       <div style="font-size:13px;font-weight:700;color:${on?'var(--al)':'var(--txt)'}">${a.l}</div>
+      ${on?'<div style="font-size:11px;color:var(--al);margin-top:2px">✓ selected</div>':''}
     </div>`}).join('')}
   </div>
   ${selActs.has('running')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🏃 Running tracking is coming soon — you can log runs manually for now</div>`:''}
@@ -967,11 +997,12 @@ function openGoalsSetup(isEdit=false){
     <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
     <button onclick="gsNext()" style="flex:2;background:${selActs.size>0?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selActs.size>0?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
   </div>
+  ${skipRow}
   `:''}
 
   ${s3?`
   <div style="font-size:18px;font-weight:800;margin-bottom:4px">Last few details</div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Helps calibrate intensity and volume for your schedule</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Helps calibrate intensity and volume — all optional, skip anytime</div>
 
   <div style="font-size:13px;font-weight:700;margin-bottom:10px">Training days per week</div>
   <div style="display:flex;gap:8px;margin-bottom:22px">
@@ -987,31 +1018,46 @@ function openGoalsSetup(isEdit=false){
     </div>`).join('')}
   </div>`:''}
 
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Biological sex <span style="font-size:11px;font-weight:500;color:var(--t2)">(optional — helps with recovery & intensity tips)</span></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:22px">
+    ${genders.map(g=>{const on=selGender===g.v;return`<div onclick="gsGender('${g.v}')" style="padding:11px;border-radius:12px;border:2px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;text-align:center">
+      <div style="font-size:20px;margin-bottom:3px">${g.i}</div>
+      <div style="font-size:12px;font-weight:700;color:${on?'var(--al)':'var(--txt)'}">${g.l}</div>
+    </div>`}).join('')}
+  </div>
+
   <div style="display:flex;gap:8px">
     <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
     <button onclick="gsSave()" style="flex:2;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:800;padding:15px;cursor:pointer">${isEdit?'Save changes':'Let\'s go 🚀'}</button>
   </div>
+  ${skipRow}
   `:''}
 </div>`;
 
-    window.gsGoal=v=>{selGoal=v;render();};
-    window.gsAct=v=>{selActs.has(v)?selActs.delete(v):selActs.add(v);render();};
-    window.gsDays=n=>{selDays=n;render();};
-    window.gsLevel=v=>{selLevel=v;render();};
-    window.gsNext=()=>{if(step===1&&!selGoal)return;if(step===2&&selActs.size===0)return;step++;render();};
-    window.gsBack=()=>{step--;render();};
+    window.gsGoal=v=>{selGoals.has(v)?selGoals.delete(v):selGoals.add(v);gsRender();};
+    window.gsAct=v=>{selActs.has(v)?selActs.delete(v):selActs.add(v);gsRender();};
+    window.gsDays=n=>{selDays=n;gsRender();};
+    window.gsLevel=v=>{selLevel=v;gsRender();};
+    window.gsGender=v=>{selGender=selGender===v?null:v;gsRender();};
+    window.gsSkipAll=gsSkipAll;
+    window.gsNext=()=>{step++;gsRender();};
+    window.gsBack=()=>{step--;gsRender();};
     window.gsSave=()=>{
-      const profile={goal:selGoal,activities:[...selActs],days:selDays,level:selLevel,onboarded:true};
+      const goals_arr=[...selGoals];
+      const profile={
+        goals:goals_arr,goal:goals_arr[0]||null,
+        activities:[...selActs],days:selDays,level:selLevel,
+        gender:selGender,onboarded:true
+      };
       DB.set('user_profile',profile);
-      // Apply activities to planner
       if(!selActs.has('cycling'))DB.set('bike_pref','none');
       else if(DB.get('bike_pref','none')==='none')DB.set('bike_pref','weather');
       sheet.remove();
       render();
-      if(!isEdit)setTimeout(()=>alert('Your plan is ready! Tap "Plan" to see your personalised week.'),300);
+      if(!isEdit)setTimeout(()=>showToast('🚀 Plan ready! Tap Plan to see your week','var(--grn)'),300);
     };
   }
-  render();
+  gsRender();
   document.body.appendChild(sheet);
 }
 
@@ -2786,8 +2832,10 @@ function rPRs(){
 
 <div class="sec-hdr">🎯 Your goals</div>
 ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
-  <div style="font-size:13px;font-weight:700;margin-bottom:6px">${goalLabels[profile.goal]||'Goal not set'}</div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🪜 Other cardio'})[a]).filter(Boolean).join(' · ')} · ${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+    ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
+  </div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🪜 Other cardio'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
   <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
 </div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
