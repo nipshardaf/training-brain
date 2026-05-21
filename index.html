@@ -667,8 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.31';
+const APP_VERSION='1.32';
 const CHANGELOG=[
+  {v:'1.32',d:'New users now see a 3-step welcome guide on the Plan tab instead of a blank "no plan" state',det:'When someone opens the app for the first time without a profile, the Plan tab now shows a friendly welcome screen with three numbered steps: set up your profile, generate your first plan, and start training. Step 1 is highlighted with a call-to-action button; steps 2 and 3 are greyed out until reached. Once a profile exists, the tab shows the standard "Ready to generate your plan" state with the preference tabs and Generate button.'},
   {v:'1.31',d:'Exercise "Coach" button renamed to "Tips" — more accurate label for hardcoded guidance',det:'The Coach button on each exercise opened a hardcoded tips panel with connection cues, setup notes, rep execution and what to avoid — not live AI coaching. Renamed to Tips with a 💡 icon to set the right expectation. The AI Coach section at the top of each workout day is the actual real-time coaching.'},
   {v:'1.30',d:'Traditional Chinese language support added — switch between English and 繁體中文 in Settings',det:'Added a full translations system with English and Traditional Chinese. Tap Settings → Language to switch. Translated: navigation tabs, screen subtitles, all section headers, workout type names, day names, energy selector, activity names, and key toasts. The language preference is saved locally and applied instantly on switch.'},
   {v:'1.29',d:'Sign-up hardened — orphaned accounts prevented, password length validated before attempting',det:'Fixed a gap where Firebase Auth could create an account but the database write immediately after could fail, leaving a user permanently locked out. Now if the database registration fails after auth creation, the auth account is automatically deleted so the user can try again cleanly. Also added an early password length check (minimum 6 chars) before any network call is made.'},
@@ -2437,12 +2438,50 @@ return plan?`
 </div>
 ${tabs}
 <button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🔄 Refresh with new weather':'🔄 Regenerate plan'}</button>
-`:`<div class="empty-wrap">
+`:(()=>{
+  const _np=DB.get('user_profile',null);
+  const _hasProfile=_np&&(_np.activities||[]).length>0;
+  if(!_hasProfile){
+    return`<div style="padding:8px 0">
+  <div style="text-align:center;padding:24px 0 20px">
+    <div style="font-size:40px;margin-bottom:10px">👋</div>
+    <div style="font-size:20px;font-weight:800;color:var(--t1);margin-bottom:6px">Welcome to Training Brain</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.6">Your AI-powered weekly training planner.<br>Three steps to get started:</div>
+  </div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+    <div style="background:rgba(124,58,237,.08);border:2px solid var(--acc);border-radius:16px;padding:16px 15px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--acc);color:#fff;font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">1</div>
+        <div style="font-size:14px;font-weight:800;color:var(--t1)">Set up your profile</div>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px;padding-left:36px">Tell the app what activities you do, how many days a week you train, your experience level, and your goals.</div>
+      <button onclick="openGoalsSetup(false)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">Set up my profile →</button>
+    </div>
+    <div style="background:var(--s1);border:1px solid var(--bord);border-radius:16px;padding:16px 15px;opacity:0.6">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--s2);border:2px solid var(--bord);color:var(--t2);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">2</div>
+        <div style="font-size:14px;font-weight:800;color:var(--t2)">Generate your first plan</div>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.6;padding-left:36px">The app builds a smart 7-day plan around your goals, your schedule, and live weather data.</div>
+    </div>
+    <div style="background:var(--s1);border:1px solid var(--bord);border-radius:16px;padding:16px 15px;opacity:0.6">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:26px;height:26px;border-radius:50%;background:var(--s2);border:2px solid var(--bord);color:var(--t2);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0">3</div>
+        <div style="font-size:14px;font-weight:800;color:var(--t2)">Start training</div>
+      </div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.6;padding-left:36px">Tap any day to see your exercises, log sets, track PRs, and get AI coaching tips.</div>
+    </div>
+  </div>
+</div>`;
+  }
+  return`<div class="empty-wrap">
   <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'📡'}</div>
-  <div class="empty-title">No plan yet</div>
+  <div class="empty-title">Ready to generate your plan</div>
+  <div style="font-size:13px;color:var(--t2);margin-bottom:16px;text-align:center;line-height:1.6">Choose your preference below then tap Generate — the app builds your full week in seconds.</div>
   ${tabs}
   <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'📡 Generate with weather forecast':p==='indoor'?'🏠 Generate (indoor rides)':'🏋️ Generate (gym only)'}</button>
-</div>`;})()}
+</div>`;
+})();})()}
 <div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
   <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
