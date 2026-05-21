@@ -3137,50 +3137,60 @@ function togHist(hi){
 
 function openGymPicker(){
   const gid=DB.get('gym_profile',null);
-  // Build city → brand → locations hierarchy
-  const tree={};
-  Object.entries(GYMS_BUILTIN).forEach(([k,g])=>{
-    if(!tree[g.city])tree[g.city]={};
-    if(!tree[g.city][g.chain])tree[g.city][g.chain]=[];
-    tree[g.city][g.chain].push([k,g]);
-  });
-  function dot(sel){
-    return`<div style="width:18px;height:18px;border-radius:50%;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'var(--acc)':'transparent'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all .15s">
-      ${sel?'<div style="width:7px;height:7px;border-radius:50%;background:#fff"></div>':''}
-    </div>`;
-  }
-  function gymRow(k,g){
-    const sel=gid===k;
-    return`<div class="gp-row" data-gym="${k}" data-search="${g.area.toLowerCase()} ${g.chain.toLowerCase()} ${g.city.toLowerCase()}"
-      onclick="DB.set('gym_profile','${k}');document.getElementById('gym-picker').remove();render()"
-      style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;border:1px solid ${sel?'var(--acc)':'transparent'};background:${sel?'rgba(124,58,237,.08)':'transparent'};margin-bottom:2px;cursor:pointer">
-      ${dot(sel)}
-      <div style="font-size:13px;font-weight:${sel?'700':'500'};color:${sel?'var(--txt)':'var(--t2)'}">${g.area}</div>
-    </div>`;
-  }
-  const listHtml=Object.entries(tree).map(([city,brands])=>`
-    <div class="gym-city-hdr" style="font-size:12px;font-weight:800;color:var(--txt);margin:16px 0 8px;padding-left:2px;display:flex;align-items:center;gap:6px">
-      <span style="background:var(--s3);border-radius:7px;padding:4px 10px">📍 ${city}</span>
-    </div>
-    ${Object.entries(brands).map(([brand,locs])=>`
-      <div style="margin-bottom:8px">
-        <div style="font-size:11px;font-weight:700;color:var(--al);padding:3px 10px;margin-bottom:3px">${brand}</div>
-        <div style="border-left:2px solid var(--bord);margin-left:10px;padding-left:6px">
-          ${locs.map(([k,g])=>gymRow(k,g)).join('')}
+  // Flat list of all gyms for filtering
+  const allGyms=Object.entries(GYMS_BUILTIN).map(([k,g])=>({k,g}));
+
+  function renderList(q){
+    const term=(q||'').trim().toLowerCase();
+    const list=document.getElementById('gps-list');
+    if(!list)return;
+    if(!term){
+      // No search — show prompt + Home Gym option only
+      const sel=gid==='home';
+      list.innerHTML=`
+        <div style="text-align:center;padding:32px 16px 20px;color:var(--t2)">
+          <div style="font-size:28px;margin-bottom:8px">🔍</div>
+          <div style="font-size:13px;font-weight:600">Start typing your city or gym name</div>
+          <div style="font-size:11px;margin-top:4px">e.g. "Newmarket", "GoodLife", "YMCA"</div>
         </div>
-      </div>`).join('')}`).join('')+
-  `<div style="font-size:12px;font-weight:800;color:var(--txt);margin:16px 0 8px;padding-left:2px">
-    <span style="background:var(--s3);border-radius:7px;padding:4px 10px">🏠 Home / Custom</span>
-  </div>
-  <div class="gp-row" data-gym="home" data-search="home gym custom"
-    onclick="DB.set('gym_profile','home');document.getElementById('gym-picker').remove();render()"
-    style="display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:11px;border:1px solid ${gid==='home'?'var(--acc)':'transparent'};background:${gid==='home'?'rgba(124,58,237,.08)':'transparent'};cursor:pointer">
-    ${dot(gid==='home')}
-    <div>
-      <div style="font-size:13px;font-weight:700;color:var(--txt)">Home Gym</div>
-      <div style="font-size:11px;color:var(--t2)">Choose your own equipment</div>
-    </div>
-  </div>`;
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--t2);margin-bottom:8px">Or choose</div>
+        <div onclick="DB.set('gym_profile','home');document.getElementById('gym-picker').remove();render()"
+          style="display:flex;align-items:center;gap:12px;padding:13px 14px;border-radius:13px;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'rgba(124,58,237,.08)':'var(--s2)'};cursor:pointer;margin-bottom:4px">
+          <span style="font-size:22px">🏠</span>
+          <div><div style="font-size:14px;font-weight:700">Home Gym</div><div style="font-size:11px;color:var(--t2)">Choose your own equipment</div></div>
+          ${sel?'<span style="color:var(--al);margin-left:auto">✓</span>':''}
+        </div>`;
+      return;
+    }
+    // Filter and show flat results
+    const results=allGyms.filter(({k,g})=>
+      g.area.toLowerCase().includes(term)||
+      g.chain.toLowerCase().includes(term)||
+      g.city.toLowerCase().includes(term)
+    );
+    if(!results.length){
+      list.innerHTML=`<div style="text-align:center;padding:40px 16px;color:var(--t2)">
+        <div style="font-size:28px;margin-bottom:8px">🤷</div>
+        <div style="font-size:13px;font-weight:600">No gyms found for "${q}"</div>
+        <div style="font-size:11px;margin-top:4px">Try a different city or brand name</div>
+      </div>`;
+      return;
+    }
+    list.innerHTML=`<div style="font-size:11px;color:var(--t2);margin-bottom:8px;font-weight:600">${results.length} result${results.length!==1?'s':''} for "${q}"</div>`+
+    results.map(({k,g})=>{
+      const sel=gid===k;
+      return`<div onclick="DB.set('gym_profile','${k}');document.getElementById('gym-picker').remove();render()"
+        style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:13px;border:2px solid ${sel?'var(--acc)':'var(--bord)'};background:${sel?'rgba(124,58,237,.08)':'var(--s2)'};cursor:pointer;margin-bottom:6px">
+        <span style="font-size:20px">🏋️</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${g.area}</div>
+          <div style="font-size:11px;color:var(--t2)">${g.chain} · ${g.city}</div>
+        </div>
+        ${sel?'<span style="color:var(--al);flex-shrink:0">✓</span>':''}
+      </div>`;
+    }).join('');
+  }
+
   const sheet=document.createElement('div');
   sheet.id='gym-picker';
   sheet.style.cssText='position:fixed;inset:0;z-index:500;display:flex;flex-direction:column;justify-content:flex-end';
@@ -3188,26 +3198,16 @@ function openGymPicker(){
 <div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:18px 16px calc(var(--sb)+18px);max-width:430px;margin:0 auto;width:100%;max-height:88vh;display:flex;flex-direction:column">
   <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 14px"></div>
   <div style="font-size:17px;font-weight:800;margin-bottom:12px">Select Your Gym</div>
-  <input id="gps-input" type="text" placeholder="🔍  Search by gym, brand or city…" oninput="filterGymPicker(this.value)"
-    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:14px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:4px;-webkit-appearance:none;flex-shrink:0">
-  <div id="gps-list" style="overflow-y:auto;flex:1;padding-top:2px">${listHtml}</div>
+  <input id="gps-input" type="search" placeholder="City, gym name or brand…" autocomplete="off"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:14px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:12px;-webkit-appearance:none;flex-shrink:0">
+  <div id="gps-list" style="overflow-y:auto;flex:1"></div>
 </div>`;
   document.body.appendChild(sheet);
-  setTimeout(()=>document.getElementById('gps-input')?.focus(),200);
-}
 
-function filterGymPicker(q){
-  const list=document.getElementById('gps-list');if(!list)return;
-  const term=q.trim().toLowerCase();
-  list.querySelectorAll('.gp-row').forEach(row=>{
-    const hay=row.dataset.search||row.textContent.toLowerCase();
-    row.style.display=(!term||hay.includes(term))?'':'none';
-  });
-  list.querySelectorAll('.gym-city-hdr').forEach(hdr=>{
-    let sib=hdr.nextElementSibling;let vis=false;
-    while(sib&&sib.classList?.contains('gp-row')){if(sib.style.display!=='none')vis=true;sib=sib.nextElementSibling;}
-    hdr.style.display=(vis||!term)?'':'none';
-  });
+  const inp=document.getElementById('gps-input');
+  renderList('');
+  inp.addEventListener('input',()=>renderList(inp.value));
+  setTimeout(()=>inp?.focus(),200);
 }
 
 function filterGyms(q){
