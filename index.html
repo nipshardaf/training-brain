@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.60';
+const APP_VERSION='1.61';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -2881,13 +2881,14 @@ ${tabs}
 function rDayRow(day,today){
   const date=new Date(day.date+'T12:00:00');
   const isToday=sameDay(date,today);
+  const isPast=!isToday&&day.date<fd(today);
   const log=DB.get(DB.lk(date),null);
   const done=log&&log.completed;
   const wi=WI[day.type]||WI.REST;
   const w=day.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(day.type);
   const v=verdict(w.score);
-  return`<div class="day-row${isToday?' is-today':''}${done?' is-done':''}" onclick="openDay('${day.date}')">
+  return`<div class="day-row${isToday?' is-today':''}${(done||isPast)?' is-done':''}" onclick="openDay('${day.date}')">
 <div class="dr-l">
   <div class="dr-day">${DNAMES[date.getDay()]} ${date.getDate()}</div>
   <div class="dr-type" style="color:${wi.c}">${wi.i} ${typeof wi.l==='function'?wi.l():wi.l}</div>
