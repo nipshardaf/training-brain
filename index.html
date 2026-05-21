@@ -667,8 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.21';
+const APP_VERSION='1.22';
 const CHANGELOG=[
+  {v:'1.22',d:'Smarter swap rebalancing — skipping a workout now offers to replace an upcoming session so no muscle group gets dropped'},
   {v:'1.21',d:'Your Activities card moved to My Training tab — activities and goals now live together'},
   {v:'1.20',d:'Progress and Settings split into separate tabs — cleaner navigation'},
   {v:'1.19',d:'App loads faster — service worker caching for instant return visits, Firebase scripts deferred'},
@@ -3252,35 +3253,45 @@ function doSwap(ds,newType){
   const plan=DB.get(pk,null);if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
   const oldType=plan[di].type;
-  const wasWorkout=['PUSH','PULL','LEGS','UPPER_PUMP','RIDE','RUN','CARDIO'].includes(oldType);
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const wasWorkout=[...gymTypes,'RIDE','RUN','CARDIO'].includes(oldType);
   const goingToRest=newType==='REST';
   plan[di].type=newType;
-  plan[di].exercises=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(newType)?genSession(newType):null;
+  plan[di].exercises=gymTypes.includes(newType)?genSession(newType):null;
   DB.set(pk,plan);
   closeSwap();syncUp();render();
-  // If swapping a workout TO rest, offer to move it to another rest day in the week
+  // If swapping a workout TO rest, offer rebalancing options for remaining days
   if(wasWorkout&&goingToRest){
-    const otherRest=plan.filter((d,i)=>i!==di&&d.type==='REST'&&d.date!==ds);
-    if(otherRest.length>0){
-      const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-      const options=otherRest.map(d=>{
-        const dt=new Date(d.date+'T12:00:00');
-        const dayName=days[dt.getDay()===0?6:dt.getDay()-1];
-        return`<button class="swap-opt" onclick="doRebalanceSwap('${d.date}','${oldType}');closeRebalance()">${dayName} <span>Move ${oldType} here</span></button>`;
-      }).join('');
-      const modal=document.createElement('div');
-      modal.className='swap-modal';
-      modal.id='rebalance-modal';
-      modal.innerHTML=`<div class="swap-ov" onclick="closeRebalance()"></div>
+    const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+    const dn=d=>{const dt=new Date(d.date+'T12:00:00');return days[dt.getDay()===0?6:dt.getDay()-1];};
+    const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',RIDE:'Ride',RUN:'Run',CARDIO:'Cardio'};
+    const missed=tl[oldType]||oldType;
+    // Only future days (after the swapped day) that aren't already done
+    const futureDays=plan.filter((d,i)=>i!==di&&d.date>ds);
+    // Option A: rest days → move missed workout there
+    const restOpts=futureDays.filter(d=>d.type==='REST');
+    // Option B: upcoming gym workouts of a DIFFERENT type → offer to replace with missed type
+    const replaceOpts=gymTypes.includes(oldType)?futureDays.filter(d=>gymTypes.includes(d.type)&&d.type!==oldType):[];
+    if(restOpts.length===0&&replaceOpts.length===0)return;
+    let options='';
+    restOpts.forEach(d=>{
+      options+=`<button class="swap-opt" onclick="doRebalanceSwap('${d.date}','${oldType}');closeRebalance()">${dn(d)} <span>Move ${missed} here · was rest day</span></button>`;
+    });
+    replaceOpts.forEach(d=>{
+      options+=`<button class="swap-opt" onclick="doRebalanceSwap('${d.date}','${oldType}');closeRebalance()">${dn(d)} — ${tl[d.type]||d.type} <span>Replace with ${missed}</span></button>`;
+    });
+    const modal=document.createElement('div');
+    modal.className='swap-modal';
+    modal.id='rebalance-modal';
+    modal.innerHTML=`<div class="swap-ov" onclick="closeRebalance()"></div>
 <div class="swap-sheet">
-  <div class="swap-title">Keep your weekly goal?</div>
-  <div style="font-size:13px;color:var(--t2);padding:0 4px 12px">You moved ${oldType} to rest. Want to slot it into another rest day so you hit your target this week?</div>
+  <div class="swap-title">You'll miss ${missed} this week</div>
+  <div style="font-size:13px;color:var(--t2);padding:0 4px 12px">Rescue it by moving to a free day, or swap out another workout so nothing gets dropped.</div>
   ${options}
-  <button class="swap-cancel" onclick="closeRebalance()">No thanks, keep as is</button>
+  <button class="swap-cancel" onclick="closeRebalance()">Skip ${missed} this week</button>
 </div>`;
-      document.body.appendChild(modal);
-      requestAnimationFrame(()=>modal.classList.add('on'));
-    }
+    document.body.appendChild(modal);
+    requestAnimationFrame(()=>modal.classList.add('on'));
   }
 }
 function closeRebalance(){const m=document.getElementById('rebalance-modal');if(m)m.remove();}
