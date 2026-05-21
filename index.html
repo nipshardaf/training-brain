@@ -716,11 +716,11 @@ const _EX_GROUP={
   core:'Core',abs:'Core',
 };
 const _GROUP_META={
-  Push:{i:'🔴',label:'Push',sub:'Chest · Shoulders · Triceps'},
-  Pull:{i:'🔵',label:'Pull',sub:'Back · Biceps · Rear Delts'},
-  Legs:{i:'🟡',label:'Legs',sub:'Quads · Hamstrings · Glutes'},
-  Core:{i:'🟢',label:'Core',sub:'Abs · Core'},
-  Other:{i:'⚪',label:'Other',sub:''},
+  Push:{color:'#ef4444',bg:'rgba(239,68,68,.12)',label:'Push',sub:'Chest · Shoulders · Triceps'},
+  Pull:{color:'#3b82f6',bg:'rgba(59,130,246,.12)',label:'Pull',sub:'Back · Biceps · Rear Delts'},
+  Legs:{color:'#f59e0b',bg:'rgba(245,158,11,.12)',label:'Legs',sub:'Quads · Hamstrings · Glutes'},
+  Core:{color:'#10b981',bg:'rgba(16,185,129,.12)',label:'Core',sub:'Abs · Core'},
+  Other:{color:'var(--t2)',bg:'var(--s2)',label:'Other',sub:''},
 };
 async function getAICoach(energy,ct,dp){
   // Guests get hardcoded responses — no API keys wasted
@@ -2348,7 +2348,7 @@ ${tabs}
 </div>`;})()}
 <div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
   <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
@@ -2853,7 +2853,7 @@ function rPRs(){
   const profile=DB.get('user_profile',null);
   const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Goals · PRs · History</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">My Training · PRs · History</div></div>
 
 <div class="sec-hdr">🎯 Your goals</div>
 ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
@@ -2899,11 +2899,8 @@ ${!prKeys.length
       return`<div style="margin-bottom:8px">
         <div class="prg-hdr" onclick="_prGroupOpen['${grp}']=!_prGroupOpen['${grp}'];render()">
           <div style="display:flex;align-items:center;gap:10px">
-            <span style="font-size:18px">${m.i}</span>
-            <div>
-              <div style="font-size:14px;font-weight:800">${m.label}</div>
-              <div style="font-size:11px;color:var(--t2)">${m.sub}</div>
-            </div>
+            <span style="background:${m.bg};color:${m.color};font-size:11px;font-weight:800;padding:4px 10px;border-radius:8px;letter-spacing:.3px">${m.label.toUpperCase()}</span>
+            <div style="font-size:11px;color:var(--t2)">${m.sub}</div>
           </div>
           <div style="display:flex;align-items:center;gap:8px">
             <span style="font-size:11px;font-weight:700;background:var(--s2);padding:3px 9px;border-radius:100px;color:var(--t2)">${ids.length}</span>
@@ -2952,7 +2949,7 @@ ${!history.length
 
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
   <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
@@ -3124,7 +3121,7 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
 
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
   <button class="bnav-btn on" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
