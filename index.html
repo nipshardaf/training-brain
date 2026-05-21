@@ -667,43 +667,44 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.26';
+const APP_VERSION='1.27';
 const CHANGELOG=[
-  {v:'1.26',d:'Tapping + Add on an activity now adds it instantly — no more going through the full setup screen'},
-  {v:'1.25',d:'Skipping a gym day automatically shifts the rest of the week — no prompts, no dropped muscle groups'},
-  {v:'1.23',d:'Activity chips now show an ⓘ info button explaining what each activity covers; renamed to Cardio & Classes'},
-  {v:'1.22',d:'Smarter swap rebalancing — skipping a workout now offers to replace an upcoming session so no muscle group gets dropped'},
-  {v:'1.21',d:'Your Activities card moved to My Training tab — activities and goals now live together'},
-  {v:'1.20',d:'Progress and Settings split into separate tabs — cleaner navigation'},
-  {v:'1.19',d:'App loads faster — service worker caching for instant return visits, Firebase scripts deferred'},
-  {v:'1.18',d:'Strava auto-syncs on app open if last sync was over 1 hour ago — no manual tap needed'},
-  {v:'1.17',d:'Edit PR sheet spacing fixed — better padding and breathing room around inputs'},
-  {v:'1.16',d:'Rest day swap now offers to move the workout to another rest day to keep your weekly goal on track'},
-  {v:'1.15',d:'Goals are now multi-select; biological sex question added to onboarding; skip option on every step'},
-  {v:'1.14',d:'Strava connect now shows a success toast with ride count; error toast if connection fails'},
-  {v:'1.13',d:'Goals onboarding — set your activities and goal; non-cyclists no longer get bike days in their plan'},
-  {v:'1.12',d:'Coach Says fetches all 4 mood notes in one API call — switching energy is now instant with zero extra calls'},
-  {v:'1.11',d:'Coach Says skips the API entirely for new users with no training data — shows a personalised explainer instead'},
-  {v:'1.10',d:'Exercise Coach tips hardcoded for all 61 exercises — instant, works offline, zero API usage'},
-  {v:'1.9', d:'AI fallback chain added — Gemini → Perplexity → OpenAI so coaching never goes down when quota is hit'},
-  {v:'1.8', d:'Login fixed to support real Gmail addresses; Forgot Password button added'},
-  {v:'1.7', d:'Edit PR modal overhauled — live lb↔kg conversion, current PR shown, better layout'},
-  {v:'1.6', d:'iOS PWA: install to home screen, correct app icon, social share preview image added'},
-  {v:'1.5', d:'Exercise Coach overhauled — 5-section muscle-activation guide: Connect, Setup, Rep, Avoid, Today'},
-  {v:'1.4', d:'Coach Says introduced — AI pre-workout note personalised to energy level and PR history via Gemini'},
-  {v:'1.3', d:'Energy selector (Fresh / Okay / Tired / Sore) added — exercises and coach adapt to how you feel'},
-  {v:'1.2', d:'Strava integration — sync real ride data, gym profile picker, home gym equipment list, bike setup wizard with event target and peak/taper periodisation'},
-  {v:'1.1', d:'Cycling planner added — weather-based outdoor/indoor day selection, Zone 2 and progressive ride blocks'},
-  {v:'1.0', d:'Exercise cards with GIF animations, collapse/expand, and muscle group banners added'},
-  {v:'0.9', d:'Google Sign-In via Firebase replaced GitHub Gist sync — no setup required, works across devices'},
-  {v:'0.8', d:'Guest preview mode added — try the app without signing up, with sample data throughout'},
-  {v:'0.7', d:'PIN lock screen added — app locks on close, auto-unlocks on PWA open if no PIN is set'},
-  {v:'0.6', d:'kg / lb toggle added — switch units in the log modal, all weights convert automatically'},
-  {v:'0.5', d:'Workout history added — last 90 days of sessions; export and import backup for your data'},
-  {v:'0.4', d:'Per-exercise swap added — change any exercise mid-workout when machines are busy'},
-  {v:'0.3', d:'Inline set logging added — track weight × reps for every set with a done checkbox'},
-  {v:'0.2', d:'Change Workout button added to day screen — swap to a different workout type on the fly'},
-  {v:'0.1', d:'Initial build — weather-driven weekly planner, Push / Pull / Legs splits, exercise library, and PR tracking'},
+  {v:'1.27',d:'Every changelog entry now has expandable detail explaining the logic and reasoning behind the change',det:'Tap any version row in What\'s New to expand a longer explanation of why the change was made, how the logic works, and any relevant context. Useful for understanding what the app actually does under the hood or checking if a specific behaviour was intentional.'},
+  {v:'1.26',d:'Tapping + Add on an activity now adds it instantly — no more going through the full setup screen',det:'Each activity chip has its own + Add button. Tapping it immediately writes that activity into your profile and confirms with a green toast. Previously all chips opened the full goals setup screen, which was unnecessary when you just wanted to add one thing. The ⓘ button still opens the info popup independently.'},
+  {v:'1.25',d:'Skipping a gym day automatically shifts the rest of the week — no prompts, no dropped muscle groups',det:'When you swap a gym day to Rest, the app finds all remaining gym days that week and cascades the missed workout type through them in order — Push moves to the next gym slot, that slot\'s type moves to the one after it, and so on. Cycling, running, cardio, and rest days are completely ignored by the cascade; only Push/Pull/Legs/Upper Pump sessions shift.'},
+  {v:'1.23',d:'Activity chips now show an ⓘ info button explaining what each activity covers; renamed to Cardio & Classes',det:'Added a small ⓘ button to the right of every activity chip (both active and the dashed + Add ones). Tapping it opens a sheet describing what that activity covers in the app and what syncs automatically. Also renamed the fourth activity from "Other Cardio" to "Cardio & Classes" to better reflect that it covers HIIT, rowing, elliptical, stair master, swimming, group fitness and similar.'},
+  {v:'1.22',d:'Smarter swap rebalancing — skipping a workout now offered to replace an upcoming session',det:'Intermediate version before the full auto-cascade in v1.25. When skipping a gym day, the app offered two options: move the workout to a free rest day, or replace a different upcoming gym session with the missed type. This was replaced in v1.25 with fully automatic cascading.'},
+  {v:'1.21',d:'Your Activities card moved to My Training tab — activities and goals now live together',det:'The Your Activities card was previously in Settings. Moved it to the My Training tab so all your training setup — goals, activities, PRs — lives in one place. Settings is now purely about configuration (AI coach, gym, Strava, account).'},
+  {v:'1.20',d:'Progress and Settings split into separate tabs — cleaner navigation',det:'The old Progress tab was getting crowded — it had PRs, history, goals, AND settings all mixed in. Split into My Training (PRs, history, goals, activities) and Settings (AI coach, gym profile, Strava, account, What\'s New). The bottom nav now has three tabs: Plan, My Training, Settings.'},
+  {v:'1.19',d:'App loads faster — service worker caching for instant return visits, Firebase scripts deferred',det:'Added a service worker (sw.js) that caches the app shell on first visit. Every return visit loads instantly from cache and updates in the background. Also moved Firebase scripts to deferred loading so they don\'t block the initial render — Firebase only initialises after the page is ready.'},
+  {v:'1.18',d:'Strava auto-syncs on app open if last sync was over 1 hour ago — no manual tap needed',det:'On every app open, checks the timestamp of the last Strava sync. If it was more than 60 minutes ago and you have a valid Strava token, a background sync runs automatically. Ride data is always fresh without you having to remember to tap Sync.'},
+  {v:'1.17',d:'Edit PR sheet spacing fixed — better padding and breathing room around inputs',det:'The edit PR bottom sheet had inputs sitting too close to the card edges. Fixed padding on all sides so the sheet is comfortable to use on small screens.'},
+  {v:'1.16',d:'Rest day swap now offers to move the workout to another rest day to keep your weekly goal on track',det:'Early version of the rebalancing logic. When swapping a workout to rest, the app checked for other rest days in the same week and offered to slot the workout there. Evolved into the full cascade in v1.22 and v1.25.'},
+  {v:'1.15',d:'Goals are now multi-select; biological sex question added to onboarding; skip option on every step',det:'Previously you could only pick one goal (e.g. Build muscle OR Lose weight). Now you can select multiple. Biological sex was added so the app can tailor coaching — only Male and Female options. Every onboarding step now has a Skip option so you\'re never forced to answer before you\'re ready.'},
+  {v:'1.14',d:'Strava connect now shows a success toast with ride count; error toast if connection fails',det:'After Strava OAuth completes, the app now shows a green toast confirming how many rides were synced, or a red toast with the error message if something went wrong. Previously there was no feedback at all.'},
+  {v:'1.13',d:'Goals onboarding — set your activities and goal; non-cyclists no longer get bike days in their plan',det:'Added the goals setup flow: pick your activities, training days per week, experience level, and goals. The weekly plan generator now checks your selected activities — if cycling isn\'t in your list, no ride days appear in your plan.'},
+  {v:'1.12',d:'Coach Says fetches all 4 mood notes in one API call — switching energy is now instant with zero extra calls',det:'Previously each energy level tap (Fresh/Okay/Tired/Sore) triggered a new API call. Now the app fetches all four mood variants in a single call on page load and caches them. Switching how you feel is instant and uses no extra quota.'},
+  {v:'1.11',d:'Coach Says skips the API entirely for new users with no training data — shows a personalised explainer instead',det:'New users with no logged workouts got a generic or broken AI response. Now the app detects no training history and shows a built-in welcome message instead of wasting an API call.'},
+  {v:'1.10',d:'Exercise Coach tips hardcoded for all 61 exercises — instant, works offline, zero API usage',det:'Exercise-specific coaching tips (connection cue, setup, rep execution, what to avoid, today\'s focus) are now baked into the app for all 61 exercises. No API call needed — tips appear instantly and work with no internet.'},
+  {v:'1.9', d:'AI fallback chain added — Gemini → Perplexity → OpenAI so coaching never goes down when quota is hit',det:'The Cloudflare Worker now tries three AI providers in order: Gemini 2.5 Flash first, then Perplexity Sonar if Gemini hits its quota (429), then GPT-4o-mini if Perplexity also fails. All responses are normalised to the same format so the app never knows which provider responded.'},
+  {v:'1.8', d:'Login fixed to support real Gmail addresses; Forgot Password button added',det:'Firebase email auth was rejecting some valid Gmail addresses due to a validation bug. Fixed. Also added a Forgot Password button that triggers Firebase\'s password reset email flow.'},
+  {v:'1.7', d:'Edit PR modal overhauled — live lb↔kg conversion, current PR shown, better layout',det:'The edit PR sheet now shows your current PR value at the top, supports live unit conversion as you type (switch between kg and lb), and has a cleaner layout with proper spacing.'},
+  {v:'1.6', d:'iOS PWA: install to home screen, correct app icon, social share preview image added',det:'Added the apple-touch-icon so the correct icon appears when you add the app to your iPhone home screen. Also added Open Graph meta tags so sharing the link shows a proper preview image instead of a blank card.'},
+  {v:'1.5', d:'Exercise Coach overhauled — 5-section muscle-activation guide: Connect, Setup, Rep, Avoid, Today',det:'Replaced the single-paragraph coach tip with a structured 5-section breakdown for every exercise: muscle connection cue, setup position, rep execution, common mistakes to avoid, and a session-specific focus based on your energy level and PRs.'},
+  {v:'1.4', d:'Coach Says introduced — AI pre-workout note personalised to energy level and PR history via Gemini',det:'Added the Coach Says card on the workout day screen. It sends your energy level, current PRs, and workout type to Gemini and returns a short personalised coaching note. Cached per session so it doesn\'t re-fetch on every render.'},
+  {v:'1.3', d:'Energy selector (Fresh / Okay / Tired / Sore) added — exercises and coach adapt to how you feel',det:'Added a 4-state energy selector at the top of each workout day. The AI coach adjusts its tone and advice based on your selection. Tired/Sore states also show a reduced-intensity note on the session.'},
+  {v:'1.2', d:'Strava integration — sync real ride data, gym profile picker, bike setup wizard',det:'Full Strava OAuth flow via Cloudflare Worker (keeps client secret off the device). Syncs recent rides and displays them in the plan. Added a gym picker with live search across a database of gyms, home gym equipment list, and a bike setup wizard with event target date and peak/taper periodisation.'},
+  {v:'1.1', d:'Cycling planner added — weather-based outdoor/indoor day selection, Zone 2 ride blocks',det:'Added cycling days to the weekly plan. The app fetches weather for your location and recommends outdoor vs indoor based on temperature and rain. Ride sessions are Zone 2 blocks with progressive duration scaling across the week.'},
+  {v:'1.0', d:'Exercise cards with GIF animations, collapse/expand, and muscle group banners added',det:'Added animated GIF demos to every exercise card. Cards collapse by default to keep the session view clean and expand on tap. Muscle group colour banners (Push/Pull/Legs) added to each session header.'},
+  {v:'0.9', d:'Google Sign-In via Firebase replaced GitHub Gist sync — no setup required, works across devices',det:'Replaced the original GitHub Gist sync (which required a personal access token) with Firebase Auth + Realtime Database. Sign in with Google in one tap, data syncs automatically across all your devices.'},
+  {v:'0.8', d:'Guest preview mode added — try the app without signing up, with sample data throughout',det:'Added a guest mode that pre-loads sample PRs, a sample weekly plan, and lets you explore all features without creating an account. Guest mode never makes API calls and never writes to the database.'},
+  {v:'0.7', d:'PIN lock screen added — app locks on close, auto-unlocks on PWA open if no PIN is set',det:'Added an optional 4-digit PIN that locks the app when you close it. If no PIN is set, the app opens straight to the plan. PIN is stored locally and never sent to any server.'},
+  {v:'0.6', d:'kg / lb toggle added — switch units in the log modal, all weights convert automatically',det:'Added a unit toggle in the set logging modal. Switching between kg and lb converts all displayed weights in real time. Preference is saved and applied globally across PRs and logging.'},
+  {v:'0.5', d:'Workout history added — last 90 days of sessions; export and import backup for your data',det:'Added a workout history view showing the last 90 days of logged sessions with exercise count and sets. Also added export (downloads a JSON backup) and import (restores from a JSON file) for full data portability.'},
+  {v:'0.4', d:'Per-exercise swap added — change any exercise mid-workout when machines are busy',det:'Added a Swap button on every exercise card during a session. Tapping it shows alternative exercises for the same muscle slot — so if the bench press is taken you can switch to dumbbell press without leaving the workout.'},
+  {v:'0.3', d:'Inline set logging added — track weight × reps for every set with a done checkbox',det:'Added set-by-set logging directly on the exercise cards. Each set has weight, reps, and a done checkbox. Completed sets are highlighted and counted. Data saves automatically to localStorage and Firebase on each tap.'},
+  {v:'0.2', d:'Change Workout button added to day screen — swap to a different workout type on the fly',det:'Added the Swap button to the day view. Lets you switch the day\'s workout type (e.g. Push → Pull) without going back to the weekly plan. The session regenerates immediately with the new type.'},
+  {v:'0.1', d:'Initial build — weather-driven weekly planner, Push / Pull / Legs splits, exercise library, and PR tracking',det:'First working version. Weekly plan generated based on number of training days. Push/Pull/Legs splits with a fixed exercise library. Weather fetched from Open-Meteo and used to pick outdoor vs indoor days. PR tracking with localStorage persistence.'},
 ];
 
 /* ── AI COACH ── */
@@ -3124,19 +3125,25 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
   <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
-  <div style="padding:13px 15px;cursor:pointer;display:flex;justify-content:space-between;align-items:center" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
-    <div>
-      <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
+  <div style="padding:13px 15px;cursor:pointer" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
+      </div>
+      <span id="changelog-arr" style="color:var(--t2);font-size:12px;margin-left:8px">▼</span>
     </div>
-    <span id="changelog-arr" style="color:var(--t2);font-size:12px">▼</span>
+    ${CHANGELOG[0].det?`<div style="font-size:12px;color:var(--t2);line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px solid var(--bord)">${CHANGELOG[0].det}</div>`:''}
   </div>
   <div id="changelog-list" style="display:none;border-top:1px solid var(--bord)">
-    ${CHANGELOG.slice(1).map(c=>`<div style="padding:10px 15px;border-bottom:1px solid var(--bord);display:flex;gap:10px;align-items:baseline">
-      <span style="font-size:10px;font-weight:800;color:var(--al);flex-shrink:0;min-width:30px">v${c.v}</span>
-      <span style="font-size:12px;color:var(--t2);line-height:1.5">${c.d}</span>
+    ${CHANGELOG.slice(1).map(c=>`<div onclick="const d=document.getElementById('cl-${c.v.replace('.','_')}');const a=document.getElementById('cla-${c.v.replace('.','_')}');if(d){const open=d.style.display==='block';d.style.display=open?'none':'block';a.textContent=open?'▾':'▴';}" style="padding:10px 15px;border-bottom:1px solid var(--bord);cursor:pointer">
+      <div style="display:flex;gap:10px;align-items:baseline">
+        <span style="font-size:10px;font-weight:800;color:var(--al);flex-shrink:0;min-width:30px">v${c.v}</span>
+        <span style="font-size:12px;color:var(--t2);line-height:1.5;flex:1">${c.d}</span>
+        ${c.det?`<span id="cla-${c.v.replace('.','_')}" style="font-size:10px;color:var(--t2);flex-shrink:0">▾</span>`:''}
+      </div>
+      ${c.det?`<div id="cl-${c.v.replace('.','_')}" style="display:none;font-size:12px;color:var(--t2);line-height:1.6;margin-top:8px;padding-top:8px;border-top:1px solid var(--bord)">${c.det}</div>`:''}
     </div>`).join('')}
-    <div style="padding:10px 15px;text-align:center;font-size:11px;color:var(--t2)">🏁 v0.1 — Initial build</div>
   </div>
 </div>
 
