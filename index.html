@@ -667,9 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.24';
+const APP_VERSION='1.25';
 const CHANGELOG=[
-  {v:'1.24',d:'Skipping a gym day now cascades the full week — each session shifts down so every muscle group is still covered'},
+  {v:'1.25',d:'Skipping a gym day automatically shifts the rest of the week — no prompts, no dropped muscle groups'},
   {v:'1.23',d:'Activity chips now show an ⓘ info button explaining what each activity covers; renamed to Cardio & Classes'},
   {v:'1.22',d:'Smarter swap rebalancing — skipping a workout now offers to replace an upcoming session so no muscle group gets dropped'},
   {v:'1.21',d:'Your Activities card moved to My Training tab — activities and goals now live together'},
@@ -3249,7 +3249,6 @@ function openSwap(ds){
   requestAnimationFrame(()=>modal.classList.add('on'));
 }
 function closeSwap(){const m=document.getElementById('swap-modal');if(m)m.remove();}
-let _pendingCascade=null;
 function doSwap(ds,newType){
   const mon=getMon(new Date(ds+'T12:00:00'));
   const pk=DB.pk(mon);
@@ -3261,58 +3260,26 @@ function doSwap(ds,newType){
   const goingToRest=newType==='REST';
   plan[di].type=newType;
   plan[di].exercises=gymTypes.includes(newType)?genSession(newType):null;
-  DB.set(pk,plan);
-  closeSwap();syncUp();render();
-  // Cascade shift: missed gym workout bubbles through remaining gym days
+  // Auto-cascade: missed gym workout ripples through remaining gym days immediately
   if(wasGym&&goingToRest){
-    const days=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-    const dn=d=>{const dt=new Date(d.date+'T12:00:00');return days[dt.getDay()===0?6:dt.getDay()-1];};
     const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump'};
-    // Future gym days in date order
     const futureGym=plan.filter((d,i)=>i!==di&&d.date>ds&&gymTypes.includes(d.type))
       .sort((a,b)=>a.date.localeCompare(b.date));
-    if(futureGym.length===0)return;
-    // Cascade: missed goes first, each subsequent gym day shifts one slot down
-    const cascadeTypes=[oldType,...futureGym.map(d=>d.type)];
-    const overflowType=cascadeTypes[futureGym.length];
-    const lastGymDate=futureGym[futureGym.length-1].date;
-    const restForOverflow=plan.find(d=>d.date>lastGymDate&&d.type==='REST');
-    const changes=futureGym.map((d,i)=>({date:d.date,type:cascadeTypes[i]}));
-    if(restForOverflow)changes.push({date:restForOverflow.date,type:overflowType});
-    _pendingCascade={pk,changes};
-    const br='border-bottom:1px solid var(--bord)';
-    let rows=futureGym.map((d,i)=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;${br}"><span style="font-size:13px;font-weight:600;color:var(--t2);min-width:36px">${dn(d)}</span><span style="font-size:13px"><span style="color:var(--t2)">${tl[d.type]}</span> → <span style="color:var(--al);font-weight:700">${tl[cascadeTypes[i]]}</span></span></div>`).join('');
-    if(restForOverflow)rows+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 4px;${br}"><span style="font-size:13px;font-weight:600;color:var(--t2);min-width:36px">${dn(restForOverflow)}</span><span style="font-size:13px"><span style="color:var(--t2)">Rest</span> → <span style="color:var(--al);font-weight:700">${tl[overflowType]}</span></span></div>`;
-    const warn=!restForOverflow?`<div style="font-size:12px;color:var(--amb);margin-top:10px;padding:0 4px">⚠️ ${tl[overflowType]} won't fit this week — no free day left</div>`:'';
-    const modal=document.createElement('div');
-    modal.className='swap-modal';modal.id='rebalance-modal';
-    modal.innerHTML=`<div class="swap-ov" onclick="closeRebalance()"></div>
-<div class="swap-sheet">
-  <div class="swap-title">Shift week so nothing gets dropped?</div>
-  <div style="font-size:13px;color:var(--t2);padding:0 4px 12px">${tl[oldType]} cascades into your remaining sessions — every muscle group still covered:</div>
-  ${rows}${warn}
-  <div style="display:flex;gap:8px;margin-top:16px">
-    <button onclick="closeRebalance()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t2);font-size:13px;font-weight:700;padding:12px;cursor:pointer">Skip ${tl[oldType]}</button>
-    <button onclick="applyCascadeRebalance()" style="flex:2;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:13px;font-weight:700;padding:12px;cursor:pointer">Apply shift ✓</button>
-  </div>
-</div>`;
-    document.body.appendChild(modal);
-    requestAnimationFrame(()=>modal.classList.add('on'));
+    if(futureGym.length>0){
+      const cascadeTypes=[oldType,...futureGym.map(d=>d.type)];
+      futureGym.forEach((d,i)=>{
+        const pi=plan.findIndex(p=>p.date===d.date);
+        if(pi!==-1){plan[pi].type=cascadeTypes[i];plan[pi].exercises=genSession(cascadeTypes[i]);}
+      });
+      const shifted=futureGym.map((d,i)=>tl[cascadeTypes[i]]).join(' · ');
+      DB.set(pk,plan);
+      closeSwap();syncUp();render();
+      showToast(`✅ Week shifted: ${shifted}`,'var(--grn)');
+      return;
+    }
   }
-}
-function closeRebalance(){_pendingCascade=null;const m=document.getElementById('rebalance-modal');if(m)m.remove();}
-function applyCascadeRebalance(){
-  if(!_pendingCascade)return;
-  const{pk,changes}=_pendingCascade;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
-  const plan=DB.get(pk,null);if(!plan)return;
-  changes.forEach(({date,type})=>{
-    const i=plan.findIndex(d=>d.date===date);
-    if(i!==-1){plan[i].type=type;plan[i].exercises=gymTypes.includes(type)?genSession(type):null;}
-  });
-  DB.set(pk,plan);_pendingCascade=null;
-  closeRebalance();syncUp();render();
-  showToast('✅ Week shifted — every muscle group covered','var(--grn)');
+  DB.set(pk,plan);
+  closeSwap();syncUp();render();
 }
 function showActInfo(k){
   const info={
