@@ -279,6 +279,19 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 /* utils */
 .mt12{margin-top:12px}
 .mt16{margin-top:16px}
+
+/* ── Chinese language — tighter sizing to prevent overcrowding ── */
+html.lang-zh .btn{font-size:14px;padding-left:14px;padding-right:14px}
+html.lang-zh .bnav-btn span:last-child{font-size:9px}
+html.lang-zh .dr-type{font-size:14px}
+html.lang-zh .dr-day{letter-spacing:.2px}
+html.lang-zh .ex-name{font-size:15px;line-height:1.35}
+html.lang-zh .ex-num-n{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;line-height:1.3}
+html.lang-zh .ex-collapse-name{white-space:normal;line-height:1.3}
+html.lang-zh .swap-btn,html.lang-zh .ex-busy-btn{font-size:10px;padding-left:7px;padding-right:7px}
+html.lang-zh .bdg{font-size:10px}
+html.lang-zh .empty-title{font-size:19px}
+html.lang-zh .hero-name{font-size:18px}
 </style>
 </head>
 <body>
@@ -672,8 +685,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.36';
+const APP_VERSION='1.37';
 const CHANGELOG=[
+  {v:'1.37',d:'Chinese language polish — history screen translated, overcrowding fixes, layout class added',det:'The Workout History screen is now fully translated (Completed, exercise/set counts, set rows). Added a lang-zh class on the page root when Traditional Chinese is active, with CSS rules that slightly reduce font sizes, allow exercise card titles to wrap to two lines instead of truncating, tighten button padding, and shrink the bottom-nav labels so nothing overflows. The My Training tab label was shortened to 訓練. Language preference now syncs to the cloud, so it restores correctly after signing in on a new device. Exercise-name and coach-message translation are still to come.'},
   {v:'1.36',d:'Weekly AI Review added — a Sunday training analysis covering 8 weeks of data',det:'Every Sunday a card appears on the Plan tab offering a weekly review. Tapping Generate sends your last 8 weeks of gym sessions, ride data (Strava or manually logged), all-time PRs and the current plan to the AI coach. It returns four sections: an honest performance summary, progressive overload targets for next week, recovery flags, and one focus goal. The result is cached per week and synced to the cloud, so reopening the app the same Sunday never re-calls the API. An optional "Email me this summary" button delivers it via EmailJS once you add your email and EmailJS keys in Settings. Fully bilingual.'},
   {v:'1.35',d:'Strava sync now pulls 8 weeks of ride history (was 30 days) to power the upcoming weekly AI review',det:'The Strava activity sync window was extended from 30 to 56 days, and the page size raised to 100 activities, so the app always holds a full 8 weeks of ride data — distance, duration, average heart rate and average power are all included in each activity. This history feeds the weekly AI review. Existing behaviour (per-day ride matching, plan auto-adapt) is unaffected; it simply has more data to work with.'},
   {v:'1.34',d:'Manual ride logging added for cyclists who haven\'t connected Strava',det:'On any ride day, users without a Strava connection now see a "Log this ride" button. Tapping it opens a form to record duration, distance, average heart rate, perceived effort (RPE) and free-text notes. Logged rides are saved alongside gym sessions, sync to the cloud automatically, and display in a summary card that can be edited later. This ride data also feeds the upcoming weekly AI review. Strava-connected users are unaffected — their rides still pull in automatically. Fully bilingual (English / 繁體中文).'},
@@ -785,10 +799,12 @@ const TRANS={
     wr_your_email:'Your email',
     wr_emailjs_hdr:'EmailJS setup (for email delivery)',
     wr_emailjs_help:'Create a free account at emailjs.com, add an email service and a template containing {{to_email}} and {{summary}} fields, then paste the three IDs below.',
+    h_completed:'Completed',h_exercises:'exercises',h_sets_logged:'sets logged',h_reps:'reps',
+    h_no_workouts:'No workouts logged yet',
     lang_en:'English',lang_zh:'繁體中文',
   },
   zh:{
-    nav_plan:'計劃',nav_training:'我的訓練',nav_settings:'設定',
+    nav_plan:'計劃',nav_training:'訓練',nav_settings:'設定',
     sub_week:'天氣驅動 · 動態訓練 · 追蹤個人紀錄',
     sub_training:'我的訓練 · 個人紀錄 · 歷史',
     sub_settings:'設定 · 連接服務',
@@ -849,6 +865,8 @@ const TRANS={
     wr_your_email:'你的電郵',
     wr_emailjs_hdr:'EmailJS 設定（用於電郵寄送）',
     wr_emailjs_help:'在 emailjs.com 建立免費帳戶，新增電郵服務和包含 {{to_email}} 與 {{summary}} 欄位的範本，然後在下方貼上三個 ID。',
+    h_completed:'已完成',h_exercises:'項練習',h_sets_logged:'組已記錄',h_reps:'下',
+    h_no_workouts:'尚未記錄任何訓練',
     lang_en:'English',lang_zh:'繁體中文',
   }
 };
@@ -2454,6 +2472,7 @@ function openDay(dateStr){
 /* ── RENDER ROOT ── */
 function render(){
   const el=document.getElementById('app');
+  document.documentElement.classList.toggle('lang-zh',DB.get('lang','en')==='zh');
   if(!S.authed){el.innerHTML=rLock();return;}
   // Show goals onboarding for new users (not guest — they get a simpler experience)
   if(!S.guest&&!DB.get('user_profile',null)&&!document.getElementById('goals-sheet')){
@@ -3412,20 +3431,21 @@ ${!prKeys.length
 
 <div class="sec-hdr">${_T('history')}</div>
 ${!history.length
-  ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">No workouts logged yet</div>`
+  ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">${_T('h_no_workouts')}</div>`
   :history.map((log,hi)=>{
     const wi=WI[log.type]||WI.REST;
     const exsDone=log.exercises.filter(e=>e.sets.some(s=>s.done));
     const totalSets=log.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0);
+    const _zh=DB.get('lang','en')==='zh';
     return`<div class="hist-row" onclick="togHist(${hi})">
-  <div class="hist-date">${log.date}${log.completed?' · ✓ Completed':''}</div>
+  <div class="hist-date">${log.date}${log.completed?' · ✓ '+_T('h_completed'):''}</div>
   <div class="hist-type" style="color:${wi.c}">${wi.i} ${typeof wi.l==='function'?wi.l():wi.l}</div>
-  <div class="hist-exs">${exsDone.length} exercises · ${totalSets} sets logged</div>
+  <div class="hist-exs">${exsDone.length} ${_T('h_exercises')} · ${totalSets} ${_T('h_sets_logged')}</div>
   <div class="hist-detail" id="hd${hi}">
     ${exsDone.map(le=>{
       const ex=EX[le.id];if(!ex)return'';
       const doneSets=le.sets.filter(s=>s.done);
-      return`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:3px">${ex.n}</div>${doneSets.map((s,i)=>`<div class="hist-set">Set ${i+1}: ${s.w?s.w+unit():'—'} × ${s.r||'—'} reps</div>`).join('')}</div>`;
+      return`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:3px">${ex.n}</div>${doneSets.map((s,i)=>`<div class="hist-set">${_zh?'第 '+(i+1)+' 組':'Set '+(i+1)}: ${s.w?s.w+unit():'—'} × ${s.r||'—'} ${_T('h_reps')}</div>`).join('')}</div>`;
     }).join('')}
   </div>
 </div>`;}).join('')}
