@@ -789,8 +789,9 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.41';
+const APP_VERSION='1.42';
 const CHANGELOG=[
+  {v:'1.42',d:'Import now accepts CSV files — restore workouts, rides and PRs from a CSV export',det:'The Restore button previously only accepted the JSON backup. It now also reads the CSV produced by Export CSV: it parses workout sets, rides and personal records back into the app, matching exercise names in English or Chinese. CSV import merges into your existing data rather than wiping it, and preserves any fields the CSV does not carry. Rows whose exercise name is not recognised are skipped and reported. The JSON backup is still the recommended full backup (it also carries your plan and settings); CSV import is handy for restoring training records specifically.'},
   {v:'1.41',d:'Performance — weather cached, AI coach recovers from failures, exercise images cached offline',det:'Three optimisations. (1) The AI coach previously marked its daily batch as "done" before the network call returned — so a single failed request disabled AI coaching for the rest of the day. It now only marks the batch done after a successful response, with an in-memory guard against duplicate concurrent calls. (2) Weather is cached for 3 hours per week and location, so regenerating your plan no longer re-hits the weather API every time. (3) The service worker now caches exercise demo images from the free-exercise-db CDN — they load instantly on repeat views and work fully offline (previously cross-origin "opaque" responses were skipped by the cache).'},
   {v:'1.40',d:'CSV export, manual ride logging fix, cleaner language labels, and a Feedback section preview',det:'Export data now offers a readable CSV (open it in Excel or Sheets to see every workout set, ride and PR as a plain table) alongside the existing JSON backup used for restore. Manual ride logging now appears on any ride day that Strava did not auto-capture — previously it was hidden entirely whenever a Strava account was connected, so connected users could not log a ride Strava missed. The language switcher no longer shows the stray "GB" / "HK" letters (unsupported flag emoji) before English / 繁體中文. A Feedback & Wishlist section was added to Settings as a coming-soon preview.'},
   {v:'1.39',d:'Chinese translation expanded — all 61 exercise names, form cues, coach messages, and the workout day screen',det:'All 61 exercises now show proper Traditional Chinese names (硬舉, 深蹲, 臥推, 引體向上, etc.) everywhere they appear — day screen, log, history, PRs and swap sheets. The 💡 form-cue tip on every exercise card is now translated. The "Coach says" pre-workout messages are fully translated for every energy level. The workout day screen UI is now translated too: the Exercises heading, Animate / Tutorial / collapse buttons, Busy? and Log sets buttons, set/rep badges, the back and swap buttons, and the log-workout button.'},
@@ -4250,22 +4251,110 @@ function exportCSV(){
 
 function importData(){
   const input=document.createElement('input');
-  input.type='file';input.accept='.json';
+  input.type='file';input.accept='.json,.csv';
   input.onchange=e=>{
     const file=e.target.files[0];if(!file)return;
+    const isCSV=/\.csv$/i.test(file.name);
     const reader=new FileReader();
     reader.onload=ev=>{
+      if(isCSV){importCSV(ev.target.result);return;}
       try{
         const data=JSON.parse(ev.target.result);
         let count=0;
         Object.entries(data).forEach(([k,v])=>{if(!k.startsWith('_')){DB.set(k,v);count++;}});
+        syncUp();
         alert(`✅ Restored ${count} records successfully!`);
         render();
-      }catch{alert('❌ Could not read file — make sure it\'s a Training Brain backup.');}
+      }catch{alert('❌ Could not read file — make sure it\'s a Training Brain backup (.json) or export (.csv).');}
     };
     reader.readAsText(file);
   };
   input.click();
+}
+
+/* ── CSV PARSING + IMPORT ── */
+function parseCSV(text){
+  const rows=[];let row=[],field='',inQ=false;
+  text=String(text).replace(/^﻿/,'');
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(inQ){
+      if(c==='"'){if(text[i+1]==='"'){field+='"';i++;}else inQ=false;}
+      else field+=c;
+    }else{
+      if(c==='"')inQ=true;
+      else if(c===','){row.push(field);field='';}
+      else if(c==='\n'){row.push(field);rows.push(row);row=[];field='';}
+      else if(c==='\r'){/* skip */}
+      else field+=c;
+    }
+  }
+  if(field!==''||row.length){row.push(field);rows.push(row);}
+  return rows;
+}
+
+function importCSV(text){
+  let rows;
+  try{rows=parseCSV(text);}catch{rows=null;}
+  if(!rows||rows.length<2){alert('❌ Could not read CSV — it looks empty or malformed.');return;}
+  // Build exercise name → id lookup (English, Chinese, and current display names)
+  const nameToId={};
+  Object.keys(EX).forEach(id=>{
+    [EX_EN_NAMES[id],(typeof EX_ZH!=='undefined'?EX_ZH[id]:null),EX[id].n].forEach(nm=>{
+      if(nm)nameToId[String(nm).trim().toLowerCase()]=id;
+    });
+  });
+  const findId=nm=>nameToId[String(nm||'').trim().toLowerCase()]||null;
+  const logs={}; // date → {exMap:{}, ride:null}
+  const prs=DB.get('prs',{});
+  let workoutRows=0,rideRows=0,prRows=0,skipped=0;
+  rows.slice(1).forEach(r=>{
+    if(!r||r.length<3)return;
+    const date=(r[0]||'').trim(),type=(r[1]||'').trim(),exercise=r[2]||'',weight=(r[4]||'').trim(),reps=(r[5]||'').trim(),notes=r[6]||'';
+    if(!date)return;
+    if(type==='Workout'){
+      const id=findId(exercise);
+      if(!id){skipped++;return;}
+      logs[date]=logs[date]||{exMap:{},ride:null};
+      logs[date].exMap[id]=logs[date].exMap[id]||{id,sets:[]};
+      logs[date].exMap[id].sets.push({w:weight,r:reps,done:true});
+      workoutRows++;
+    }else if(type==='Ride'){
+      const dist=parseFloat(weight),dur=parseFloat(reps);
+      let hr=null,rpe=null,note='';
+      String(notes).split(' · ').forEach(tok=>{
+        tok=tok.trim();if(!tok)return;
+        if(/bpm$/i.test(tok))hr=parseFloat(tok);
+        else if(/^rpe/i.test(tok))rpe=parseFloat(tok.replace(/rpe/i,''));
+        else note=note?note+' · '+tok:tok;
+      });
+      logs[date]=logs[date]||{exMap:{},ride:null};
+      logs[date].ride={dur:isNaN(dur)?null:dur,dist:isNaN(dist)?null:dist,hr:isNaN(hr)?null:hr,rpe:isNaN(rpe)?null:rpe,notes:note,logged:new Date().toISOString()};
+      rideRows++;
+    }else if(type==='Personal Record'){
+      const id=findId(exercise);
+      if(!id){skipped++;return;}
+      prs[id]={w:parseFloat(weight)||weight,r:isNaN(+reps)?reps:+reps,date};
+      prRows++;
+    }
+  });
+  if(!workoutRows&&!rideRows&&!prRows){
+    alert('❌ No recognisable rows found. Make sure this is a Training Brain CSV export.');
+    return;
+  }
+  // Merge into storage — preserve any field the CSV does not carry
+  Object.keys(logs).forEach(date=>{
+    const k='log_'+date;
+    const existing=DB.get(k,null)||{};
+    const exList=Object.values(logs[date].exMap);
+    if(exList.length)existing.exercises=exList;
+    if(logs[date].ride)existing.ride=logs[date].ride;
+    DB.set(k,existing);
+  });
+  DB.set('prs',prs);
+  syncUp();
+  render();
+  alert(`✅ Imported ${workoutRows} workout sets, ${rideRows} rides and ${prRows} PRs across ${Object.keys(logs).length} day(s).`+(skipped?`\n⚠️ ${skipped} row(s) skipped — exercise name not recognised.`:''));
 }
 
 /* ── GENERATE PLAN ── */
