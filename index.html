@@ -389,6 +389,9 @@ Object.keys(EX).forEach(id=>{EX_EN_NAMES[id]=EX[id].n;});
 function applyExLang(){
   const zh=DB.get('lang','en')==='zh';
   Object.keys(EX).forEach(id=>{EX[id].n=(zh&&EX_ZH[id])?EX_ZH[id]:EX_EN_NAMES[id];});
+  if(typeof EX_CUES_EN!=='undefined'){
+    Object.keys(EX_CUES_EN).forEach(id=>{EX_CUES[id]=(zh&&EX_CUES_ZH[id])?EX_CUES_ZH[id]:EX_CUES_EN[id];});
+  }
 }
 
 /* ── SESSION SLOT TEMPLATES ── */
@@ -503,6 +506,69 @@ const EX_CUES={
   cable_crunch:'Round your spine — this is not a hip flexor exercise. Crunch down, feel abs shorten.',
   mach_crunch:'Slow and deliberate. Hold at max contraction. Breathe out on the way down.',
 };
+
+/* ── EXERCISE CUES — Traditional Chinese ── */
+const EX_CUES_ZH={
+  bb_bench:'收緊肩胛骨，雙腳踏穩。沿微弧線推起 — 手肘約 75°，勿外展。',
+  db_bench:'底部感受雙側胸肌伸展。下降受控，向上爆發，頂部夾緊。',
+  incline_bb:'30–45° 上斜。挺胸，腳跟發力，專注上胸伸展。',
+  incline_db:'底部讓手肘向外下沉。向上向內推 — 感受上胸發力。',
+  cable_fly:'全程保持手肘微屈。頂部如環抱大樹般夾緊胸肌。',
+  pec_deck:'坐直，以手肘帶動。打開時充分伸展，接觸時用力夾緊。',
+  ohp:'核心繃緊，夾緊臀部。上推時槓鈴貼近臉部，過頭保持垂直。',
+  db_spress:'脊椎中立，身體微前傾。向上推過頭 — 勿完全鎖死。',
+  arnold:'掌心由底部朝向自己、轉至頂部朝前，全程完整旋轉。',
+  lat_raise:'以小指帶動，舉至肩高即止，緩慢受控地下放。',
+  cable_lat:'身體微微側傾，沿大弧線舉至肩高，完整活動範圍。',
+  tri_push:'手肘緊貼體側固定不動，伸直時用力收緊三頭肌。',
+  skull:'緩慢下放至額頭，手肘保持垂直勿外展，向上收緊。',
+  tri_oh:'繃緊核心，底部充分伸展，再爆發向上推。',
+  dips:'前傾練胸，直立練三頭。下降低於平行以求完整範圍。',
+  pullup:'底部完全懸垂伸直，上拉時將手肘往口袋方向下壓。',
+  lat_pull:'身體微後傾，挺胸。手肘向下向後 — 想著「胸口觸槓」。',
+  bb_row:'髖部鉸鏈，槓鈴貼身。拉向下胸，用力夾緊背闊肌，受控下放。',
+  tbar_row:'胸口貼墊。用手肘而非手掌拉動，頂部用力夾緊。',
+  db_row:'撐於長椅上。手肘筆直向後拉向髖部，而非向上至肩。',
+  cable_row:'坐直，拉向肚臍，夾緊肩胛骨，停留 1 秒。',
+  face_pull:'繩索置於臉部高度。拉向額頭，手肘高而寬，最後外旋。',
+  rear_fly:'胸口貼椅，手肘微屈。雙臂舉至肩高 — 感受後三角肌。',
+  bb_curl:'手肘緊貼體側。底部完全伸直，頂部用力收緊。',
+  db_curl:'彎舉時旋後（轉動）手腕。手肘不動，只有前臂活動。',
+  hammer:'全程中立握法，鍛鍊肱肌厚度。動作嚴謹，勿借力擺動。',
+  preacher:'全程胸口貼墊。緩慢下放至完全伸直 — 成長在於伸展。',
+  incline_curl:'雙臂垂於身後 — 伸展二頭肌長頭。全程保持手肘向後。',
+  cable_curl:'持續張力。頂部手肘保持向前以維持峰值收縮。',
+  bb_squat:'深吸氣繃緊。膝蓋向外推，保持挺胸，蹲至平行或更低。',
+  front_squat:'手肘抬高，槓鈴置於前三角肌。軀幹直立是關鍵，膝蓋外推。',
+  leg_press:'雙腳與髖同寬置於板中央。勿鎖膝，以腳跟而非腳尖發力。',
+  bss:'後腳置於椅上，前膝對齊腳掌。後膝下降貼近地面，保持挺直。',
+  lunge:'大步距。前膝對齊腳踝。以前腳跟蹬地返回。',
+  step_up:'以前腳的腳跟發力，勿用後腳蹬地，受控下降。',
+  goblet_squat:'重量置於胸前，手肘對齊膝蓋。有助建立直立軀幹。',
+  hack_squat:'挺胸，腳跟發力。完整範圍 — 切勿做半程。',
+  leg_ext:'坐直，頂部用力收緊股四頭肌。緩慢下放，控制重量。',
+  adductor_mach:'緩慢受控。打開時感受大腿內側伸展，內收時夾緊。',
+  abductor_mach:'受控向外推，最大範圍處稍停。有助髖部穩定。',
+  rdl:'膝蓋微屈，槓鈴貼腿。髖部後鉸至感受膕繩肌伸展，再推髖向前。',
+  deadlift:'槓鈴位於腳掌中央，脊椎中立。想著「把地面推開」而非「拉」。',
+  hip_thrust:'腳跟發力，頂部夾緊臀部。收下巴 — 勿過度伸展下背。',
+  glute_bridge:'雙腳踏平，推髖向上。頂部用力夾緊臀部，頸部中立。',
+  glute_kick:'髖部保持方正，筆直向後踢 — 全靠臀部，而非下背。',
+  nordic_curl:'固定雙腳，盡量緩慢下降。離心階段才是重點，用手撐起返回。',
+  leg_curl:'勿讓髖部抬起。完全捲起，緩慢下放，感受膕繩肌伸展。',
+  seated_leg_curl:'坐直，身體微前傾。底部完全伸直，頂部夾緊。',
+  calf_raise:'完整活動範圍。底部伸展處稍停，頂部用力收緊。',
+  seated_calf:'針對比目魚肌。緩慢、完整範圍 — 感受底部伸展。',
+  single_calf:'扶穩保持平衡。完整活動範圍，每下感受底部伸展。',
+  plank:'脊椎中立 — 髖部勿下沉。全身繃緊：核心、臀部、股四頭肌。',
+  hang_raise:'由完全懸垂開始。受控舉腿勿擺盪，緩慢下放。',
+  ab_wheel:'全程繃緊核心。完全伸展時勿讓髖部下沉。',
+  cable_crunch:'弓起脊椎 — 這不是髖屈肌動作。向下捲起，感受腹肌縮短。',
+  mach_crunch:'緩慢而刻意。最大收縮處停留，向下時呼氣。',
+};
+// Snapshot original English cues so the language can switch both ways
+const EX_CUES_EN={};
+Object.keys(EX_CUES).forEach(id=>{EX_CUES_EN[id]=EX_CUES[id];});
 
 /* ── HARDCODED COACH TIPS (no API needed) ── */
 const EX_COACH_TIPS={
@@ -725,7 +791,7 @@ function coachMsg(e,ct){
 /* ── VERSION & CHANGELOG ── */
 const APP_VERSION='1.39';
 const CHANGELOG=[
-  {v:'1.39',d:'Chinese translation expanded — all 61 exercise names, coach messages, and the workout day screen',det:'All 61 exercises now show proper Traditional Chinese names (硬舉, 深蹲, 臥推, 引體向上, etc.) everywhere they appear — day screen, log, history, PRs and swap sheets. The "Coach says" pre-workout messages are fully translated for every energy level. The workout day screen UI is now translated too: the Exercises heading, Animate / Tutorial / collapse buttons, Busy? and Log sets buttons, set/rep badges, the back and swap buttons, and the log-workout button. The exercise form-cue tips remain in English for now.'},
+  {v:'1.39',d:'Chinese translation expanded — all 61 exercise names, form cues, coach messages, and the workout day screen',det:'All 61 exercises now show proper Traditional Chinese names (硬舉, 深蹲, 臥推, 引體向上, etc.) everywhere they appear — day screen, log, history, PRs and swap sheets. The 💡 form-cue tip on every exercise card is now translated. The "Coach says" pre-workout messages are fully translated for every energy level. The workout day screen UI is now translated too: the Exercises heading, Animate / Tutorial / collapse buttons, Busy? and Log sets buttons, set/rep badges, the back and swap buttons, and the log-workout button.'},
   {v:'1.38',d:'Fixed the Swap Workout sheet showing raw code instead of workout names',det:'After workout labels were made translatable (lazy functions), the "Change workout for this day" sheet was still rendering them directly — so it showed text like ()=>_T(\'wt_push\') instead of "Push". The swap sheet now calls the label and description functions correctly, matching every other screen.'},
   {v:'1.37',d:'Chinese language polish — history screen translated, overcrowding fixes, layout class added',det:'The Workout History screen is now fully translated (Completed, exercise/set counts, set rows). Added a lang-zh class on the page root when Traditional Chinese is active, with CSS rules that slightly reduce font sizes, allow exercise card titles to wrap to two lines instead of truncating, tighten button padding, and shrink the bottom-nav labels so nothing overflows. The My Training tab label was shortened to 訓練. Language preference now syncs to the cloud, so it restores correctly after signing in on a new device. Exercise-name and coach-message translation are still to come.'},
   {v:'1.36',d:'Weekly AI Review added — a Sunday training analysis covering 8 weeks of data',det:'Every Sunday a card appears on the Plan tab offering a weekly review. Tapping Generate sends your last 8 weeks of gym sessions, ride data (Strava or manually logged), all-time PRs and the current plan to the AI coach. It returns four sections: an honest performance summary, progressive overload targets for next week, recovery flags, and one focus goal. The result is cached per week and synced to the cloud, so reopening the app the same Sunday never re-calls the API. An optional "Email me this summary" button delivers it via EmailJS once you add your email and EmailJS keys in Settings. Fully bilingual.'},
