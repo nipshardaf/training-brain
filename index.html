@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.58';
+const APP_VERSION='1.59';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.59',d:'Plan order fixed; Strava rides now lock completed days on refresh',det:'Two fixes. (1) The lock logic that preserves completed days on refresh was keyed by array position, not by date — so a previously corrupted plan (with wrong order) would scramble the new plan. It is now keyed by date string so position never matters. The day list is also sorted by date at render time as a final safety net. (2) Completed Strava rides now lock ride days the same way completed gym sessions lock gym days — refreshing the plan will no longer overwrite a day you already rode.'},
   {v:'1.58',d:'"Sync now" button added to ride card; Garmin ride types now recognised',det:'When Strava is connected but no activity has synced for a ride day yet, the ride log card now shows a "🟠 Sync now · Synced Xm ago" button so you can trigger a fresh Strava fetch without leaving the day screen. Also widened the ride type filter to include GravelRide, MountainBikeRide, EBikeRide and sport_type variants — Garmin can produce any of these and they were previously ignored.'},
   {v:'1.57',d:'Fix: "Refresh with new weather" now always fetches fresh data and never drops days',det:'Two fixes. (1) Clicking "Refresh with new weather" was still returning a stale cached result if you had refreshed in the last 3 hours — including bad cached results from before the v1.56 fix. The explicit refresh button now always bypasses the weather cache and forces a fresh API call. (2) buildWeek now has a safety net: if the weather array arrives with fewer than 7 days for any reason, it pads the missing days from the existing plan or a neutral placeholder, so a partial result can never produce a short week.'},
   {v:'1.56',d:'Fix: refreshing plan mid-week no longer drops past days from the week view',det:'When you refreshed the plan on Wednesday, Monday and Tuesday disappeared. Root cause: the Open-Meteo weather API only returns forecast data from today onwards — so looking up Monday on a Wednesday returned nothing, and the plan was built starting from Wednesday. Fixed by building all 7 days from the Monday start date individually, falling back to the existing plan\'s weather data for any past day (or a neutral placeholder if there is no prior data). Refreshing on any day of the week now always produces a complete Mon–Sun week.'},
@@ -2105,19 +2106,25 @@ function buildWeek(wdays){
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
   const rankedAsc=[...ranked].reverse(); // worst weather first — used to pick rest days
 
-  // Lock days that already have completed sets — preserve them on refresh
+  // Lock days that already have completed activity — preserve on refresh.
+  // Keyed by DATE STRING (not position) so a previously disordered plan can't corrupt a fresh rebuild.
+  // Locks: completed gym sets OR a Strava ride on a planned ride day.
   const existingPlan=DB.get(DB.pk(S.weekStart),null);
-  const locked={}; // dayIndex → type
+  const locked={}; // dateStr → existing plan entry
   if(existingPlan){
-    existingPlan.forEach((dp,i)=>{
+    existingPlan.forEach(dp=>{
       const log=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null);
-      if(log?.exercises?.some(e=>e.sets.some(s=>s.done))&&GYM_SEQ.includes(dp.type))locked[i]=dp.type;
+      const gymDone=log?.exercises?.some(e=>e.sets.some(s=>s.done))&&GYM_SEQ.includes(dp.type);
+      const rideTypes=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'];
+      const rideDone=(stravaRideOnDate(dp.date)||log?.ride?.dur!=null)&&rideTypes.includes(dp.type);
+      if(gymDone||rideDone)locked[dp.date]=dp;
     });
   }
 
-  // mk: preserves exercises for locked days, generates fresh for new days
-  const mk=(w,type,idx)=>{
-    if(locked[idx]&&existingPlan?.[idx])return{...existingPlan[idx],weather:w};
+  // mk: preserves locked days, generates fresh for everything else.
+  // Always uses w.date (from correctly-ordered wdays) so output order is always Mon→Sun.
+  const mk=(w,type)=>{
+    if(locked[w.date])return{...locked[w.date],weather:w};
     const exs=GYM_SEQ.includes(type)?genSession(type):null;
     return{date:w.date,type,exercises:exs,weather:w};
   };
@@ -2126,11 +2133,12 @@ function buildWeek(wdays){
   function assignGym(gymDays,asgn){
     const sorted=[...gymDays].sort((a,b)=>a-b);
     let lastType=null;
-    for(const i of sorted){if(locked[i])lastType=locked[i];}
+    for(const i of sorted){const d=wdays[i]?.date;if(locked[d])lastType=locked[d].type;}
     if(!lastType)lastType=getLastGymType();
     let si=(GYM_SEQ.indexOf(lastType)+1)%GYM_SEQ.length;
     for(const i of sorted){
-      if(locked[i]){asgn[i]=locked[i];}
+      const d=wdays[i]?.date;
+      if(locked[d]){asgn[i]=locked[d].type;}
       else{asgn[i]=GYM_SEQ[si];si=(si+1)%GYM_SEQ.length;}
     }
   }
@@ -2143,7 +2151,7 @@ function buildWeek(wdays){
     const gymDays=[0,1,2,3,4,5,6].filter(i=>!restSet.has(i));
     const asgn={};
     assignGym(gymDays,asgn);
-    return wdays.map((w,i)=>mk(w,restSet.has(i)?'REST':asgn[i]||'REST',i));
+    return wdays.map((w,i)=>mk(w,restSet.has(i)?'REST':asgn[i]||'REST'));
   }
 
   // ── With rides (weather or indoor) ───────────────────────────────────────
@@ -2201,7 +2209,7 @@ function buildWeek(wdays){
     else if(r2&&i===r2.i)type=t2;
     else if(restSet.has(i))type='REST';
     else type=asgn[i]||'REST';
-    return mk(w,type,i);
+    return mk(w,type);
   });
 }
 
@@ -2814,7 +2822,7 @@ ${rReviewCard()}
 ${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
 <div class="day-list">
-  ${plan.map(d=>rDayRow(d,today)).join('')}
+  ${[...plan].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>rDayRow(d,today)).join('')}
 </div>
 ${tabs}
 <button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🌤️ Refresh with new weather':'🔄 Regenerate plan'}</button>
