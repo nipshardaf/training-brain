@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.65';
+const APP_VERSION='1.66';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -1575,8 +1575,8 @@ async function stravaFetchActivities(){
   const token=await _stravaAccessToken();
   if(!token)return;
   try{
-    const after=Math.floor(Date.now()/1000)-56*86400; // 8 weeks — feeds the weekly AI review
-    const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=100`,{
+    const after=Math.floor(Date.now()/1000)-180*86400; // 6 months of history
+    const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=200`,{
       headers:{Authorization:'Bearer '+token}
     });
     if(!r.ok)throw new Error('activities '+r.status);
@@ -3637,15 +3637,15 @@ function completeWk(){
 function rPRs(){
   const prs=DB.get('prs',{});
   const prKeys=Object.keys(prs);
-  // Scan last 90 days for logs + Strava rides
+  // Scan last 180 days for logs + Strava rides
   const history=[];
-  for(let i=0;i<90;i++){
+  for(let i=0;i<180;i++){
     const d=addDays(new Date(),-i);
     const ds=fd(d);
     const log=DB.get(DB.lk(d),null);
     if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push({...log,date:log.date||ds});
   }
-  const _hCutoff=fd(addDays(new Date(),-90));
+  const _hCutoff=fd(addDays(new Date(),-180));
   const _hRideSet=new Set(['Ride','VirtualRide','EBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
   (DB.get('strava_activities',[])||[]).filter(a=>{
     const ds=(a.start_date_local||'').slice(0,10);
