@@ -648,15 +648,15 @@ function filterSlot(slot){
 
 /* ── WORKOUT METADATA ── */
 const WI = {
-  PUSH:         {l:'Push',         i:'🏋️',c:'#7c3aed',d:'Chest · Shoulders · Triceps'},
-  PULL:         {l:'Pull',         i:'🏋️',c:'#2563eb',d:'Back · Biceps · Rear Delts'},
-  LEGS:         {l:'Legs',         i:'🏋️',c:'#059669',d:'Quads · Hamstrings · Glutes · Core'},
-  UPPER_PUMP:   {l:'Upper Pump',   i:'🏋️',c:'#d97706',d:'Full Upper Body · High Volume'},
-  LONG_OUTDOOR: {l:'Long Ride',    i:'🚴',c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
-  SHORT_OUTDOOR:{l:'Short Ride',   i:'🚴',c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
-  LONG_INDOOR:  {l:'Long Ride',    i:'🚲',c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
-  SHORT_INDOOR: {l:'Short Ride',   i:'🚲',c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
-  REST:         {l:'Rest & Mobility',i:'🌿',c:'#64748b',d:'Recovery · Stretch'},
+  PUSH:         {l:()=>_T('wt_push'),      i:'🏋️',c:'#7c3aed',d:()=>_T('wi_push_d')},
+  PULL:         {l:()=>_T('wt_pull'),      i:'🏋️',c:'#2563eb',d:()=>_T('wi_pull_d')},
+  LEGS:         {l:()=>_T('wt_legs'),      i:'🏋️',c:'#059669',d:()=>_T('wi_legs_d')},
+  UPPER_PUMP:   {l:()=>_T('wt_upper'),     i:'🏋️',c:'#d97706',d:()=>_T('wi_upper_d')},
+  LONG_OUTDOOR: {l:()=>_T('wt_ride_l'),   i:'🚴',c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
+  SHORT_OUTDOOR:{l:()=>_T('wt_ride_s'),   i:'🚴',c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
+  LONG_INDOOR:  {l:()=>_T('wt_ride_l'),   i:'🚲',c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
+  SHORT_INDOOR: {l:()=>_T('wt_ride_s'),   i:'🚲',c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
+  REST:         {l:()=>_T('wt_rest'),      i:'🌿',c:'#64748b',d:()=>_T('wi_rest_d')},
 };
 
 const COACH = {
@@ -667,8 +667,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.29';
+const APP_VERSION='1.30';
 const CHANGELOG=[
+  {v:'1.30',d:'Traditional Chinese language support added — switch between English and 繁體中文 in Settings',det:'Added a full translations system with English and Traditional Chinese. Tap Settings → Language to switch. Translated: navigation tabs, screen subtitles, all section headers, workout type names, day names, energy selector, activity names, and key toasts. The language preference is saved locally and applied instantly on switch.'},
   {v:'1.29',d:'Sign-up hardened — orphaned accounts prevented, password length validated before attempting',det:'Fixed a gap where Firebase Auth could create an account but the database write immediately after could fail, leaving a user permanently locked out. Now if the database registration fails after auth creation, the auth account is automatically deleted so the user can try again cleanly. Also added an early password length check (minimum 6 chars) before any network call is made.'},
   {v:'1.28',d:'Active activity chips now have a − button to remove instantly; "Change my activities" button removed',det:'Each active activity chip (Cycling, Gym & Weights, etc.) now has a red − button on the right to remove it directly. The redundant "Change my activities" button is gone — add and remove are now handled entirely from the chips. The "Set up activities" button only appears when you have no activities at all.'},
   {v:'1.27',d:'Every changelog entry now has expandable detail explaining the logic and reasoning behind the change',det:'Tap any version row in What\'s New to expand a longer explanation of why the change was made, how the logic works, and any relevant context. Useful for understanding what the app actually does under the hood or checking if a specific behaviour was intentional.'},
@@ -708,6 +709,86 @@ const CHANGELOG=[
   {v:'0.2', d:'Change Workout button added to day screen — swap to a different workout type on the fly',det:'Added the Swap button to the day view. Lets you switch the day\'s workout type (e.g. Push → Pull) without going back to the weekly plan. The session regenerates immediately with the new type.'},
   {v:'0.1', d:'Initial build — weather-driven weekly planner, Push / Pull / Legs splits, exercise library, and PR tracking',det:'First working version. Weekly plan generated based on number of training days. Push/Pull/Legs splits with a fixed exercise library. Weather fetched from Open-Meteo and used to pick outdoor vs indoor days. PR tracking with localStorage persistence.'},
 ];
+
+/* ── TRANSLATIONS ── */
+const TRANS={
+  en:{
+    nav_plan:'Plan',nav_training:'My Training',nav_settings:'Settings',
+    sub_week:'Weather-driven · Dynamic exercises · Tracks your PRs',
+    sub_training:'My Training · PRs · History',
+    sub_settings:'Settings · Connected services',
+    your_goals:'🎯 Your goals',your_activities:'🏃 Your Activities',
+    prs:'🏆 Personal Records',history:'📋 Workout History',
+    ai_coach:'🤖 AI Coach',gym_profile:'🏋️ Gym Profile',
+    ride_pref:'🚴 Ride preference',cycling_setup:'🚴 Cycling Plan Setup',
+    strava:'🟠 Strava · Garmin Sync',account:'☁️ Account & backup',
+    whats_new:"📋 What's new",language:'🌐 Language',
+    wt_push:'Push',wt_pull:'Pull',wt_legs:'Legs',wt_upper:'Upper Pump',
+    wt_rest:'Rest & Mobility',wt_ride_l:'Long Ride',wt_ride_s:'Short Ride',
+    wt_run:'Running',wt_cardio:'Cardio',
+    wi_push_d:'Chest · Shoulders · Triceps',wi_pull_d:'Back · Biceps · Rear Delts',
+    wi_legs_d:'Quads · Hamstrings · Glutes · Core',wi_upper_d:'Full Upper Body · High Volume',
+    wi_rest_d:'Recovery · Stretch',
+    e_fresh:'Fresh',e_okay:'Okay',e_tired:'Tired',e_sore:'Sore',
+    how_feeling:'How are you feeling?',
+    act_gym:'Gym & Weights',act_cycling:'Cycling',act_running:'Running',act_cardio:'Cardio & Classes',
+    g_muscle:'Build muscle & strength',g_weight:'Lose weight',
+    g_fitness:'General fitness',g_endurance:'Endurance / event prep',g_perf:'Sport performance',
+    days:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
+    today:'Today',done:'✓ Done',great_ride:'Great day to ride',
+    swap:'Swap',log_sets:'Log sets',coach_btn:'Coach',busy:'Busy?',
+    animate:'Animate',tutorial:'Tutorial',
+    back_up_now:'Back up now',backed_now:'Backed up just now',
+    backed_ago:'Backed up',sign_out:'Sign out',
+    no_goals:'No goals set yet',no_acts:'No activities set yet',
+    not_in_plan:'Not in your plan yet:',
+    set_up_acts:'➕ Set up activities',edit_goals:'✏️ Edit goals',
+    no_prs:'No PRs yet — log a workout to start tracking',
+    no_history:'No workouts logged in the last 90 days',
+    shift_toast:'✅ Week shifted — every muscle group covered',
+    added_toast:'✅ {act} added to your plan',removed_toast:'{act} removed from your plan',
+    lang_en:'English',lang_zh:'繁體中文',
+  },
+  zh:{
+    nav_plan:'計劃',nav_training:'我的訓練',nav_settings:'設定',
+    sub_week:'天氣驅動 · 動態訓練 · 追蹤個人紀錄',
+    sub_training:'我的訓練 · 個人紀錄 · 歷史',
+    sub_settings:'設定 · 連接服務',
+    your_goals:'🎯 你的目標',your_activities:'🏃 你的運動項目',
+    prs:'🏆 個人最佳紀錄',history:'📋 訓練歷史',
+    ai_coach:'🤖 AI 教練',gym_profile:'🏋️ 健身房資料',
+    ride_pref:'🚴 騎乘偏好',cycling_setup:'🚴 單車計劃設定',
+    strava:'🟠 Strava · Garmin 同步',account:'☁️ 帳戶與備份',
+    whats_new:'📋 最新更新',language:'🌐 語言',
+    wt_push:'推',wt_pull:'拉',wt_legs:'腿部',wt_upper:'上肢全力',
+    wt_rest:'休息與活動',wt_ride_l:'長途騎行',wt_ride_s:'短途騎行',
+    wt_run:'跑步',wt_cardio:'有氧',
+    wi_push_d:'胸 · 肩 · 三頭肌',wi_pull_d:'背 · 二頭肌 · 後三角肌',
+    wi_legs_d:'股四頭 · 膕繩 · 臀部 · 核心',wi_upper_d:'上肢全力 · 高容量',
+    wi_rest_d:'恢復 · 伸展',
+    e_fresh:'精力充沛',e_okay:'一般',e_tired:'疲累',e_sore:'痠痛',
+    how_feeling:'你今天狀態如何？',
+    act_gym:'健身房 & 重訓',act_cycling:'單車',act_running:'跑步',act_cardio:'有氧 & 課程',
+    g_muscle:'增肌 & 增力',g_weight:'減重',
+    g_fitness:'一般健康',g_endurance:'耐力 / 賽事準備',g_perf:'運動表現',
+    days:['一','二','三','四','五','六','日'],
+    today:'今天',done:'✓ 完成',great_ride:'適合騎車',
+    swap:'更換',log_sets:'記錄組數',coach_btn:'教練',busy:'器材被佔？',
+    animate:'動畫',tutorial:'教學',
+    back_up_now:'立即備份',backed_now:'剛剛已備份',
+    backed_ago:'已備份',sign_out:'登出',
+    no_goals:'尚未設定目標',no_acts:'尚未設定運動項目',
+    not_in_plan:'尚未加入計劃：',
+    set_up_acts:'➕ 設定運動項目',edit_goals:'✏️ 編輯目標',
+    no_prs:'尚無個人紀錄 — 記錄訓練以開始追蹤',
+    no_history:'過去 90 天內未有訓練記錄',
+    shift_toast:'✅ 本週已調整 — 所有肌肉群均已涵蓋',
+    added_toast:'✅ 已加入{act}',removed_toast:'已移除{act}',
+    lang_en:'English',lang_zh:'繁體中文',
+  }
+};
+function _T(k){const l=DB.get('lang','en');return(TRANS[l]||TRANS.en)[k]??TRANS.en[k]??k;}
+function _TD(){return(TRANS[DB.get('lang','en')]||TRANS.en).days;}
 
 /* ── AI COACH ── */
 const GEMINI_PROXY='https://training-brain-ai.ht9323.workers.dev';
@@ -1600,7 +1681,8 @@ const DB = {
 };
 
 /* ── DATE HELPERS ── */
-const DNAMES=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DNAMES_EN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const DNAMES=new Proxy({},{get(_,i){const d=_TD();return i==='length'?7:[d[6],d[0],d[1],d[2],d[3],d[4],d[5]][+i]??DNAMES_EN[+i];}});
 const MNAMES=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 function getMon(d=new Date()){const r=new Date(d);const dw=r.getDay();r.setDate(r.getDate()-(dw===0?6:dw-1));r.setHours(0,0,0,0);return r;}
 function addDays(d,n){const r=new Date(d);r.setDate(r.getDate()+n);return r;}
@@ -2333,7 +2415,7 @@ function rWeek(){
   return`<div class="screen">
 <div class="hdr" style="position:relative">
   <h1>Training Brain</h1>
-  <div class="hdr-sub">Weather-driven · Dynamic exercises · Tracks your PRs</div>
+  <div class="hdr-sub">${_T('sub_week')}</div>
   <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">🔒</button>
 </div>
 ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</span><button onclick="lockApp()" style="background:none;border:none;color:#f59e0b;font-size:12px;font-weight:700;cursor:pointer">Exit Guest →</button></div>`:''}
@@ -2361,9 +2443,9 @@ ${tabs}
   <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'📡 Generate with weather forecast':p==='indoor'?'🏠 Generate (indoor rides)':'🏋️ Generate (gym only)'}</button>
 </div>`;})()}
 <div class="bnav">
-  <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
+  <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>${_T('nav_settings')}</span></button>
 </div>
 </div>`;
 }
@@ -2380,8 +2462,8 @@ function rDayRow(day,today){
   return`<div class="day-row${isToday?' is-today':''}${done?' is-done':''}" onclick="openDay('${day.date}')">
 <div class="dr-l">
   <div class="dr-day">${DNAMES[date.getDay()]} ${date.getDate()}</div>
-  <div class="dr-type" style="color:${wi.c}">${wi.i} ${wi.l}</div>
-  <div class="dr-desc">${wi.d}</div>
+  <div class="dr-type" style="color:${wi.c}">${wi.i} ${typeof wi.l==='function'?wi.l():wi.l}</div>
+  <div class="dr-desc">${typeof wi.d==='function'?wi.d():wi.d}</div>
 </div>
 <div class="dr-r">
   <div class="dr-weather">${wIcon(w.code,w.rain)} ${w.tmax}°${w.rain>0?`<span class="dr-rain">${w.rain}mm</span>`:''}</div>
@@ -2415,14 +2497,14 @@ function rDay(){
   <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">Swap ↕</button>
 </div>
 <div class="day-hero" style="border-color:${wi.c}33">
-  <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${wi.l.toUpperCase()}</div>
-  <div class="hero-name">${wi.d}</div>
+  <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${(typeof wi.l==='function'?wi.l():wi.l).toUpperCase()}</div>
+  <div class="hero-name">${typeof wi.d==='function'?wi.d():wi.d}</div>
   <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>
   ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
 </div>
-<div class="sec-lbl">How are you feeling?</div>
+<div class="sec-lbl">${_T('how_feeling')}</div>
 <div class="egrid">
-  ${eBtn('fresh','🔥','Fresh')}${eBtn('okay','💪','Okay')}${eBtn('tired','😪','Tired')}${eBtn('sore','🤕','Sore')}
+  ${eBtn('fresh','🔥',_T('e_fresh'))}${eBtn('okay','💪',_T('e_okay'))}${eBtn('tired','😪',_T('e_tired'))}${eBtn('sore','🤕',_T('e_sore'))}
 </div>
 <div class="coach${S.energy?' on':''}" id="coach-card">
   <div class="coach-lbl">Coach says</div>
@@ -2605,7 +2687,7 @@ function rLog(){
   return`<div class="screen">
 <div class="day-hdr">
   <button class="back-btn" onclick="go('day',{viewDate:S.viewDate})">← Back</button>
-  <div class="day-hdr-r">Log: ${wi.l}</div>
+  <div class="day-hdr-r">Log: ${typeof wi.l==='function'?wi.l():wi.l}</div>
 </div>
 <div class="log-list">
   ${log.exercises.map((le,ei)=>rLogEx(le,ei)).join('')}
@@ -2867,9 +2949,9 @@ function rPRs(){
   const profile=DB.get('user_profile',null);
   const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">My Training · PRs · History</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">${_T('sub_training')}</div></div>
 
-<div class="sec-hdr">🎯 Your goals</div>
+<div class="sec-hdr">${_T('your_goals')}</div>
 ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
     ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
@@ -2881,11 +2963,11 @@ ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-
   <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
 </div>`}
 
-<div class="sec-hdr">🏃 Your Activities</div>
+<div class="sec-hdr">${_T('your_activities')}</div>
 ${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🏊',l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>🏆 Personal Records</span>
+  <span>${_T('prs')}</span>
   ${prKeys.length?`<span style="font-size:11px;color:var(--t2);font-weight:600">${prKeys.length} total</span>`:''}
 </div>
 ${!prKeys.length
@@ -2944,7 +3026,7 @@ ${!prKeys.length
   })()
 }
 
-<div class="sec-hdr">📋 Workout History</div>
+<div class="sec-hdr">${_T('history')}</div>
 ${!history.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">No workouts logged yet</div>`
   :history.map((log,hi)=>{
@@ -2953,7 +3035,7 @@ ${!history.length
     const totalSets=log.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0);
     return`<div class="hist-row" onclick="togHist(${hi})">
   <div class="hist-date">${log.date}${log.completed?' · ✓ Completed':''}</div>
-  <div class="hist-type" style="color:${wi.c}">${wi.i} ${wi.l}</div>
+  <div class="hist-type" style="color:${wi.c}">${wi.i} ${typeof wi.l==='function'?wi.l():wi.l}</div>
   <div class="hist-exs">${exsDone.length} exercises · ${totalSets} sets logged</div>
   <div class="hist-detail" id="hd${hi}">
     ${exsDone.map(le=>{
@@ -2965,9 +3047,9 @@ ${!history.length
 </div>`;}).join('')}
 
 <div class="bnav">
-  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
+  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
+  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>${_T('nav_settings')}</span></button>
 </div>
 </div>`;
 }
@@ -2976,9 +3058,9 @@ ${!history.length
 function rSettings(){
   const hasPIN=!!DB.get('pin',null);
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Settings · Connected services</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">${_T('sub_settings')}</div></div>
 
-<div class="sec-hdr">🤖 AI Coach</div>
+<div class="sec-hdr">${_T('ai_coach')}</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
@@ -2987,7 +3069,7 @@ function rSettings(){
   <div style="font-size:12px;color:var(--t2);line-height:1.5">Gives you a personalised pre-workout note each day based on your logged sets, PRs, and how you're feeling. Powered by Gemini 2.5 Flash.</div>
 </div>
 
-<div class="sec-hdr">🏋️ Gym Profile</div>
+<div class="sec-hdr">${_T('gym_profile')}</div>
 ${(()=>{
   const gid=DB.get('gym_profile',null);
   const isHome=gid==='home';
@@ -3081,7 +3163,7 @@ ${(()=>{
 </div>`;
 })()}
 
-<div class="sec-hdr">🟠 Strava · Garmin Sync</div>
+<div class="sec-hdr">${_T('strava')}</div>
 ${(()=>{
   const tok=DB.get('strava_token',null);
   const acts=DB.get('strava_activities')||[];
@@ -3105,7 +3187,7 @@ ${(()=>{
 </div>`;
 })()}
 
-<div class="sec-hdr">☁️ Account & backup</div>
+<div class="sec-hdr">${_T('account')}</div>
 ${S.fbUser
   ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
       <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span><br>
@@ -3128,8 +3210,14 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
   <button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>
 </div>`:''}
 
+<div class="sec-hdr">${_T('language')}</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:6px;margin-bottom:10px;display:flex;gap:4px">
+  <button onclick="DB.set('lang','en');render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='en'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='en'?'#fff':'var(--t2)'}">🇬🇧 English</button>
+  <button onclick="DB.set('lang','zh');render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='zh'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='zh'?'#fff':'var(--t2)'}">🇭🇰 繁體中文</button>
+</div>
+
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
-  <span>📋 What's new</span>
+  <span>${_T('whats_new')}</span>
   <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
@@ -3156,9 +3244,9 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
 </div>
 
 <div class="bnav">
-  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>My Training</span></button>
-  <button class="bnav-btn on" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
+  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
+  <button class="bnav-btn on" onclick="go('settings')"><span>⚙️</span><span>${_T('nav_settings')}</span></button>
 </div>
 </div>`;
 }
@@ -3290,7 +3378,7 @@ function doSwap(ds,newType){
       const shifted=futureGym.map((d,i)=>tl[cascadeTypes[i]]).join(' · ');
       DB.set(pk,plan);
       closeSwap();syncUp();render();
-      showToast(`✅ Week shifted: ${shifted}`,'var(--grn)');
+      showToast(_T('shift_toast'),'var(--grn)');
       return;
     }
   }
@@ -3305,8 +3393,8 @@ function quickAddActivity(key){
   profile.activities=[...acts];
   DB.set('user_profile',profile);
   syncUp();render();
-  const labels={gym:'Gym & Weights',cycling:'Cycling',running:'Running',cardio:'Cardio & Classes'};
-  showToast(`✅ ${labels[key]||key} added to your plan`,'var(--grn)');
+  const labels={gym:_T('act_gym'),cycling:_T('act_cycling'),running:_T('act_running'),cardio:_T('act_cardio')};
+  showToast(_T('added_toast').replace('{act}',labels[key]||key),'var(--grn)');
 }
 function removeActivity(key){
   const profile=DB.get('user_profile',{});
@@ -3314,8 +3402,8 @@ function removeActivity(key){
   profile.activities=acts;
   DB.set('user_profile',profile);
   syncUp();render();
-  const labels={gym:'Gym & Weights',cycling:'Cycling',running:'Running',cardio:'Cardio & Classes'};
-  showToast(`${labels[key]||key} removed from your plan`,'var(--t2)');
+  const labels={gym:_T('act_gym'),cycling:_T('act_cycling'),running:_T('act_running'),cardio:_T('act_cardio')};
+  showToast(_T('removed_toast').replace('{act}',labels[key]||key),'var(--t2)');
 }
 function showActInfo(k){
   const info={
