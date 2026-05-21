@@ -364,22 +364,22 @@ const EX = {
   toe_spread:  {n:'Toe Spread & Hold',   g:'foot',     t:'I',sets:3,reps:'10×5s', rpe:'3', m:'Intrinsic Foot',          p:null},
   heel_raise:  {n:'Heel Raise (arch)',   g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Arch · Calves',           p:null,                                      uni:true},
   // ── Bodyweight / home exercises ────────────────────────────────────────────
-  pushup:       {n:'Push-Up',              g:'chest',    t:'C',sets:4,reps:'10–15',rpe:'6',  m:'Chest · Triceps',         p:null, bw:true},
+  pushup:       {n:'Push-Up',              g:'chest',    t:'C',sets:4,reps:'10–15',rpe:'6',  m:'Chest · Triceps',         p:['https://wger.de/media/exercise-images/1551/a6a9e561-3965-45c6-9f2b-ee671e1a3a45.png'], bw:true},
   decline_pu:   {n:'Decline Push-Up',      g:'chest',    t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Upper Chest',             p:'Decline_Push-Up', bw:true},
-  diamond_pu:   {n:'Diamond Push-Up',      g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:null, bw:true},
+  diamond_pu:   {n:'Diamond Push-Up',      g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:['https://wger.de/media/exercise-images/1086/b2ee8d9b-0480-4992-8494-c223b37c2696.jpg'], bw:true},
   pike_pu:      {n:'Pike Push-Up',         g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders · Triceps',     p:null, bw:true},
-  inverted_row: {n:'Inverted Row',         g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back · Biceps',           p:null, bw:true},
+  inverted_row: {n:'Inverted Row',         g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back · Biceps',           p:['https://wger.de/media/exercise-images/1198/864906ac-4ac7-4e52-a886-c6bb97950a9f.jpg'], bw:true},
   superman:     {n:'Superman',             g:'hback_h',  t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Lower Back · Glutes',     p:'Superman', bw:true},
   bw_squat:     {n:'Bodyweight Squat',     g:'quad',     t:'C',sets:3,reps:'15–20',rpe:'5',  m:'Quads · Glutes',          p:'Bodyweight_Squat', bw:true},
   jump_squat:   {n:'Jump Squat',           g:'quad',     t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Quads · Glutes',          p:'Freehand_Jump_Squat', bw:true},
   bw_lunge:     {n:'Bodyweight Lunge',     g:'quad',     t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Quads · Glutes',          p:'Bodyweight_Walking_Lunge', bw:true, uni:true},
   sl_glute_bridge:{n:'Single-Leg Glute Bridge',g:'ham',  t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Glutes · Hamstrings',     p:'Single_Leg_Glute_Bridge', bw:true, uni:true},
-  donkey_kick:  {n:'Donkey Kick',          g:'ham',      t:'I',sets:3,reps:'15/leg',rpe:'5', m:'Glutes',                  p:null, bw:true, uni:true},
+  donkey_kick:  {n:'Donkey Kick',          g:'ham',      t:'I',sets:3,reps:'15/leg',rpe:'5', m:'Glutes',                  p:['https://wger.de/media/exercise-images/990/de20457c-914a-45c9-8cf9-0ad9739759a1.png'], bw:true, uni:true},
   wall_sit:     {n:'Wall Sit',             g:'quad',     t:'I',sets:3,reps:'45s',   rpe:'6', m:'Quads',                   p:null, bw:true},
   mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:'Mountain_Climbers', bw:true},
-  bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:null, bw:true},
+  bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:['https://wger.de/media/exercise-images/176/Cross-body-crunch-1.png','https://wger.de/media/exercise-images/176/Cross-body-crunch-2.png'], bw:true},
   side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:null, bw:true, uni:true},
-  leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:null, bw:true},
+  leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:['https://wger.de/media/exercise-images/125/Leg-raises-1.png','https://wger.de/media/exercise-images/125/Leg-raises-2.png'], bw:true},
   crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:'Crunches', bw:true},
   burpee:       {n:'Burpee',               g:'core',     t:'C',sets:3,reps:'10–15', rpe:'8', m:'Full Body',               p:null, bw:true},
 };
@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.54';
+const APP_VERSION='1.55';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.55',d:'Bodyweight exercise images: 14 of 18 now show real demos instead of placeholders',det:'Added a second image source (wger.de) for exercises missing from the free-exercise-db. Push-Up, Diamond Push-Up, Inverted Row, Donkey Kick now pull from wger.de. Bicycle Crunch and Floor Leg Raise have 2-frame animations. Combined with the 8 already fixed in v1.54, 14 of the 18 bodyweight exercises now show real images. The remaining 4 (Pike Push-Up, Wall Sit, Side Plank, Burpee) have no suitable image in either database and show styled muscle-group placeholders. The image loader now supports both free-exercise-db folder paths and direct wger.de URLs.'},
   {v:'1.54',d:'"At home today" moved to each workout day — now per-day, instant, no regenerate needed',det:'"Training from home this week?" has been redesigned. Instead of a week-wide toggle on the Plan tab that required a separate Regenerate tap, there is now a compact "Training at home today?" row on each individual gym day screen. Tap it and the exercises switch to bodyweight immediately — no second step. Tap it again to switch back to gym exercises. It only affects that one day. Also fixed: 8 of the 18 bodyweight exercises now show real demo images (Decline Push-Up, Superman, Bodyweight Squat, Jump Squat, Bodyweight Lunge, Single-Leg Glute Bridge, Mountain Climber, Crunch) — the remaining 10 show styled muscle-group placeholders since those specific movements are not in the exercise image database.'},
   {v:'1.53',d:'Settings Account section layout fixes — no empty space, clearer button labels',det:'"Sign out" no longer sits in a half-empty two-column row. "Backup (.json)" renamed to "Download backup" — the .json detail was meaningless to most people.'},
   {v:'1.52',d:'iPhone home screen icon updated to the current app logo',det:'The apple-touch-icon (the icon shown when you add Training Brain to your iPhone home screen) was still the original placeholder. It now uses the same logo shown inside the app. To see the update: remove the existing home screen shortcut and re-add it via Safari → Share → Add to Home Screen.'},
@@ -2236,13 +2237,15 @@ const G_PH={
 };
 
 function loadGifDb(){
-  // Build cache directly from hardcoded paths — instant, no network call
+  // p can be:
+  //   string  → free-exercise-db folder name → GIF_BASE+p+'/0.jpg' / '/1.jpg'
+  //   array   → direct image URLs [frame0, frame1?] (e.g. wger.de)
   Object.entries(EX).forEach(([id,ex])=>{
-    if(ex.p){
-      S.gifCache[id]={
-        f0:GIF_BASE+ex.p+'/0.jpg',
-        f1:GIF_BASE+ex.p+'/1.jpg',
-      };
+    if(!ex.p)return;
+    if(Array.isArray(ex.p)){
+      S.gifCache[id]={f0:ex.p[0],f1:ex.p[1]||ex.p[0]};
+    } else {
+      S.gifCache[id]={f0:GIF_BASE+ex.p+'/0.jpg',f1:GIF_BASE+ex.p+'/1.jpg'};
     }
   });
   patchGifs();
