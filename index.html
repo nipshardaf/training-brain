@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.55';
+const APP_VERSION='1.56';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.56',d:'Fix: refreshing plan mid-week no longer drops past days from the week view',det:'When you refreshed the plan on Wednesday, Monday and Tuesday disappeared. Root cause: the Open-Meteo weather API only returns forecast data from today onwards — so looking up Monday on a Wednesday returned nothing, and the plan was built starting from Wednesday. Fixed by building all 7 days from the Monday start date individually, falling back to the existing plan\'s weather data for any past day (or a neutral placeholder if there is no prior data). Refreshing on any day of the week now always produces a complete Mon–Sun week.'},
   {v:'1.55',d:'Bodyweight exercise images: 14 of 18 now show real demos instead of placeholders',det:'Added a second image source (wger.de) for exercises missing from the free-exercise-db. Push-Up, Diamond Push-Up, Inverted Row, Donkey Kick now pull from wger.de. Bicycle Crunch and Floor Leg Raise have 2-frame animations. Combined with the 8 already fixed in v1.54, 14 of the 18 bodyweight exercises now show real images. The remaining 4 (Pike Push-Up, Wall Sit, Side Plank, Burpee) have no suitable image in either database and show styled muscle-group placeholders. The image loader now supports both free-exercise-db folder paths and direct wger.de URLs.'},
   {v:'1.54',d:'"At home today" moved to each workout day — now per-day, instant, no regenerate needed',det:'"Training from home this week?" has been redesigned. Instead of a week-wide toggle on the Plan tab that required a separate Regenerate tap, there is now a compact "Training at home today?" row on each individual gym day screen. Tap it and the exercises switch to bodyweight immediately — no second step. Tap it again to switch back to gym exercises. It only affects that one day. Also fixed: 8 of the 18 bodyweight exercises now show real demo images (Decline Push-Up, Superman, Bodyweight Squat, Jump Squat, Bodyweight Lunge, Single-Leg Glute Bridge, Mountain Climber, Crunch) — the remaining 10 show styled muscle-group placeholders since those specific movements are not in the exercise image database.'},
   {v:'1.53',d:'Settings Account section layout fixes — no empty space, clearer button labels',det:'"Sign out" no longer sits in a half-empty two-column row. "Backup (.json)" renamed to "Download backup" — the .json detail was meaningless to most people.'},
@@ -2026,16 +2027,25 @@ async function fetchWeather(lat,lon,startStr){
   const url=`https://api.open-meteo.com/v1/forecast?latitude=${lat.toFixed(4)}&longitude=${lon.toFixed(4)}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max,weathercode&timezone=auto&forecast_days=16`;
   const r=await fetch(url);if(!r.ok)throw new Error();
   const data=await r.json();const d=data.daily;
-  let si=d.time.indexOf(startStr);if(si<0)si=0;
-  const result=Array.from({length:7},(_,i)=>({
-    date:d.time[si+i],
-    tmax:Math.round(d.temperature_2m_max[si+i]),
-    tmin:Math.round(d.temperature_2m_min[si+i]),
-    rain:Math.round(d.precipitation_sum[si+i]*10)/10,
-    wind:Math.round(d.windspeed_10m_max[si+i]),
-    code:d.weathercode[si+i],
-    score:bikeScore(d.precipitation_sum[si+i],d.windspeed_10m_max[si+i],d.temperature_2m_max[si+i]),
-  }));
+  // Build 7 days from startStr — look each date up individually.
+  // Past days won't be in the forecast; fill them with neutral placeholders
+  // so Mon/Tue never disappear when you regenerate mid-week.
+  const result=Array.from({length:7},(_,i)=>{
+    const dateStr=fd(addDays(new Date(startStr+'T12:00:00'),i));
+    const idx=d.time.indexOf(dateStr);
+    if(idx>=0)return{
+      date:dateStr,
+      tmax:Math.round(d.temperature_2m_max[idx]),
+      tmin:Math.round(d.temperature_2m_min[idx]),
+      rain:Math.round(d.precipitation_sum[idx]*10)/10,
+      wind:Math.round(d.windspeed_10m_max[idx]),
+      code:d.weathercode[idx],
+      score:bikeScore(d.precipitation_sum[idx],d.windspeed_10m_max[idx],d.temperature_2m_max[idx]),
+    };
+    // Past day — preserve existing plan entry weather if available, else use placeholder
+    const existing=DB.get(DB.pk(S.weekStart),null)?.find(x=>x.date===dateStr);
+    return existing?.weather||{date:dateStr,tmax:15,tmin:5,rain:0,wind:10,code:1,score:0};
+  });
   DB.set(ck,{t:Date.now(),d:result});
   return result;
 }
