@@ -972,7 +972,7 @@ function openGoalsSetup(isEdit=false,startStep=1){
     {v:'gym',    i:'🏋️', l:'Gym / Weights'},
     {v:'cycling',i:'🚴', l:'Cycling'},
     {v:'running',i:'🏃', l:'Running'},
-    {v:'cardio', i:'🪜', l:'Other cardio'},
+    {v:'cardio', i:'🏊', l:'Outdoor / Other Cardio'},
   ];
   const genders=[
     {v:'male',   i:'♂️', l:'Male'},
@@ -1034,7 +1034,7 @@ function openGoalsSetup(isEdit=false,startStep=1){
     </div>`}).join('')}
   </div>
   ${selActs.has('running')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🏃 Running tracking is coming soon — you can log runs manually for now</div>`:''}
-  ${selActs.has('cardio')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🪜 Other cardio can be logged as free notes — full planning coming soon</div>`:''}
+  ${selActs.has('cardio')?`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);border-radius:10px;padding:10px 12px;margin-bottom:16px;font-size:12px;color:var(--amb)">🏊 Outdoor / Other Cardio can be logged as free notes — full planning coming soon</div>`:''}
   <div style="display:flex;gap:8px">
     <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
     <button onclick="gsNext()" style="flex:2;background:${selActs.size>0?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selActs.size>0?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
@@ -2860,7 +2860,7 @@ ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
     ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
   </div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🪜 Other cardio'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🏊 Outdoor / Other Cardio'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
   <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
 </div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
@@ -2960,7 +2960,7 @@ function rSettings(){
   const hasPIN=!!DB.get('pin',null);
   const _profile=DB.get('user_profile',null);
   const _acts=_profile?.activities||[];
-  const _actMeta={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🪜',l:'Other Cardio'}};
+  const _actMeta={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🏊',l:'Outdoor / Other Cardio'}};
   const _missing=Object.keys(_actMeta).filter(a=>!_acts.includes(a));
   return`<div class="screen">
 <div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Settings · Connected services</div></div>
