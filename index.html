@@ -646,17 +646,20 @@ function filterSlot(slot){
   return filtered.length>0?filtered:slot;
 }
 
+/* ── ICON HELPER — PNG with emoji fallback ── */
+function _icon(f,e,s){s=s||18;return`<img src="/training-brain/assets/icons/${f}" width="${s}" height="${s}" style="vertical-align:middle;display:inline-block;object-fit:contain" onerror="this.outerHTML='${e}'">`;}
+
 /* ── WORKOUT METADATA ── */
 const WI = {
-  PUSH:         {l:()=>_T('wt_push'),      i:'🏋️',c:'#7c3aed',d:()=>_T('wi_push_d')},
-  PULL:         {l:()=>_T('wt_pull'),      i:'🏋️',c:'#2563eb',d:()=>_T('wi_pull_d')},
-  LEGS:         {l:()=>_T('wt_legs'),      i:'🏋️',c:'#059669',d:()=>_T('wi_legs_d')},
-  UPPER_PUMP:   {l:()=>_T('wt_upper'),     i:'🏋️',c:'#d97706',d:()=>_T('wi_upper_d')},
-  LONG_OUTDOOR: {l:()=>_T('wt_ride_l'),   i:'🚴',c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
-  SHORT_OUTDOOR:{l:()=>_T('wt_ride_s'),   i:'🚴',c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
-  LONG_INDOOR:  {l:()=>_T('wt_ride_l'),   i:'🚲',c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
-  SHORT_INDOOR: {l:()=>_T('wt_ride_s'),   i:'🚲',c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
-  REST:         {l:()=>_T('wt_rest'),      i:'🌿',c:'#64748b',d:()=>_T('wi_rest_d')},
+  PUSH:         {l:()=>_T('wt_push'),      i:_icon('push-workout.png','🏋️'),   c:'#7c3aed',d:()=>_T('wi_push_d')},
+  PULL:         {l:()=>_T('wt_pull'),      i:_icon('pull-workout.png','🏋️'),   c:'#2563eb',d:()=>_T('wi_pull_d')},
+  LEGS:         {l:()=>_T('wt_legs'),      i:_icon('legs-workout.png','🏋️'),   c:'#059669',d:()=>_T('wi_legs_d')},
+  UPPER_PUMP:   {l:()=>_T('wt_upper'),     i:_icon('gym-weights.png','🏋️'),    c:'#d97706',d:()=>_T('wi_upper_d')},
+  LONG_OUTDOOR: {l:()=>_T('wt_ride_l'),   i:_icon('ride-day.png','🚴'),        c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
+  SHORT_OUTDOOR:{l:()=>_T('wt_ride_s'),   i:_icon('ride-day.png','🚴'),        c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
+  LONG_INDOOR:  {l:()=>_T('wt_ride_l'),   i:_icon('ride-day.png','🚲'),        c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
+  SHORT_INDOOR: {l:()=>_T('wt_ride_s'),   i:_icon('ride-day.png','🚲'),        c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
+  REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
 };
 
 const COACH = {
@@ -667,8 +670,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.32';
+const APP_VERSION='1.33';
 const CHANGELOG=[
+  {v:'1.33',d:'Custom PNG icons replace emoji throughout the app — workout types, nav tabs, activities, logo',det:'All major emoji icons replaced with purpose-built PNG graphics: each gym workout type (Push/Pull/Legs/Upper Pump) has its own icon, cycling and ride days use a proper bicycle image, rest days show the mobility graphic, activity chips in Settings use the corresponding sport icons, and nav tabs use the branded icon set. The app logo symbol appears in the lock screen and screen headers. Emoji fallbacks activate automatically if an icon fails to load, so the app always looks correct even offline.'},
   {v:'1.32',d:'New users now see a 3-step welcome guide on the Plan tab instead of a blank "no plan" state',det:'When someone opens the app for the first time without a profile, the Plan tab now shows a friendly welcome screen with three numbered steps: set up your profile, generate your first plan, and start training. Step 1 is highlighted with a call-to-action button; steps 2 and 3 are greyed out until reached. Once a profile exists, the tab shows the standard "Ready to generate your plan" state with the preference tabs and Generate button.'},
   {v:'1.31',d:'Exercise "Coach" button renamed to "Tips" — more accurate label for hardcoded guidance',det:'The Coach button on each exercise opened a hardcoded tips panel with connection cues, setup notes, rep execution and what to avoid — not live AI coaching. Renamed to Tips with a 💡 icon to set the right expectation. The AI Coach section at the top of each workout day is the actual real-time coaching.'},
   {v:'1.30',d:'Traditional Chinese language support added — switch between English and 繁體中文 in Settings',det:'Added a full translations system with English and Traditional Chinese. Tap Settings → Language to switch. Translated: navigation tabs, screen subtitles, all section headers, workout type names, day names, energy selector, activity names, and key toasts. The language preference is saved locally and applied instantly on switch.'},
@@ -2010,7 +2014,7 @@ function rLock(){
   if(S.lockMode==='choose'){
     const isNew=S._authNew||false;
     return`<div class="lock-wrap">
-<div class="lock-logo">🧠</div>
+<div class="lock-logo"><img src="/training-brain/assets/icons/app-logo-symbol.png" width="80" height="80" style="object-fit:contain" onerror="this.outerHTML='🧠'"></div>
 <div class="lock-title">Training Brain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
 <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px" autocomplete="off">
@@ -2093,7 +2097,7 @@ function rLock(){
   const titles={unlock:'Enter your PIN',setup:'Create a PIN',confirm:'Confirm PIN'};
   const subs={unlock:'',setup:'Choose a 4-digit PIN to protect your data',confirm:'Enter the same PIN again'};
   return`<div class="lock-wrap">
-<div class="lock-logo">🧠</div>
+<div class="lock-logo"><img src="/training-brain/assets/icons/app-logo-symbol.png" width="80" height="80" style="object-fit:contain" onerror="this.outerHTML='🧠'"></div>
 <div class="lock-title" style="margin-bottom:6px">${titles[mode]}</div>
 ${subs[mode]?`<div class="lock-sub" style="margin-bottom:22px">${subs[mode]}</div>`:'<div style="margin-bottom:22px"></div>'}
 <div class="pin-dots" id="pin-dots">${[0,1,2,3].map(i=>`<div class="pin-dot" id="pd${i}"></div>`).join('')}</div>
@@ -2416,7 +2420,7 @@ function rWeek(){
   const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
   return`<div class="screen">
 <div class="hdr" style="position:relative">
-  <h1>Training Brain</h1>
+  <h1><img src="/training-brain/assets/icons/app-logo-symbol.png" width="22" height="22" style="vertical-align:middle;margin-right:5px;object-fit:contain" onerror="this.style.display='none'">Training Brain</h1>
   <div class="hdr-sub">${_T('sub_week')}</div>
   <button onclick="lockApp()" style="position:absolute;top:0;right:0;background:none;border:none;font-size:18px;cursor:pointer;padding:4px" title="Lock">🔒</button>
 </div>
@@ -2483,9 +2487,9 @@ ${tabs}
 </div>`;
 })();})()}
 <div class="bnav">
-  <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn on" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
 </div>
 </div>`;
 }
@@ -2646,7 +2650,7 @@ function rRideCard(dp){
 </div>`:'';
   return`<div class="ride-card" style="text-align:left">
 <div style="text-align:center;margin-bottom:14px">
-  <span class="ride-icon">${indoor?'🚲':'🚴'}</span>
+  <span class="ride-icon">${_icon('ride-day.png',indoor?'🚲':'🚴',52)}</span>
   <div class="ride-lbl" style="margin-bottom:5px">${s.name}</div>
   <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
@@ -2668,7 +2672,7 @@ ${actual?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transf
 
 function rRestCard(){
   return`<div class="rest-card">
-<span class="rest-emoji">🌿</span>
+<span class="rest-emoji">${_icon('rest-mobility.png','🌿',52)}</span>
 <div class="rest-title">Rest &amp; Recover</div>
 <div class="rest-sub">Muscles grow during rest. Today you earn tomorrow's gains.</div>
 <div class="mob-list">${MOBILITY.map(m=>`<div class="mob-item"><span>${m.i}</span><span>${m.t}</span></div>`).join('')}</div>
@@ -2989,7 +2993,7 @@ function rPRs(){
   const profile=DB.get('user_profile',null);
   const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">${_T('sub_training')}</div></div>
+<div class="hdr"><h1><img src="/training-brain/assets/icons/app-logo-symbol.png" width="22" height="22" style="vertical-align:middle;margin-right:5px;object-fit:contain" onerror="this.style.display='none'">Training Brain</h1><div class="hdr-sub">${_T('sub_training')}</div></div>
 
 <div class="sec-hdr">${_T('your_goals')}</div>
 ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
@@ -3004,7 +3008,7 @@ ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-
 </div>`}
 
 <div class="sec-hdr">${_T('your_activities')}</div>
-${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:'🏋️',l:'Gym & Weights'},cycling:{i:'🚴',l:'Cycling'},running:{i:'🏃',l:'Running'},cardio:{i:'🏊',l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
+${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:_icon('gym-weights.png','🏋️',20),l:'Gym & Weights'},cycling:{i:_icon('cycling.png','🚴',20),l:'Cycling'},running:{i:_icon('running.png','🏃',20),l:'Running'},cardio:{i:_icon('cardio-classes.png','🏊',20),l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
   <span>${_T('prs')}</span>
@@ -3087,9 +3091,9 @@ ${!history.length
 </div>`;}).join('')}
 
 <div class="bnav">
-  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
-  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
+  <button class="bnav-btn on" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
 </div>
 </div>`;
 }
@@ -3098,7 +3102,7 @@ ${!history.length
 function rSettings(){
   const hasPIN=!!DB.get('pin',null);
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">${_T('sub_settings')}</div></div>
+<div class="hdr"><h1><img src="/training-brain/assets/icons/app-logo-symbol.png" width="22" height="22" style="vertical-align:middle;margin-right:5px;object-fit:contain" onerror="this.style.display='none'">Training Brain</h1><div class="hdr-sub">${_T('sub_settings')}</div></div>
 
 <div class="sec-hdr">${_T('ai_coach')}</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
@@ -3284,9 +3288,9 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
 </div>
 
 <div class="bnav">
-  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>${_T('nav_plan')}</span></button>
-  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn on" onclick="go('settings')"><span>⚙️</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
+  <button class="bnav-btn on" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
 </div>
 </div>`;
 }
@@ -3447,10 +3451,10 @@ function removeActivity(key){
 }
 function showActInfo(k){
   const info={
-    gym:{i:'🏋️',t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
-    cycling:{i:'🚴',t:'Cycling',d:'Road or trail rides tracked outdoors. Syncs automatically with Strava for speed, distance, elevation and power data.'},
-    running:{i:'🏃',t:'Running',d:'Outdoor runs and treadmill sessions. Syncs with Strava for pace, distance, heart rate and route tracking.'},
-    cardio:{i:'🏊',t:'Cardio & Classes',d:'HIIT classes, rowing, elliptical, stair master, swimming, group fitness and more. Sessions logged manually as notes for now — full tracking coming soon.'},
+    gym:{i:_icon('gym-weights.png','🏋️',52),t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
+    cycling:{i:_icon('cycling.png','🚴',52),t:'Cycling',d:'Road or trail rides tracked outdoors. Syncs automatically with Strava for speed, distance, elevation and power data.'},
+    running:{i:_icon('running.png','🏃',52),t:'Running',d:'Outdoor runs and treadmill sessions. Syncs with Strava for pace, distance, heart rate and route tracking.'},
+    cardio:{i:_icon('cardio-classes.png','🏊',52),t:'Cardio & Classes',d:'HIIT classes, rowing, elliptical, stair master, swimming, group fitness and more. Sessions logged manually as notes for now — full tracking coming soon.'},
   };
   const m=info[k];if(!m)return;
   const el=document.createElement('div');
