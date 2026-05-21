@@ -2995,28 +2995,41 @@ ${(()=>{
   </div>`:''}
 </div>`;})()}
 
-<div class="sec-hdr">🚴 Biking preference</div>
-${(()=>{const p=DB.get('bike_pref','weather');return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Controls how outdoor rides are planned each week.</div>
+${(()=>{
+  const profile=DB.get('user_profile',null);
+  const hasCycling=(profile?.activities||[]).includes('cycling');
+  if(!hasCycling)return'';
+  const p=DB.get('bike_pref','weather');
+  return`<div class="sec-hdr">🚴 Ride preference</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should rides be planned when cycling is in your week?</div>
   <div style="display:flex;flex-direction:column;gap:8px">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;border-radius:10px;border:1px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
       <input type="radio" name="bike_pref" value="weather" ${p==='weather'?'checked':''} onchange="DB.set('bike_pref','weather');render()" style="accent-color:var(--acc)">
-      <div><div style="font-weight:700;font-size:13px">Use weather forecast</div><div style="font-size:11px;color:var(--t2)">Outdoor rides when conditions are good</div></div>
+      <div>
+        <div style="font-weight:700;font-size:13px">Use weather forecast</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Schedules outdoor rides on good weather days automatically</div>
+      </div>
     </label>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;border-radius:10px;border:1px solid ${p==='indoor'?'var(--acc)':'var(--bord)'};background:${p==='indoor'?'rgba(124,58,237,.08)':'transparent'}">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='indoor'?'var(--acc)':'var(--bord)'};background:${p==='indoor'?'rgba(124,58,237,.08)':'transparent'}">
       <input type="radio" name="bike_pref" value="indoor" ${p==='indoor'?'checked':''} onchange="DB.set('bike_pref','indoor');render()" style="accent-color:var(--acc)">
-      <div><div style="font-weight:700;font-size:13px">Always indoor</div><div style="font-size:11px;color:var(--t2)">Trainer only, ignore weather</div></div>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:10px 12px;border-radius:10px;border:1px solid ${p==='none'?'var(--acc)':'var(--bord)'};background:${p==='none'?'rgba(124,58,237,.08)':'transparent'}">
-      <input type="radio" name="bike_pref" value="none" ${p==='none'?'checked':''} onchange="DB.set('bike_pref','none');render()" style="accent-color:var(--acc)">
-      <div><div style="font-weight:700;font-size:13px">No biking</div><div style="font-size:11px;color:var(--t2)">Gym only — extra workout days instead of rides</div></div>
+      <div>
+        <div style="font-weight:700;font-size:13px">Always indoor</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Trainer / Zwift only — weather is ignored</div>
+      </div>
     </label>
   </div>
-  <div style="margin-top:12px;font-size:11px;color:var(--t2)">⚠️ Changing this will affect newly generated weeks, not existing plans.</div>
-</div>`})()}
+  <div style="margin-top:12px;font-size:11px;color:var(--t2)">To remove cycling from your plan entirely, edit your goals.</div>
+</div>`;
+})()}
 
-<div class="sec-hdr">🚴 Cycling Plan Setup</div>
 ${(()=>{
+  const _cp=DB.get('user_profile',null);
+  if(!(_cp?.activities||[]).includes('cycling'))return'';
+  return'<div class="sec-hdr">🚴 Cycling Plan Setup</div>';
+})()}
+${(()=>{
+  if(!(DB.get('user_profile',null)?.activities||[]).includes('cycling'))return'';
   const setup=DB.get('bike_setup',null);
   const factor=DB.get('bike_adapt_factor',1.0);
   const checked=DB.get('bike_adapt_check',null);
