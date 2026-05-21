@@ -2257,6 +2257,7 @@ function render(){
   else if(S.screen==='day')el.innerHTML=rDay();
   else if(S.screen==='log')el.innerHTML=rLog();
   else if(S.screen==='prs')el.innerHTML=rPRs();
+  else if(S.screen==='settings')el.innerHTML=rSettings();
   bindEnergy();
   loadAllGifs();
 }
@@ -2304,6 +2305,7 @@ ${tabs}
 <div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>📅</span><span>Plan</span></button>
   <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
 }
@@ -2807,7 +2809,57 @@ function rPRs(){
   const profile=DB.get('user_profile',null);
   const goalLabels={muscle:'💪 Build muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance / event prep',performance:'🏆 Sport performance'};
   return`<div class="screen">
-<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Progress · Records · History</div></div>
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Goals · PRs · History</div></div>
+
+<div class="sec-hdr">🎯 Your goals</div>
+${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+    ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
+  </div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🪜 Other cardio'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
+  <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
+</div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
+  <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
+</div>`}
+
+<div class="sec-hdr">🏆 Personal Records</div>
+${!prKeys.length
+  ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:8px">No PRs yet — log a workout to start tracking</div>`
+  :`<div class="prs-list">${prKeys.map(id=>{const ex=EX[id];if(!ex)return'';const pr=prs[id];const u=unit();return`<div class="pr-row"><div class="pr-row-name">${ex.n}</div><div class="pr-row-val">🏆 ${pr.w}${u} × ${pr.r}</div><div class="pr-row-date">${pr.date}</div><div style="display:flex;gap:6px;margin-top:8px;width:100%"><button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button><button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">🗑 Delete</button></div></div>`;}).join('')}</div>`}
+
+<div class="sec-hdr">📋 Workout History</div>
+${!history.length
+  ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">No workouts logged yet</div>`
+  :history.map((log,hi)=>{
+    const wi=WI[log.type]||WI.REST;
+    const exsDone=log.exercises.filter(e=>e.sets.some(s=>s.done));
+    const totalSets=log.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0);
+    return`<div class="hist-row" onclick="togHist(${hi})">
+  <div class="hist-date">${log.date}${log.completed?' · ✓ Completed':''}</div>
+  <div class="hist-type" style="color:${wi.c}">${wi.i} ${wi.l}</div>
+  <div class="hist-exs">${exsDone.length} exercises · ${totalSets} sets logged</div>
+  <div class="hist-detail" id="hd${hi}">
+    ${exsDone.map(le=>{
+      const ex=EX[le.id];if(!ex)return'';
+      const doneSets=le.sets.filter(s=>s.done);
+      return`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:3px">${ex.n}</div>${doneSets.map((s,i)=>`<div class="hist-set">Set ${i+1}: ${s.w?s.w+unit():'—'} × ${s.r||'—'} reps</div>`).join('')}</div>`;
+    }).join('')}
+  </div>
+</div>`;}).join('')}
+
+<div class="bnav">
+  <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
+  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
+</div>
+</div>`;
+}
+
+/* ── SETTINGS SCREEN ── */
+function rSettings(){
+  return`<div class="screen">
+<div class="hdr"><h1>Training Brain</h1><div class="hdr-sub">Settings · Connected services</div></div>
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
   <span>📋 What's new</span>
@@ -2830,18 +2882,6 @@ function rPRs(){
   </div>
 </div>
 
-<div class="sec-hdr">🎯 Your goals</div>
-${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-    ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
-  </div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🪜 Other cardio'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
-  <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
-</div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
-  <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
-</div>`}
-
 <div class="sec-hdr">☁️ Cloud sync</div>
 ${S.fbUser
   ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
@@ -2858,7 +2898,7 @@ ${S.fbUser
       <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
     </div>`}
 
-<div class="sec-hdr">💾 Manual backup</div>
+<div class="sec-hdr">💾 Backup & security</div>
 <div class="data-btns">
   <button class="btn btn-s" onclick="exportData()">⬇️ Export</button>
   <button class="btn btn-s" onclick="importData()">⬆️ Import</button>
@@ -2874,7 +2914,7 @@ ${S.fbUser
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
     <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
   </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.5">Coaching is personalised to your exercises, PRs and energy level. Powered by Gemini 1.5 Flash.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5">Coaching is personalised to your exercises, PRs and energy level. Powered by Gemini 2.5 Flash.</div>
 </div>
 
 <div class="sec-hdr">🏋️ Gym Profile</div>
@@ -2982,34 +3022,10 @@ ${(()=>{
 </div>`;
 })()}
 
-<div class="sec-hdr">🏆 Personal Records</div>
-${!prKeys.length
-  ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:8px">No PRs yet — log a workout to start tracking</div>`
-  :`<div class="prs-list">${prKeys.map(id=>{const ex=EX[id];if(!ex)return'';const pr=prs[id];const u=unit();return`<div class="pr-row"><div class="pr-row-name">${ex.n}</div><div class="pr-row-val">🏆 ${pr.w}${u} × ${pr.r}</div><div class="pr-row-date">${pr.date}</div><div style="display:flex;gap:6px;margin-top:8px;width:100%"><button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button><button onclick="deletePR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--red);font-size:12px;font-weight:700;padding:7px;cursor:pointer">🗑 Delete</button></div></div>`;}).join('')}</div>`}
-
-<div class="sec-hdr">📋 Workout History</div>
-${!history.length
-  ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">No workouts logged yet</div>`
-  :history.map((log,hi)=>{
-    const wi=WI[log.type]||WI.REST;
-    const exsDone=log.exercises.filter(e=>e.sets.some(s=>s.done));
-    const totalSets=log.exercises.reduce((n,e)=>n+e.sets.filter(s=>s.done).length,0);
-    return`<div class="hist-row" onclick="togHist(${hi})">
-  <div class="hist-date">${log.date}${log.completed?' · ✓ Completed':''}</div>
-  <div class="hist-type" style="color:${wi.c}">${wi.i} ${wi.l}</div>
-  <div class="hist-exs">${exsDone.length} exercises · ${totalSets} sets logged</div>
-  <div class="hist-detail" id="hd${hi}">
-    ${exsDone.map(le=>{
-      const ex=EX[le.id];if(!ex)return'';
-      const doneSets=le.sets.filter(s=>s.done);
-      return`<div style="margin-bottom:8px"><div style="font-size:13px;font-weight:700;margin-bottom:3px">${ex.n}</div>${doneSets.map((s,i)=>`<div class="hist-set">Set ${i+1}: ${s.w?s.w+unit():'—'} × ${s.r||'—'} reps</div>`).join('')}</div>`;
-    }).join('')}
-  </div>
-</div>`;}).join('')}
-
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>📅</span><span>Plan</span></button>
-  <button class="bnav-btn on" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn" onclick="go('prs')"><span>🏆</span><span>Progress</span></button>
+  <button class="bnav-btn on" onclick="go('settings')"><span>⚙️</span><span>Settings</span></button>
 </div>
 </div>`;
 }
