@@ -789,10 +789,12 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.45';
+const APP_VERSION='1.46';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.46',d:'"Gym only" replaces "No biking"; plan now respects your training-days-per-week setting',det:'The third plan mode was renamed from "No biking" to "Gym only" — a much clearer description of what it actually does. More importantly, the weekly plan generator now honours the training-days-per-week setting from your profile (3–6 days). Previously every mode hard-coded 6 active days regardless of what you set. Now: Gym only = your chosen number of gym days, worst-weather days become rest. With rides = 2 ride days + (target days − 2) gym days + rest. For example, a 4-day user on "Use weather" gets 2 rides + 2 gym + 3 rest instead of 2 rides + 4 gym + 1 rest. The "Gym only" option also now appears in the Ride preference section of Settings so you can switch without going back to the Plan tab. Cycling-specific options (Use weather / Indoor only) are hidden on the Plan tab for users who have no cycling activity selected.'},
+  {v:'1.45',d:'Goals, Strava and bike plan now survive reinstalls and sign-outs',det:'Profile data (goals, activities, training days, experience level) and the Strava token were never included in the Firebase sync — so reinstalling the app or signing out and back in cleared them, causing the goals onboarding sheet to reappear and Strava to disconnect. All of this data is now included in saveToCloud. The goals and bike plan setup sheets also now push to Firebase immediately on save, so the data is backed up the moment you tap Save rather than waiting for the next log entry.'},
   {v:'1.44',d:'Friendlier ride-log message — explains Strava syncs on its own and may just need time',det:'The hint on the manual ride log was reworded. The old wording ("Strava has no ride logged for today") sounded like the ride would never sync. It now makes clear that a connected Strava ride syncs in automatically once Strava finishes processing it — so you can skip the form — and that manual entry is there if you want it tracked right away. For users without Strava, the message is more encouraging about logging to keep progress moving.'},
   {v:'1.43',d:'Ride logging is now inline on the ride card (no pop-up); Weekly Review set to "coming soon"',det:'The manual ride log no longer opens a separate screen. The duration, distance, average heart rate, perceived effort and notes fields now sit directly on the ride card and save as you type — with a short note explaining that rides sync automatically once Strava is connected. The Weekly Review email setup in Settings is temporarily shown as "coming soon" while the email backend is being finished; it will be switched back on alongside the Feedback feature.'},
   {v:'1.42',d:'Import now accepts CSV files — restore workouts, rides and PRs from a CSV export',det:'The Restore button previously only accepted the JSON backup. It now also reads the CSV produced by Export CSV: it parses workout sets, rides and personal records back into the app, matching exercise names in English or Chinese. CSV import merges into your existing data rather than wiping it, and preserves any fields the CSV does not carry. Rows whose exercise name is not recognised are skipped and reported. The JSON backup is still the recommended full backup (it also carries your plan and settings); CSV import is handy for restoring training records specifically.'},
@@ -1974,7 +1976,11 @@ function getLastGymType(){
 
 function buildWeek(wdays){
   const bikePref=DB.get('bike_pref','weather');
+  const profile=DB.get('user_profile',{});
+  // Honour the user's training-days-per-week setting (default 4, range 3-6)
+  const targetDays=Math.min(6,Math.max(3,profile.days||4));
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
+  const rankedAsc=[...ranked].reverse(); // worst weather first — used to pick rest days
 
   // Lock days that already have completed sets — preserve them on refresh
   const existingPlan=DB.get(DB.pk(S.weekStart),null);
@@ -1996,7 +2002,6 @@ function buildWeek(wdays){
   // Assign gym types in PPL sequence, respecting locked days
   function assignGym(gymDays,asgn){
     const sorted=[...gymDays].sort((a,b)=>a-b);
-    // Find last completed type (locked days this week first, then history)
     let lastType=null;
     for(const i of sorted){if(locked[i])lastType=locked[i];}
     if(!lastType)lastType=getLastGymType();
@@ -2007,22 +2012,35 @@ function buildWeek(wdays){
     }
   }
 
+  // ── Gym only (no cardio/rides) ────────────────────────────────────────────
+  // targetDays gym sessions; remaining days are rest (worst weather first)
   if(bikePref==='none'){
-    const restIdx=ranked[ranked.length-1].i;
-    const gymDays=[0,1,2,3,4,5,6].filter(i=>i!==restIdx);
+    const numRest=7-targetDays;
+    const restSet=new Set(rankedAsc.slice(0,numRest).map(r=>r.i));
+    const gymDays=[0,1,2,3,4,5,6].filter(i=>!restSet.has(i));
     const asgn={};
     assignGym(gymDays,asgn);
-    return wdays.map((w,i)=>mk(w,i===restIdx?'REST':asgn[i]||'REST',i));
+    return wdays.map((w,i)=>mk(w,restSet.has(i)?'REST':asgn[i]||'REST',i));
   }
 
-  // D: gym-aware — find tentative LEGS day to avoid placing hard ride after it
-  // We do a quick pre-pass to figure out which gym day would get LEGS
+  // ── With rides (weather or indoor) ───────────────────────────────────────
+  // 2 ride days (best weather) + (targetDays-2) gym days + rest days
+  // e.g. 4-day user: 2 rides + 2 gym + 3 rest
+  //      6-day user: 2 rides + 4 gym + 1 rest
+  const numRides=Math.min(2,Math.max(1,targetDays-1)); // always keep ≥1 gym slot
+  const numGym=targetDays-numRides;
+  const numRest=7-targetDays;
   const OT=45;
-  const tentativeRideSet=new Set([ranked[0].i,ranked[1].i]);
-  const tentativeRest5=[0,1,2,3,4,5,6].filter(i=>!tentativeRideSet.has(i));
-  let tentativeRestIdx=(ranked[0].i+1)%7;
-  if(!tentativeRest5.includes(tentativeRestIdx))tentativeRestIdx=tentativeRest5[tentativeRest5.length-1];
-  const tentativeGymDays=tentativeRest5.filter(i=>i!==tentativeRestIdx).sort((a,b)=>a-b);
+
+  // Pre-pass: figure out which gym day gets LEGS so we can avoid placing
+  // the short (quality) ride the day after it
+  const tentativeRideSet=new Set(ranked.slice(0,numRides).map(r=>r.i));
+  const tentativeNonRide=[0,1,2,3,4,5,6].filter(i=>!tentativeRideSet.has(i));
+  // Among non-ride days, worst weather = rest
+  const tentativeRestSet=new Set(
+    rankedAsc.filter(r=>tentativeNonRide.includes(r.i)).slice(0,numRest).map(r=>r.i)
+  );
+  const tentativeGymDays=tentativeNonRide.filter(i=>!tentativeRestSet.has(i)).sort((a,b)=>a-b);
   let legsIdx=-1;
   {
     let lastType=getLastGymType();
@@ -2034,27 +2052,31 @@ function buildWeek(wdays){
   }
   const postLegsIdx=legsIdx>=0?(legsIdx+1)%7:-1;
 
-  // Pick long ride day: best weather overall
-  // Pick short (quality) ride day: best weather that is NOT the day after LEGS
+  // Pick ride days: long ride on best-weather day; short ride on best remaining
+  // day but penalised if it falls the day after LEGS
   const longCandidates=[...ranked];
   const shortCandidates=[...ranked].map(r=>({...r,s:r.i===postLegsIdx?r.s-40:r.s})).sort((a,b)=>b.s-a.s);
   const r1=longCandidates[0];
-  const r2=shortCandidates.find(r=>r.i!==r1.i)||shortCandidates[1];
+  const r2=numRides>1?(shortCandidates.find(r=>r.i!==r1.i)||shortCandidates[1]):null;
+  const rideSet=new Set([r1.i,...(r2?[r2.i]:[])]);
 
   const t1=bikePref==='indoor'?'LONG_INDOOR':r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR';
-  const t2=bikePref==='indoor'?'SHORT_INDOOR':r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR';
-  const rideSet=new Set([r1.i,r2.i]);
-  const rest5=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i));
-  let restIdx=(r1.i+1)%7;
-  if(!rest5.includes(restIdx))restIdx=rest5[rest5.length-1];
-  const gymDays=rest5.filter(i=>i!==restIdx);
+  const t2=r2?(bikePref==='indoor'?'SHORT_INDOOR':r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR'):null;
+
+  // Non-ride days: worst weather = rest, rest = gym
+  const nonRide=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i));
+  const restSet=new Set(
+    rankedAsc.filter(r=>nonRide.includes(r.i)).slice(0,numRest).map(r=>r.i)
+  );
+  const gymDays=nonRide.filter(i=>!restSet.has(i));
   const asgn={};
   assignGym(gymDays,asgn);
+
   return wdays.map((w,i)=>{
     let type;
     if(i===r1.i)type=t1;
-    else if(i===r2.i)type=t2;
-    else if(i===restIdx)type='REST';
+    else if(r2&&i===r2.i)type=t2;
+    else if(restSet.has(i))type='REST';
     else type=asgn[i]||'REST';
     return mk(w,type,i);
   });
@@ -2664,7 +2686,7 @@ ${pat
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rReviewCard()}
-${(()=>{const p=DB.get('bike_pref','weather');const opts=[{v:'weather',i:'📡',l:'Use weather'},{v:'indoor',i:'🏠',l:'Indoor only'},{v:'none',i:'🏋️',l:'No biking'}];const tabs=`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`;
+${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'📡',l:'Use weather'},{v:'indoor',i:'🏠',l:'Indoor only'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
 <div class="day-list">
   ${plan.map(d=>rDayRow(d,today)).join('')}
@@ -3667,8 +3689,14 @@ ${(()=>{
         <div style="font-size:11px;color:var(--t2);margin-top:1px">Trainer / Zwift only — weather is ignored</div>
       </div>
     </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='none'?'var(--acc)':'var(--bord)'};background:${p==='none'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="none" ${p==='none'?'checked':''} onchange="DB.set('bike_pref','none');render()" style="accent-color:var(--acc)">
+      <div>
+        <div style="font-weight:700;font-size:13px">Gym only</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Skip cardio this week — gym sessions fill the week</div>
+      </div>
+    </label>
   </div>
-  <div style="margin-top:12px;font-size:11px;color:var(--t2)">To remove cycling from your plan entirely, edit your goals.</div>
 </div>`;
 })()}
 
