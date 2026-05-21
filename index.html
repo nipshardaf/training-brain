@@ -702,8 +702,9 @@ const COACH = {
 };
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.29';
+const APP_VERSION='1.30';
 const CHANGELOG=[
+  {v:'1.30',d:'Sign-up hardened — orphaned accounts prevented, password length validated before attempting',det:'Fixed a gap where Firebase Auth could create an account but the database write immediately after could fail, leaving a user permanently locked out. Now if the database registration fails after auth creation, the auth account is automatically deleted so the user can try again cleanly. Also added an early password length check (minimum 6 chars) before any network call is made.'},
   {v:'1.29',d:'Full visual system refresh — emoji UI replaced with clean inline SVG icons',det:'Replaced the app header, bottom navigation, activity chips, section headers, workout cards, weather badges, energy selector, onboarding choices, toasts, and settings badges with a consistent inline SVG icon set. The new icons inherit the existing theme colours, keep the offline PWA self-contained, and make Training Brain feel more like a polished fitness app than a web page.'},
   {v:'1.28',d:'Active activity chips now have a − button to remove instantly; "Change my activities" button removed',det:'Each active activity chip (Cycling, Gym & Weights, etc.) now has a red − button on the right to remove it directly. The redundant "Change my activities" button is gone — add and remove are now handled entirely from the chips. The "Set up activities" button only appears when you have no activities at all.'},
   {v:'1.27',d:'Every changelog entry now has expandable detail explaining the logic and reasoning behind the change',det:'Tap any version row in What\'s New to expand a longer explanation of why the change was made, how the logic works, and any relevant context. Useful for understanding what the app actually does under the hood or checking if a specific behaviour was intentional.'},
@@ -2228,6 +2229,7 @@ async function doAuth(isNew){
   try{
     let result;
     if(isNew){
+      if(pass.length<6){if(errEl)errEl.textContent='Password must be at least 6 characters.';if(btn){btn.textContent='Create Account';btn.disabled=false;}return;}
       // Check username not taken
       const snap=await _fbDb.ref('usernames/'+username).once('value');
       if(snap.exists()){
@@ -2236,10 +2238,16 @@ async function doAuth(isNew){
         return;
       }
       result=await _fbAuth.createUserWithEmailAndPassword(internalEmail,pass);
-      // Store username → uid mapping and optional recovery email
-      await _fbDb.ref('usernames/'+username).set({uid:result.user.uid,created:new Date().toISOString()});
-      if(recovery)await _fbDb.ref('users/'+result.user.uid+'/profile').set({username,recovery});
-      else await _fbDb.ref('users/'+result.user.uid+'/profile').set({username});
+      // Store username → uid mapping — if this fails, roll back the auth user to prevent orphaned accounts
+      try{
+        await _fbDb.ref('usernames/'+username).set({uid:result.user.uid,created:new Date().toISOString()});
+        if(recovery)await _fbDb.ref('users/'+result.user.uid+'/profile').set({username,recovery});
+        else await _fbDb.ref('users/'+result.user.uid+'/profile').set({username});
+      }catch(dbErr){
+        // Roll back: delete the just-created auth user so they can try again cleanly
+        try{await result.user.delete();}catch(_){}
+        throw dbErr;
+      }
     }else{
       // Sign in: look up username → internal email
       result=await _fbAuth.signInWithEmailAndPassword(internalEmail,pass);
