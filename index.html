@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.77';
+const APP_VERSION='1.78';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.78',d:'Auth: fix half-stuck accounts + smarter error messages',det:'Fixed a scenario where a user (e.g. on a restricted network) could start creating an account, have the network drop mid-way, and then be permanently stuck — unable to create (email already in use) or sign in (unknown password). Now: auth/email-already-in-use shows inline "Sign in instead" and "Reset your password" action buttons. Wrong-password errors on sign-in now show an inline "Forgot password?" link. Added the modern auth/invalid-login-credentials error code to the map (Firebase changed this code and it was falling through to a raw ugly error message). Added auth/network-request-failed with a clear connection error message.'},
   {v:'1.77',d:'Weekly Advisor: smarter context for new users + better PR labels',det:'Two improvements to the Weekly Advisor. (1) The advisor now counts how many weeks of gym history exist in the app and passes that context to the AI — on week 1 it explicitly tells the AI these are baseline measurements, not progressions, so it stops saying "excellent progression" when everything is a first-time entry. (2) PR labels in the training data sent to the AI now distinguish between [baseline — first logged], [NEW PR], and [below PR: X×Y] so the AI has real signal about whether a number is a first-time baseline, a genuine new personal record, or a below-best session.'},
   {v:'1.76',d:'Code cleanup — quota-error helper, stale-flag fix',det:'Internal code review cleanup. (1) The 429/403 quota-error check was copy-pasted in 4 places — now a single isQuotaErr() helper. (2) Fixed a bug where the "AI quota used up" note could linger all session: the _aiQuotaHit flag now clears automatically as soon as any AI call succeeds again. (3) Removed redundant comments.'},
   {v:'1.75',d:'AI Usage dashboard in Settings — see calls today, this week, by type, and quota bar',det:'Added a full AI usage tracker. Every Gemini call (Gym Coach, Ride Coach, Weekly Advisor, Weekly Review) is logged to localStorage with timestamp and success/fail status. The Settings tab now shows: Today / This week / All time counts, a daily quota progress bar vs the ~1500/day free tier limit, a 7-day bar chart, a breakdown by feature type, and the last call time. A Clear button resets the log. Quota warning appears when >85% of daily limit is used.'},
@@ -2855,14 +2856,29 @@ async function doAuth(isNew){
     render();
   }catch(e){
     const msgs={
-      'auth/user-not-found':'No account with that username — try "Create Account".',
-      'auth/wrong-password':'Wrong password. Try again.',
-      'auth/invalid-credential':'Wrong username or password.',
-      'auth/email-already-in-use':'Username already taken — choose another.',
+      'auth/user-not-found':'No account found — tap "Create Account" to sign up.',
+      'auth/wrong-password':'Wrong password. Try again or use Forgot Password.',
+      'auth/invalid-credential':'Wrong email or password.',
+      'auth/invalid-login-credentials':'Wrong email or password.',
       'auth/weak-password':'Password must be at least 6 characters.',
-      'auth/too-many-requests':'Too many attempts. Try again later.',
+      'auth/too-many-requests':'Too many attempts — try again in a few minutes.',
+      'auth/network-request-failed':'Connection failed — check your internet and try again.',
     };
-    if(errEl)errEl.textContent=msgs[e.code]||('Error: '+e.message);
+    if(errEl){
+      // email-already-in-use during Create Account: account half-created (e.g. network dropped mid-flow)
+      // Give the user a clear path forward rather than a dead end
+      if(e.code==='auth/email-already-in-use'){
+        errEl.innerHTML='An account with this email already exists. '
+          +'<button onclick="S._authNew=false;render()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Sign in instead</button>'
+          +' or <button onclick="doForgotPassword()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">reset your password</button>.';
+      } else {
+        errEl.textContent=msgs[e.code]||('Error: '+e.message);
+        // For wrong-password / invalid-credential on sign-in: nudge toward forgot password
+        if(!isNew&&(e.code==='auth/wrong-password'||e.code==='auth/invalid-credential'||e.code==='auth/invalid-login-credentials')){
+          errEl.innerHTML=errEl.textContent+' <button onclick="doForgotPassword()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Forgot password?</button>';
+        }
+      }
+    }
     if(btn){btn.textContent=isNew?'Create Account':'Sign In';btn.disabled=false;}
   }
 }
