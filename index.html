@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.66';
+const APP_VERSION='1.67';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -2861,6 +2861,24 @@ ${tabs}
     </div>
   </div>
 </div>`;
+  }
+  // Past weeks: auto-show recorded Strava rides + gym sessions without needing a plan
+  const _isPastWeek=fd(sun)<fd(today);
+  if(_isPastWeek){
+    const _ws=fd(S.weekStart),_we=fd(sun);
+    const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const _allDates=new Set();
+    (DB.get('strava_activities',[])||[]).forEach(a=>{const ds=(a.start_date_local||'').slice(0,10);if(ds>=_ws&&ds<=_we&&(_rSet.has(a.type)||_rSet.has(a.sport_type)))_allDates.add(ds);});
+    for(let i=0;i<7;i++){const d=addDays(S.weekStart,i);const ds=fd(d);const log=DB.get(DB.lk(d),null);if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))_allDates.add(ds);}
+    if(_allDates.size>0){
+      const _rows=[..._allDates].sort().map(ds=>{
+        const d=new Date(ds+'T12:00:00');
+        const log=DB.get(DB.lk(d),null);
+        const fakeDay={date:ds,type:log?.type||'REST',weather:{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0},exercises:log?.exercises||[]};
+        return rDayRow(fakeDay,today);
+      }).join('');
+      return`<div class="day-list">${_rows}</div>${tabs}<button class="btn btn-s" onclick="genPlan()">🔄 Generate plan for this week</button>`;
+    }
   }
   return`<div class="empty-wrap">
   <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'🌤️'}</div>
