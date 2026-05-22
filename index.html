@@ -887,10 +887,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.88';
+const APP_VERSION='1.89';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.89',d:'Advisor exercise swap suggestions — AI recommends specific exercise changes, wired directly into your workout',det:'The Weekly Advisor now outputs a SWAPS section alongside TARGETS. When the AI spots stalled progress on an exercise (3+ sessions with no weight or rep improvement), a missing movement pattern for your goal, or a clearly better alternative for your level — it flags it with a specific swap: e.g. "Switch Lying Leg Curl → Nordic Curl — better eccentric hamstring load". That suggestion appears as an amber badge inside the exercise card when you open it in your workout. One tap on Swap → applies it immediately to your session and plan, exactly like the existing machine-busy swap. The sequencing research (NSCA compound-before-isolation guidelines, agonist-antagonist pairing for Upper Pump) is also documented inline in the slot templates.'},
   {v:'1.88',d:'Exercise sequencing overhaul — proper movement order and slot logic for all workout types',det:'Four fixes to how sessions are built. (1) PUSH: shoulder compound (OHP/DB press) was sitting in slot 3, after chest accessories — it now comes immediately after flat bench as slot 2, which is the standard push protocol. (2) PULL: had two separate bicep slots meaning every pull session forced two bicep exercises. Merged into one slot — biceps already get significant work from all the rows. (3) LEGS: BSS, lunges, and step-ups (heavy unilateral compound movements) were in slot 3 alongside leg press and leg extension. Moved all unilateral compounds to slot 1/3 properly — slot 3 is now secondary compound and machine work, slot 4 is pure isolation. (4) Sort bug: the exercise variety sort had ai-bi inverted — it was silently picking the MOST recently used exercise each time instead of the least recently used. Fixed to bi-ai so the app correctly rotates exercises across sessions.'},
   {v:'1.87',d:'Fix advisor cross-device trigger + merge AI usage counts across devices',det:'Two sync fixes. (1) The advisor was saving to its own Firebase path but never updating the users/{uid}/updated timestamp, so the cross-device listener on other devices never fired. Fixed by re-adding a saveToCloud() call after advisor generates (updates the timestamp), and extending the sync listener to also pull the current week advisor from Firebase when it wakes up. (2) AI usage log was never synced — each device had its own count. Added ai_usage to the sync bundle, and changed loadFromCloud to merge the calls arrays by timestamp union rather than blindly overwriting — so both devices end up with the combined total.'},
   {v:'1.86',d:'Weekly Advisor cross-device sync — fix Firebase array conversion + dedicated storage path',det:'v1.85 had two silent bugs. (1) The PC PWA was cached on v1.84 when the fix shipped, so weekly_advisor_* keys were never included in the Firebase save. (2) Firebase Realtime Database converts JavaScript arrays to objects with numeric keys on round-trip — so even if the data synced, the targets array came back as {"0":{...}} instead of [{...}], breaking the target lookup silently. Fixed by: storing the advisor result directly at users/{uid}/advisor/{weekKey} as a JSON string (strings round-trip perfectly through Firebase), checking that path first on any device before hitting the API, and falling back to the AI only when Firebase has nothing. This means generate-once-use-everywhere with no wasted API calls.'},
@@ -3730,15 +3731,16 @@ Training data:
 ${dataLines.join('\n')}
 ${upLines.length?'\nUpcoming this week:\n'+upLines.join('\n'):''}
 
-Write exactly 5 sections:
+Write exactly 6 sections:
 LOAD: [1 sentence: overall load — sessions completed, volume, any rides]
 TREND: [1-2 sentences: what the numbers show — name specific exercises or rides; for early users note these are baselines not progressions]
 FOCUS: [1-2 sentences: what to prioritise this week — specific targets to aim for, using exact exercise names and numbers]
 RECOVERY: [1 sentence: recovery or readiness note]
-TARGETS: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array only, no prose. Use the EXACT exercise names from the training data above. Include ONLY exercises where FOCUS gives a specific numeric weight AND rep target. Empty array [] if none.`;
+TARGETS: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array only, no prose. Use EXACT exercise names from the training data. Include ONLY exercises where FOCUS gives a specific numeric weight AND rep target. Empty array [] if none.
+SWAPS: [{"current":"Exact Exercise Name","suggested":"Exact Alternative Name","reason":"one sentence"}] — JSON array only. Recommend a swap ONLY if: (a) the same exercise appears in 3+ sessions with zero weight or rep progression, (b) a key movement pattern is missing for their stated goal, or (c) a clearly more effective alternative exists for their training level. Use EXACT names from the training data for "current". "suggested" must be a real gym exercise. Max 2 swaps. Empty array [] if no swap is warranted.`;
   // Let fetch errors throw — caller distinguishes "no data" (null) from "API error" (thrown)
   const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:400,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:550,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
   trackAICall('weekly_advisor',r.ok);
   if(!r.ok)throw new Error('API '+r.status);
   const data=await r.json();
@@ -3746,12 +3748,14 @@ TARGETS: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array onl
   if(!text)throw new Error('empty response');
   const sections={};
   ['LOAD','TREND','FOCUS','RECOVERY'].forEach(k=>{
-    const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY|TARGETS)[:\\*]|$)','si');
+    const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY|TARGETS|SWAPS)[:\\*]|$)','si');
     const m=text.match(rx);if(m)sections[k]=m[1].trim().replace(/\*\*/g,'');
   });
   let targets=[];
   try{const tm=text.match(/TARGETS:\s*(\[[\s\S]*?\])/);if(tm)targets=JSON.parse(tm[1]);}catch(_){}
-  const result={sections,targets,ts:Date.now()};
+  let swaps=[];
+  try{const sm=text.match(/SWAPS:\s*(\[[\s\S]*?\])/);if(sm)swaps=JSON.parse(sm[1]);}catch(_){}
+  const result={sections,targets,swaps,ts:Date.now()};
   DB.set(cacheKey,result);
   // Push to Firebase as a JSON string so it syncs to other devices without array conversion issues
   if(_fbDb&&S.fbUser){try{await _fbDb.ref('users/'+S.fbUser.uid+'/advisor/'+fd(weekStartDate)).set(JSON.stringify(result));}catch(_){}}
@@ -4107,6 +4111,32 @@ function setLabel(si,set){
   if(set.side==='R')return'<span style="font-size:10px;font-weight:800;color:#f472b6">R</span>';
   return String(si+1);
 }
+// Resolve an exercise name (from AI output) to an EX id
+function findExByName(name){
+  if(!name)return null;
+  const q=name.toLowerCase().trim();
+  let found=Object.entries(EX).find(([,e])=>e.n.toLowerCase()===q);if(found)return found[0];
+  found=Object.entries(EX).find(([,e])=>e.n.toLowerCase().includes(q)||q.includes(e.n.toLowerCase()));
+  return found?found[0]:null;
+}
+
+// Find an advisor-suggested swap for this exercise name (handles Firebase object/array)
+function findWeekSwap(exName,swaps){
+  if(!swaps)return null;
+  if(!Array.isArray(swaps))swaps=Object.values(swaps);
+  if(!swaps.length)return null;
+  const name=exName.toLowerCase();
+  const s=swaps.find(s=>s.current&&(
+    s.current.toLowerCase()===name||
+    name.includes(s.current.toLowerCase())||
+    s.current.toLowerCase().includes(name)
+  ));
+  if(!s||!s.suggested)return null;
+  const toId=findExByName(s.suggested);
+  if(!toId||toId===findExByName(exName))return null; // don't swap to itself
+  return{...s,toId};
+}
+
 function findWeekTarget(exName,targets){
   if(!targets?.length)return null;
   const name=exName.toLowerCase();
@@ -4132,9 +4162,10 @@ function rLogEx(le,ei){
   const isOpen=S.openLogEx===ei;
   const wPh=tgt.sugW?`~${tgt.sugW}${unit()}`:'—';
   const rPh=tgt.reps||'—';
-  // Weekly advisor target for this exercise
+  // Weekly advisor target + swap suggestion for this exercise
   const _advData=DB.get('weekly_advisor_'+fd(getMon(S.viewDate)),null);
   const _wTgt=findWeekTarget(ex.n,_advData?.targets||[]);
+  const _wSwap=findWeekSwap(ex.n,_advData?.swaps||[]);
   // compact summary for when collapsed and done
   const bestSet=allDone?le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0]:null;
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
@@ -4148,6 +4179,7 @@ function rLogEx(le,ei){
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar()}
   ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
+  ${_wSwap?`<div style="font-size:11px;font-weight:600;margin-bottom:8px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:8px"><span style="color:var(--amb);flex:1">💡 Try <strong>${EX[_wSwap.toId]?.n||_wSwap.suggested}</strong> — ${_wSwap.reason}</span><button onclick="event.stopPropagation();doExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}','${_wSwap.toId}')" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);border-radius:6px;color:var(--amb);font-size:10px;font-weight:700;padding:4px 9px;cursor:pointer;white-space:nowrap;-webkit-appearance:none">Swap →</button></div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
   <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
