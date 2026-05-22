@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.85';
+const APP_VERSION='1.86';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.86',d:'Weekly Advisor cross-device sync — fix Firebase array conversion + dedicated storage path',det:'v1.85 had two silent bugs. (1) The PC PWA was cached on v1.84 when the fix shipped, so weekly_advisor_* keys were never included in the Firebase save. (2) Firebase Realtime Database converts JavaScript arrays to objects with numeric keys on round-trip — so even if the data synced, the targets array came back as {"0":{...}} instead of [{...}], breaking the target lookup silently. Fixed by: storing the advisor result directly at users/{uid}/advisor/{weekKey} as a JSON string (strings round-trip perfectly through Firebase), checking that path first on any device before hitting the API, and falling back to the AI only when Firebase has nothing. This means generate-once-use-everywhere with no wasted API calls.'},
   {v:'1.85',d:'Weekly Advisor syncs to Firebase — generate once, available on all your devices',det:'The weekly advisor result (including Smart Targets) was previously stored only in localStorage, meaning each device had to make its own API call. Now weekly_advisor_* keys are included in the Firebase sync bundle. As soon as the advisor generates on any device, it saves to the cloud and your other devices pick it up automatically via the existing cross-device listener — no extra API calls needed.'},
   {v:'1.84',d:'Smart Targets — Weekly Advisor now sets exercise targets that appear in your workout log',det:'The Weekly Advisor now outputs a structured TARGETS block alongside its text advice. When you open an exercise that has a specific target this week (e.g. "Lying Leg Curl at 130lbs × 12"), a green 🎯 badge appears in the exercise body showing exactly what to aim for. When you complete all sets on that exercise, the app checks your best set against the target: hit it and you get a "Target achieved!" toast; close but not quite gets an encouraging nudge. Targets are extracted by the AI from the FOCUS section using the exact exercise names in your training data, so they only appear for exercises the AI actually mentioned.'},
   {v:'1.83',d:'Handle Gemini 503 overload — better error messages for all AI failure types',det:'Gemini occasionally returns 503 (temporarily overloaded) in addition to 429 (quota) and 403 (auth). The Cloudflare Worker now falls through to the next provider on 503 as well. The app now distinguishes three error states: quota exhausted (no retry, reset at midnight), overloaded (retry shown, "usually clears in a minute"), and connection blip (retry shown). Previously 503 looked the same as a connection blip with no explanation.'},
@@ -2955,7 +2956,7 @@ async function saveToCloud(manual=false){
     'user_profile','strava_token','strava_activities','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
-    if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||k.startsWith('weekly_advisor_')||_syncKeys.includes(k))data[k]=DB.get(k);
+    if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
   }
   try{
     const _ts=new Date().toISOString();
@@ -3611,7 +3612,16 @@ function saveRideLogInline(ds){
 async function getWeeklyAdvisor(weekStartDate,force=false){
   if(S.guest)return null;
   const cacheKey='weekly_advisor_'+fd(weekStartDate);
+  // 1. Local cache (fastest, works offline)
   if(!force){const cached=DB.get(cacheKey,null);if(cached)return cached;}
+  // 2. Firebase — check for result generated on another device (saves API call)
+  // Stored as JSON string to avoid Firebase array→object conversion issues
+  if(!force&&_fbDb&&S.fbUser){
+    try{
+      const snap=await _fbDb.ref('users/'+S.fbUser.uid+'/advisor/'+fd(weekStartDate)).once('value');
+      if(snap.exists()){const fbResult=JSON.parse(snap.val());DB.set(cacheKey,fbResult);return fbResult;}
+    }catch(_){}
+  }
   const profile=DB.get('user_profile',null);
   const prs=DB.get('prs',{});
   const u=unit();
@@ -3711,6 +3721,8 @@ TARGETS: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array onl
   try{const tm=text.match(/TARGETS:\s*(\[[\s\S]*?\])/);if(tm)targets=JSON.parse(tm[1]);}catch(_){}
   const result={sections,targets,ts:Date.now()};
   DB.set(cacheKey,result);
+  // Push to Firebase as a JSON string so it syncs to other devices without array conversion issues
+  if(_fbDb&&S.fbUser){try{await _fbDb.ref('users/'+S.fbUser.uid+'/advisor/'+fd(weekStartDate)).set(JSON.stringify(result));}catch(_){}}
   return result;
 }
 
@@ -3780,7 +3792,6 @@ async function loadWeeklyAdvisor(force=false){
       S._advisorNoData=true; // genuinely no logged data yet
     } else {
       showToast('🧠 Weekly analysis ready','var(--grn)');
-      saveToCloud(); // push advisor result to Firebase so other devices get it without another API call
     }
   }catch(e){
     console.warn('Weekly advisor error:',e);
