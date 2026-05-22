@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.71';
+const APP_VERSION='1.72';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.72',d:'Weekly Advisor: fix silent API errors + human-friendly messages',det:'Two improvements to the Weekly Advisor. (1) API errors were being swallowed and mis-reported as "not enough data" — now errors propagate correctly so the right message is shown. (2) All advisor states now use plain human language: connection failures say "might just be a blip", genuinely empty data shows a first-week welcome, and the idle state is shorter and friendlier.'},
   {v:'1.71',d:'Fix: duplicate Monday row; Weekly Advisor shows error state instead of silent failure',det:'Two fixes. (1) A bug could produce duplicate day entries in the plan (two Monday rows). Now deduplicated at render time so only the first entry per date is shown. (2) The Weekly Advisor "Analyse" button was failing silently — if the API returned no data or errored, the card just stayed empty with no feedback. Now shows a specific error message ("not enough data" vs "connection failed") with a retry button, and a success toast when the analysis completes.'},
   {v:'1.70',d:'Weekly Advisor added — AI analysis of your training with weekly focus points',det:'A new 🧠 Weekly Advisor card now appears on the week plan screen. Tap "Analyse my training" and Gemini reviews the last 2 weeks of your actual logged data — gym sets/weights/reps per exercise, Strava rides with HR and power — and returns 4 specific points: Training Load (volume assessment), Trend (what the numbers show — flagging fatigue, progression, plateaus by name), Focus (specific targets for this week), and Recovery (readiness note). Cached per week so it does not re-fetch on every render. Refresh button available to re-run the analysis.'},
   {v:'1.69',d:'Weather refresh preserves exercises; AI Coach uses real training data',det:'Two major upgrades. (1) "Refresh with new weather" now only reschedules which days are rides, gym, or rest — it no longer regenerates exercise selections if the session type is unchanged. Your workout content survives a weather refresh. (2) AI Coach is now data-driven: ride days get coaching based on your last 8 Strava rides (HR, watts, distance trends) with specific targets; gym days now show 4-week set/rep trends per exercise so the coach can flag fatigue (dropped reps), plateaus, or PR opportunities with exact numbers.'},
@@ -3330,22 +3331,21 @@ LOAD: [1 sentence: overall load last week — volume, intensity, sessions]
 TREND: [1-2 sentences: what the numbers show — name specific exercises or rides, flag fatigue or progress]
 FOCUS: [1-2 sentences: what to prioritise this week based on the data — specific targets]
 RECOVERY: [1 sentence: recovery or readiness note based on training load]`;
-  try{
-    const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:400,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
-    if(!r.ok)throw new Error('API '+r.status);
-    const data=await r.json();
-    const text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if(!text)return null;
-    const sections={};
-    ['LOAD','TREND','FOCUS','RECOVERY'].forEach(k=>{
-      const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY)[:\\*]|$)','si');
-      const m=text.match(rx);if(m)sections[k]=m[1].trim().replace(/\*\*/g,'');
-    });
-    const result={sections,ts:Date.now()};
-    DB.set(cacheKey,result);
-    return result;
-  }catch(e){console.warn('Weekly advisor:',e);return null;}
+  // Let fetch errors throw — caller distinguishes "no data" (null) from "API error" (thrown)
+  const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:400,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
+  if(!r.ok)throw new Error('API '+r.status);
+  const data=await r.json();
+  const text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+  if(!text)throw new Error('empty response');
+  const sections={};
+  ['LOAD','TREND','FOCUS','RECOVERY'].forEach(k=>{
+    const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY)[:\\*]|$)','si');
+    const m=text.match(rx);if(m)sections[k]=m[1].trim().replace(/\*\*/g,'');
+  });
+  const result={sections,ts:Date.now()};
+  DB.set(cacheKey,result);
+  return result;
 }
 
 function rWeeklyAdvisor(){
@@ -3362,12 +3362,17 @@ function rWeeklyAdvisor(){
 </div>`;
   if(S._advisorError)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:12px">${S._advisorError}</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Couldn't reach the AI right now — might just be a blip. Check your connection and give it another go.</div>
   <button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>
+</div>`;
+  if(S._advisorNoData)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Looks like this is your first week on the app — welcome! Once you've got a few sessions logged or your Strava rides synced, I'll be able to give you a proper read on your training load, trends and what to focus on next.</div>
+  <button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:8px 16px;cursor:pointer">↻ Check again</button>
 </div>`;
   if(!data)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Get a data-driven analysis of your recent training — load, trends, what to focus on this week.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Get a data-driven read on your training — load, trends, what to focus on this week.</div>
   <button onclick="loadWeeklyAdvisor()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:10px 18px;cursor:pointer;width:100%">🧠 Analyse my training</button>
 </div>`;
   const s=data.sections||{};
@@ -3391,17 +3396,19 @@ async function loadWeeklyAdvisor(force=false){
   if(S._advisorLoading)return;
   if(force)DB.set('weekly_advisor_'+fd(S.weekStart),null);
   S._advisorLoading=true;
-  S._advisorError=false;
+  S._advisorError=null;
+  S._advisorNoData=false;
   render();
   try{
     const result=await getWeeklyAdvisor(S.weekStart,force);
     if(!result){
-      S._advisorError='Not enough training data yet — log some sessions or sync Strava first.';
+      S._advisorNoData=true; // genuinely no logged data yet
     } else {
       showToast('🧠 Weekly analysis ready','var(--grn)');
     }
   }catch(e){
-    S._advisorError='Analysis failed — check your connection and try again.';
+    console.warn('Weekly advisor error:',e);
+    S._advisorError=e.message||'fetch failed';
   }
   S._advisorLoading=false;
   render();
