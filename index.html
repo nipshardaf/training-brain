@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.72';
+const APP_VERSION='1.73';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.73',d:'Cross-device sync — plan and log data now syncs live between your phone and PC',det:'Added a Firebase real-time listener that watches for changes from other devices. When you log a session or generate a plan on your phone, your PC picks it up automatically (and vice versa) without needing to reload the app. Uses the existing Firebase Realtime Database — no new setup required. A "Synced from another device" toast appears when remote data is pulled in.'},
   {v:'1.72',d:'Weekly Advisor: fix silent API errors + human-friendly messages',det:'Two improvements to the Weekly Advisor. (1) API errors were being swallowed and mis-reported as "not enough data" — now errors propagate correctly so the right message is shown. (2) All advisor states now use plain human language: connection failures say "might just be a blip", genuinely empty data shows a first-week welcome, and the idle state is shorter and friendlier.'},
   {v:'1.71',d:'Fix: duplicate Monday row; Weekly Advisor shows error state instead of silent failure',det:'Two fixes. (1) A bug could produce duplicate day entries in the plan (two Monday rows). Now deduplicated at render time so only the first entry per date is shown. (2) The Weekly Advisor "Analyse" button was failing silently — if the API returned no data or errored, the card just stayed empty with no feedback. Now shows a specific error message ("not enough data" vs "connection failed") with a retry button, and a success toast when the analysis completes.'},
   {v:'1.70',d:'Weekly Advisor added — AI analysis of your training with weekly focus points',det:'A new 🧠 Weekly Advisor card now appears on the week plan screen. Tap "Analyse my training" and Gemini reviews the last 2 weeks of your actual logged data — gym sets/weights/reps per exercise, Strava rides with HR and power — and returns 4 specific points: Training Load (volume assessment), Trend (what the numbers show — flagging fatigue, progression, plateaus by name), Focus (specific targets for this week), and Recovery (readiness note). Cached per week so it does not re-fetch on every render. Refresh button available to re-run the analysis.'},
@@ -2693,6 +2694,8 @@ function debouncedSync(){clearTimeout(_syncTimer);_syncTimer=setTimeout(()=>save
 
 /* ── FIREBASE / GOOGLE SYNC ── */
 let _fb=null,_fbDb=null,_fbAuth=null;
+let _myLastSaveTs=null; // timestamp of our own last save — used to skip listener echo
+let _syncListenerActive=false; // ensure we only attach one listener per session
 
 const FB_CFG={
   apiKey:"AIzaSyCSq4c3qF8ylYVFNAqiGFi52AUt57RdpIQ",
@@ -2721,6 +2724,7 @@ function initFirebase(){
         // Auto-unlock if no PIN set — user already authenticated
         // Also run a load→sync cycle so any local-only data (e.g. user_profile set
         // before v1.45) gets pushed up to Firebase, and Firebase data is fresh.
+        startSyncListener(user.uid);
         if(!S.authed&&!DB.get('pin',null)){
           S.authed=true;render();
           loadFromCloud().then(()=>{syncUp();render();});
@@ -2741,6 +2745,7 @@ async function signInGoogle(){
     S.authed=true;S.lockMode='choose';
     await loadFromCloud();
     syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
+    startSyncListener(result.user.uid);
     render();
   }catch(e){
     if(e.code!=='auth/popup-closed-by-user')alert('Sign-in failed: '+e.message);
@@ -2812,6 +2817,7 @@ async function doAuth(isNew){
     S.authed=true;S.lockMode='choose';
     await loadFromCloud();
     syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
+    startSyncListener(result.user.uid);
     render();
   }catch(e){
     const msgs={
@@ -2837,8 +2843,10 @@ async function saveToCloud(manual=false){
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
   }
   try{
-    await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:new Date().toISOString()});
-    DB.set('fb_last_sync',new Date().toISOString());
+    const _ts=new Date().toISOString();
+    _myLastSaveTs=_ts; // stamp before the write so the listener can recognise our own echo
+    await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:_ts});
+    DB.set('fb_last_sync',_ts);
     if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>☁️ Backed up just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button>`;render();}
   }catch(_){}
 }
@@ -2849,6 +2857,24 @@ async function loadFromCloud(){
     const snap=await _fbDb.ref('users/'+S.fbUser.uid).once('value');
     if(snap.exists()){const {data}=snap.val()||{};Object.entries(data||{}).forEach(([k,v])=>DB.set(k,v));}
   }catch(_){}
+}
+
+// Real-time cross-device listener — watches the 'updated' timestamp on Firebase.
+// When another device saves, it's a different timestamp than _myLastSaveTs, so we pull.
+function startSyncListener(uid){
+  if(_syncListenerActive||!_fbDb||!uid)return;
+  _syncListenerActive=true;
+  let _firstFire=true; // skip the initial fire (that's our own loadFromCloud data)
+  _fbDb.ref('users/'+uid+'/updated').on('value',async snap=>{
+    const remoteTs=snap.val();
+    if(!remoteTs){_firstFire=false;return;}
+    if(_firstFire){_firstFire=false;return;} // skip the initial value event
+    if(remoteTs===_myLastSaveTs)return; // this is our own echo — skip
+    // A different device saved — pull their data
+    await loadFromCloud();
+    showToast('☁️ Synced from another device','var(--al)');
+    render();
+  });
 }
 
 async function connectAndEnter(){
