@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.69';
+const APP_VERSION='1.70';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.70',d:'Weekly Advisor added — AI analysis of your training with weekly focus points',det:'A new 🧠 Weekly Advisor card now appears on the week plan screen. Tap "Analyse my training" and Gemini reviews the last 2 weeks of your actual logged data — gym sets/weights/reps per exercise, Strava rides with HR and power — and returns 4 specific points: Training Load (volume assessment), Trend (what the numbers show — flagging fatigue, progression, plateaus by name), Focus (specific targets for this week), and Recovery (readiness note). Cached per week so it does not re-fetch on every render. Refresh button available to re-run the analysis.'},
   {v:'1.69',d:'Weather refresh preserves exercises; AI Coach uses real training data',det:'Two major upgrades. (1) "Refresh with new weather" now only reschedules which days are rides, gym, or rest — it no longer regenerates exercise selections if the session type is unchanged. Your workout content survives a weather refresh. (2) AI Coach is now data-driven: ride days get coaching based on your last 8 Strava rides (HR, watts, distance trends) with specific targets; gym days now show 4-week set/rep trends per exercise so the coach can flag fatigue (dropped reps), plateaus, or PR opportunities with exact numbers.'},
   {v:'1.68',d:'Plan now uses your goal and Strava rides to decide how many ride days to schedule',det:'Previously the planner always assigned exactly 2 ride days regardless of what you already rode or what your goal is. Now: (1) Your profile goal drives the ride quota — endurance/performance goals get more ride days, muscle goals get mostly gym, fitness goals get a balanced split. (2) Strava rides already done this week count toward that quota first — if you rode Monday and Thursday and your target is 2 rides, no more rides are added to the remaining days.'},
   {v:'1.67',d:'Past weeks with no plan now auto-show recorded Strava rides and gym sessions',det:'Navigating to a previous week that had no generated plan used to show the empty "Ready to generate" screen even if you had Strava rides or logged gym sessions that week. Now the app scans strava_activities and gym log keys for that date range and renders whatever was recorded automatically — no generate needed. A "Generate plan for this week" button still appears below.'},
@@ -2935,6 +2936,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rReviewCard()}
+${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
 <div class="day-list">
@@ -3260,6 +3262,131 @@ function saveRideLogInline(ds){
   syncUp();
   render();
   showToast(_T('rl_saved_toast'),'var(--grn)');
+}
+
+/* ── WEEKLY ADVISOR ── */
+async function getWeeklyAdvisor(weekStartDate,force=false){
+  if(S.guest)return null;
+  const cacheKey='weekly_advisor_'+fd(weekStartDate);
+  if(!force){const cached=DB.get(cacheKey,null);if(cached)return cached;}
+  const profile=DB.get('user_profile',null);
+  const prs=DB.get('prs',{});
+  const u=unit();
+  const _gm={muscle:'build muscle',lose_weight:'lose weight',fitness:'general fitness',endurance:'endurance',performance:'sport performance'};
+  const _goals=profile?.goals||(profile?.goal?[profile.goal]:[]);
+  const goalDesc=_goals.map(g=>_gm[g]||g).join(' + ')||'general fitness';
+  const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  // Gather last 2 weeks of training data
+  const dataLines=[];
+  for(let w=1;w>=0;w--){
+    const mon=getMon(addDays(weekStartDate,-w*7));
+    const wLabel=w===1?'Last week':'This week (so far)';
+    const wPlan=DB.get(DB.pk(mon),null);
+    const wLines=[];
+    for(let i=0;i<7;i++){
+      const d=addDays(mon,i);const ds=fd(d);
+      const log=DB.get(DB.lk(d),null);
+      const sr=(DB.get('strava_activities',[])||[]).find(a=>(a.start_date_local||'').slice(0,10)===ds&&(_rSet.has(a.type)||_rSet.has(a.sport_type)));
+      if(sr){
+        const dur=Math.round((sr.moving_time||0)/60);
+        const dist=+((sr.distance||0)/1000).toFixed(1);
+        const hr=sr.average_heartrate?Math.round(sr.average_heartrate):null;
+        const watts=sr.average_watts?Math.round(sr.average_watts):null;
+        wLines.push(`  ${ds} RIDE: ${dist}km ${dur}min${hr?' HR '+hr+'bpm':''}${watts?' '+watts+'W':''}`);
+      }
+      if(log?.exercises?.some(e=>e.sets.some(s=>s.done))){
+        const planDay=wPlan?.find(p=>p.date===ds);
+        const type=planDay?.type||log.type||'GYM';
+        const exLines=log.exercises.map(le=>{
+          const ex=EX[le.id];if(!ex)return null;
+          const done=le.sets.filter(s=>s.done&&s.w&&s.r);if(!done.length)return null;
+          const pr=prs[le.id];
+          const avgW=Math.round(done.reduce((a,s)=>a+(parseFloat(s.w)||0),0)/done.length*10)/10;
+          const avgR=Math.round(done.reduce((a,s)=>a+(parseInt(s.r)||0),0)/done.length);
+          return `    ${ex.n}: ${avgW}${u}×${avgR} avg, ${done.length} sets${pr?` [PR ${pr.w}${u}×${pr.r}]`:''}`;
+        }).filter(Boolean);
+        wLines.push(`  ${ds} ${type}:${log.completed?' ✓':''}`);
+        exLines.forEach(l=>wLines.push(l));
+      }
+    }
+    if(wLines.length){dataLines.push(wLabel+':');dataLines.push(...wLines);}
+  }
+  if(!dataLines.length)return null;
+  // Upcoming days this week for context
+  const upPlan=DB.get(DB.pk(weekStartDate),null);
+  const todayStr=fd(new Date());
+  const upLines=(upPlan||[]).filter(d=>d.date>=todayStr).map(d=>`  ${d.date}: ${d.type}`);
+  const prompt=`You are a data-driven personal trainer. Analyze this athlete's recent training data and write a concise weekly advisory. Be specific — use exercise names, weights, distances, HR. Identify patterns: dropped reps at same weight = fatigue; consistent increases = progression; missed sessions = load drop.
+
+Goal: ${goalDesc} | Level: ${profile?.level||'intermediate'}${profile?.gender?' | '+profile.gender:''}
+
+Training data:
+${dataLines.join('\n')}
+${upLines.length?'\nUpcoming this week:\n'+upLines.join('\n'):''}
+
+Write exactly 4 advisor points:
+LOAD: [1 sentence: overall load last week — volume, intensity, sessions]
+TREND: [1-2 sentences: what the numbers show — name specific exercises or rides, flag fatigue or progress]
+FOCUS: [1-2 sentences: what to prioritise this week based on the data — specific targets]
+RECOVERY: [1 sentence: recovery or readiness note based on training load]`;
+  try{
+    const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:400,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
+    if(!r.ok)throw new Error('API '+r.status);
+    const data=await r.json();
+    const text=data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(!text)return null;
+    const sections={};
+    ['LOAD','TREND','FOCUS','RECOVERY'].forEach(k=>{
+      const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY)[:\\*]|$)','si');
+      const m=text.match(rx);if(m)sections[k]=m[1].trim().replace(/\*\*/g,'');
+    });
+    const result={sections,ts:Date.now()};
+    DB.set(cacheKey,result);
+    return result;
+  }catch(e){console.warn('Weekly advisor:',e);return null;}
+}
+
+function rWeeklyAdvisor(){
+  if(S.guest)return'';
+  const cacheKey='weekly_advisor_'+fd(S.weekStart);
+  const data=DB.get(cacheKey,null);
+  const loading=!!S._advisorLoading;
+  const icons={LOAD:'📊',TREND:'📈',FOCUS:'🎯',RECOVERY:'💤'};
+  const labels={LOAD:'Training Load',TREND:'What the data shows',FOCUS:'Focus this week',RECOVERY:'Recovery'};
+  const colors={LOAD:'var(--al)',TREND:'#0891b2',FOCUS:'var(--grn)',RECOVERY:'#f59e0b'};
+  if(loading)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">🧠 Weekly Advisor</div>
+  <div style="display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px"><div class="sync-dot"></div>Analysing your training data…</div>
+</div>`;
+  if(!data)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Get a data-driven analysis of your recent training — load, trends, what to focus on this week.</div>
+  <button onclick="loadWeeklyAdvisor()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:10px 18px;cursor:pointer;width:100%">🧠 Analyse my training</button>
+</div>`;
+  const s=data.sections||{};
+  const sectHTML=(['LOAD','TREND','FOCUS','RECOVERY']).filter(k=>s[k]).map(k=>`<div style="margin-bottom:11px">
+  <div style="font-size:10px;font-weight:800;color:${colors[k]};text-transform:uppercase;letter-spacing:.6px;margin-bottom:3px">${icons[k]} ${labels[k]}</div>
+  <div style="font-size:13px;color:var(--txt);line-height:1.55">${s[k]}</div>
+</div>`).join('');
+  const age=data.ts?Math.round((Date.now()-data.ts)/60000):null;
+  const ageStr=age===null?'':age<2?'just now':age<60?`${age}m ago`:`${Math.round(age/60)}h ago`;
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px">🧠 Weekly Advisor</div>
+    <button onclick="loadWeeklyAdvisor(true)" style="background:none;border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer">↻ Refresh</button>
+  </div>
+  ${sectHTML}
+  ${ageStr?`<div style="font-size:10px;color:var(--t2);margin-top:4px">Updated ${ageStr}</div>`:''}
+</div>`;
+}
+
+async function loadWeeklyAdvisor(force=false){
+  if(S._advisorLoading)return;
+  if(force)DB.set('weekly_advisor_'+fd(S.weekStart),null);
+  S._advisorLoading=true;render();
+  await getWeeklyAdvisor(S.weekStart,force);
+  S._advisorLoading=false;render();
 }
 
 /* ── WEEKLY AI REVIEW ── */
