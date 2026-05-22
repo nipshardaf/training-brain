@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.79';
+const APP_VERSION='1.80';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.80',d:'Friends — connect with friends and see each other\'s weekly training',det:'Added a full friends system. Each user gets a unique 6-character friend code (e.g. A3K9P2) generated at login. Share your code — your friend enters it to send a request. You get a red badge on the Settings tab when a request comes in. Accept or decline inline. Once connected, you see each other\'s Strava-style weekly card: a 7-dot Mon–Sun activity strip, session counts (gym + rides), total km, and week streak. No weights or PRs are shared — just the summary. Week summary is written to Firebase on every save so friends always see current data. Friend codes are stored in a reverse-lookup table so there\'s no searching the user database.'},
   {v:'1.79',d:'Rest days no longer show "How are you feeling?"',det:'The energy selector (Fresh / Okay / Tired / Sore) is only relevant before a training session. On REST & MOBILITY days it served no purpose and added noise. It is now hidden on rest days — only shown on gym and ride days where the coach uses it to adjust your session targets.'},
   {v:'1.78',d:'Auth: fix half-stuck accounts + smarter error messages',det:'Fixed a scenario where a user (e.g. on a restricted network) could start creating an account, have the network drop mid-way, and then be permanently stuck — unable to create (email already in use) or sign in (unknown password). Now: auth/email-already-in-use shows inline "Sign in instead" and "Reset your password" action buttons. Wrong-password errors on sign-in now show an inline "Forgot password?" link. Added the modern auth/invalid-login-credentials error code to the map (Firebase changed this code and it was falling through to a raw ugly error message). Added auth/network-request-failed with a clear connection error message.'},
   {v:'1.77',d:'Weekly Advisor: smarter context for new users + better PR labels',det:'Two improvements to the Weekly Advisor. (1) The advisor now counts how many weeks of gym history exist in the app and passes that context to the AI — on week 1 it explicitly tells the AI these are baseline measurements, not progressions, so it stops saying "excellent progression" when everything is a first-time entry. (2) PR labels in the training data sent to the AI now distinguish between [baseline — first logged], [NEW PR], and [below PR: X×Y] so the AI has real signal about whether a number is a first-time baseline, a genuine new personal record, or a below-best session.'},
@@ -2131,7 +2132,7 @@ function energyTargets(exId,energy){
 }
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false,_friendCode:null,_friendRequests:{},_friendSummaries:{},_friendsLoaded:false};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -2761,6 +2762,7 @@ function initFirebase(){
         // Also run a load→sync cycle so any local-only data (e.g. user_profile set
         // before v1.45) gets pushed up to Firebase, and Firebase data is fresh.
         startSyncListener(user.uid);
+        ensureFriendCode().then(()=>loadFriendData());
         if(!S.authed&&!DB.get('pin',null)){
           S.authed=true;render();
           loadFromCloud().then(()=>{syncUp();render();});
@@ -2782,6 +2784,7 @@ async function signInGoogle(){
     await loadFromCloud();
     syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
     startSyncListener(result.user.uid);
+    ensureFriendCode().then(()=>loadFriendData());
     render();
   }catch(e){
     if(e.code!=='auth/popup-closed-by-user')alert('Sign-in failed: '+e.message);
@@ -2854,6 +2857,7 @@ async function doAuth(isNew){
     await loadFromCloud();
     syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
     startSyncListener(result.user.uid);
+    ensureFriendCode().then(()=>loadFriendData());
     render();
   }catch(e){
     const msgs={
@@ -2898,6 +2902,8 @@ async function saveToCloud(manual=false){
     _myLastSaveTs=_ts; // stamp before the write so the listener can recognise our own echo
     await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:_ts});
     DB.set('fb_last_sync',_ts);
+    // Write public week summary so friends can see this user's weekly stats
+    try{await _fbDb.ref('public/'+S.fbUser.uid+'/weekSummary').set(computeWeekSummary());}catch(_){}
     if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>☁️ Backed up just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button>`;render();}
   }catch(_){}
 }
@@ -2926,6 +2932,204 @@ function startSyncListener(uid){
     showToast('☁️ Synced from another device','var(--al)');
     render();
   });
+}
+
+/* ── FRIENDS ── */
+function _genFriendCode(){
+  const c='ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // omit I,O,0,1 — visually confusing
+  let code='';for(let i=0;i<6;i++)code+=c[Math.floor(Math.random()*c.length)];
+  return code;
+}
+
+async function ensureFriendCode(){
+  if(!S.fbUser||!_fbDb)return;
+  const existing=DB.get('friend_code',null);
+  if(existing){S._friendCode=existing;return;}
+  // Generate unique code
+  let code,tries=0;
+  do{code=_genFriendCode();const snap=await _fbDb.ref('friendCodes/'+code).once('value');if(!snap.exists())break;}while(++tries<10);
+  await _fbDb.ref('friendCodes/'+code).set({uid:S.fbUser.uid,name:S.fbUser.username||S.fbUser.name||''});
+  await _fbDb.ref('users/'+S.fbUser.uid+'/profile/friendCode').set(code);
+  DB.set('friend_code',code);S._friendCode=code;
+}
+
+function computeWeekSummary(){
+  const ws=getMon(new Date());
+  const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  const stravaActs=DB.get('strava_activities',[])||[];
+  const daysDone=[];let gymSessions=0,rideSessions=0,totalKm=0;
+  for(let i=0;i<7;i++){
+    const d=addDays(ws,i);const ds=fd(d);
+    const log=DB.get(DB.lk(d),null);
+    const sr=stravaActs.find(a=>(a.start_date_local||'').slice(0,10)===ds&&(_rSet.has(a.type)||_rSet.has(a.sport_type)));
+    const gymDone=log?.exercises?.some(e=>e.sets.some(s=>s.done));
+    if(gymDone){gymSessions++;if(!daysDone.includes(ds))daysDone.push(ds);}
+    if(sr){rideSessions++;totalKm+=(sr.distance||0)/1000;if(!daysDone.includes(ds))daysDone.push(ds);}
+  }
+  // Week streak — consecutive weeks (including current) with at least 1 session
+  let weekStreak=0;
+  for(let w=0;w<=52;w++){
+    const wMon=getMon(addDays(new Date(),-w*7));
+    let has=false;
+    for(let i=0;i<7;i++){const d=addDays(wMon,i);const ds=fd(d);const log=DB.get(DB.lk(d),null);const sr=stravaActs.find(a=>(a.start_date_local||'').slice(0,10)===ds&&(_rSet.has(a.type)||_rSet.has(a.sport_type)));if(log?.exercises?.some(e=>e.sets.some(s=>s.done))||sr){has=true;break;}}
+    if(has)weekStreak++;else if(w>0)break;
+  }
+  return{displayName:S.fbUser?.username||S.fbUser?.name||'',weekStart:fd(ws),gymSessions,rideSessions,totalKm:Math.round(totalKm*10)/10,daysDone:daysDone.sort(),weekStreak};
+}
+
+async function loadFriendData(){
+  if(!S.fbUser||!_fbDb)return;
+  try{
+    const [reqSnap,friendsSnap]=await Promise.all([
+      _fbDb.ref('users/'+S.fbUser.uid+'/friendRequests').once('value'),
+      _fbDb.ref('users/'+S.fbUser.uid+'/friends').once('value')
+    ]);
+    S._friendRequests=reqSnap.val()||{};
+    const friends=friendsSnap.val()||{};
+    S._friendSummaries={};
+    await Promise.all(Object.keys(friends).map(async fuid=>{
+      try{
+        const snap=await _fbDb.ref('public/'+fuid+'/weekSummary').once('value');
+        S._friendSummaries[fuid]={...friends[fuid],...(snap.val()||{})};
+      }catch(_){S._friendSummaries[fuid]={...friends[fuid]};}
+    }));
+    S._friendsLoaded=true;
+    render();
+  }catch(_){}
+}
+
+async function sendFriendRequest(code){
+  if(!S.fbUser||!_fbDb||!code)return;
+  const c=code.trim().toUpperCase();
+  if(c===S._friendCode){showToast('That\'s your own code!','var(--red)');return;}
+  try{
+    const snap=await _fbDb.ref('friendCodes/'+c).once('value');
+    if(!snap.exists()){showToast('Code not found — double-check and try again','var(--red)');return;}
+    const {uid:tUid}=snap.val();
+    const already=await _fbDb.ref('users/'+S.fbUser.uid+'/friends/'+tUid).once('value');
+    if(already.exists()){showToast('Already connected! 👋','var(--grn)');return;}
+    const pendingOut=await _fbDb.ref('users/'+tUid+'/friendRequests/'+S.fbUser.uid).once('value');
+    if(pendingOut.exists()){showToast('Request already sent — waiting for them to accept','var(--al)');return;}
+    await _fbDb.ref('users/'+tUid+'/friendRequests/'+S.fbUser.uid).set({
+      name:S.fbUser.username||S.fbUser.name||'',code:S._friendCode||'',ts:new Date().toISOString()
+    });
+    showToast('Friend request sent! 🤝','var(--grn)');
+    document.getElementById('friend-code-input') && (document.getElementById('friend-code-input').value='');
+  }catch(e){showToast('Could not send — check your connection','var(--red)');}
+}
+
+async function acceptFriend(fromUid){
+  if(!S.fbUser||!_fbDb)return;
+  const req=S._friendRequests?.[fromUid];if(!req)return;
+  try{
+    const now=new Date().toISOString();
+    await Promise.all([
+      _fbDb.ref('users/'+S.fbUser.uid+'/friends/'+fromUid).set({name:req.name,code:req.code,since:now}),
+      _fbDb.ref('users/'+fromUid+'/friends/'+S.fbUser.uid).set({name:S.fbUser.username||S.fbUser.name||'',code:S._friendCode||'',since:now}),
+      _fbDb.ref('users/'+S.fbUser.uid+'/friendRequests/'+fromUid).remove()
+    ]);
+    delete S._friendRequests[fromUid];
+    showToast('Connected! 🎉','var(--grn)');
+    await loadFriendData();
+  }catch(e){showToast('Error — try again','var(--red)');}
+}
+
+async function declineFriend(fromUid){
+  if(!S.fbUser||!_fbDb)return;
+  try{
+    await _fbDb.ref('users/'+S.fbUser.uid+'/friendRequests/'+fromUid).remove();
+    delete S._friendRequests[fromUid];render();
+  }catch(_){}
+}
+
+async function removeFriend(fuid){
+  if(!S.fbUser||!_fbDb)return;
+  if(!confirm('Remove this friend?'))return;
+  try{
+    await _fbDb.ref('users/'+S.fbUser.uid+'/friends/'+fuid).remove();
+    delete S._friendSummaries[fuid];render();
+  }catch(e){showToast('Error removing friend','var(--red)');}
+}
+
+function rFriendsSection(){
+  if(!S.fbUser)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:5px">👥 Friends</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6">Sign in to connect with friends and see each other's weekly training.</div>
+</div>`;
+
+  const code=S._friendCode||DB.get('friend_code',null)||'Loading…';
+  const pendingReqs=Object.entries(S._friendRequests||{});
+  const friends=Object.entries(S._friendSummaries||{});
+  const ws=getMon(new Date());
+
+  // Helper: render 7-dot activity strip for a friend's daysDone
+  const dotStrip=(daysDone=[])=>{
+    const days=[];
+    for(let i=0;i<7;i++){const d=addDays(ws,i);const ds=fd(d);days.push(daysDone.includes(ds));}
+    return`<div style="display:flex;gap:4px;margin:6px 0 4px">${days.map(on=>`<div style="width:10px;height:10px;border-radius:50%;background:${on?'var(--acc)':'var(--s3,var(--bord))'};flex-shrink:0"></div>`).join('')}</div>`;
+  };
+
+  const friendCards=friends.length?friends.map(([fuid,f])=>{
+    const streak=f.weekStreak||0;
+    const gym=f.gymSessions||0;
+    const rides=f.rideSessions||0;
+    const km=f.totalKm||0;
+    const summaryParts=[];
+    if(gym)summaryParts.push(`${gym} gym`);
+    if(rides)summaryParts.push(`${rides} ride`);
+    if(km>0)summaryParts.push(`${km.toFixed(1)}km`);
+    const summaryStr=summaryParts.length?summaryParts.join(' · '):'No sessions yet this week';
+    return`<div style="background:var(--s2);border-radius:12px;padding:12px 13px;margin-bottom:8px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px">
+    <div style="font-size:13px;font-weight:700;color:var(--txt)">👤 ${f.name||'Unknown'}</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      ${streak>0?`<div style="font-size:12px;font-weight:700;color:#f59e0b">${streak}🔥</div>`:''}
+      <button onclick="removeFriend('${fuid}')" style="background:none;border:none;color:var(--t2);font-size:11px;cursor:pointer;padding:2px 4px;opacity:.6">✕</button>
+    </div>
+  </div>
+  ${dotStrip(f.daysDone||[])}
+  <div style="font-size:11px;color:var(--t2)">${summaryStr}</div>
+</div>`;
+  }).join(''):`<div style="font-size:12px;color:var(--t2);text-align:center;padding:14px 0">No friends added yet — share your code to get started!</div>`;
+
+  const requestCards=pendingReqs.length?`<div style="margin-bottom:12px">
+  <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Pending requests</div>
+  ${pendingReqs.map(([uid,req])=>`<div style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.2);border-radius:11px;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+    <div style="font-size:13px;font-weight:700">👤 ${req.name||'Someone'}</div>
+    <div style="display:flex;gap:6px">
+      <button onclick="acceptFriend('${uid}')" style="background:var(--grn);border:none;border-radius:8px;color:#fff;font-size:12px;font-weight:700;padding:6px 12px;cursor:pointer">Accept</button>
+      <button onclick="declineFriend('${uid}')" style="background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:12px;font-weight:600;padding:6px 10px;cursor:pointer">Decline</button>
+    </div>
+  </div>`).join('')}
+</div>`:'';
+
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:12px">👥 Friends</div>
+
+  <div style="margin-bottom:14px">
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">Your friend code — share this to connect</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div style="font-size:22px;font-weight:800;letter-spacing:3px;color:var(--acc);font-family:monospace;background:var(--s2);border-radius:10px;padding:8px 14px;flex:1;text-align:center">${code}</div>
+      <button onclick="navigator.clipboard?.writeText('${code}').then(()=>showToast('Code copied!','var(--grn)'))" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:700;padding:10px 13px;cursor:pointer;flex-shrink:0">Copy</button>
+    </div>
+  </div>
+
+  <div style="margin-bottom:14px">
+    <div style="font-size:11px;color:var(--t2);margin-bottom:6px">Add a friend</div>
+    <div style="display:flex;gap:8px">
+      <input id="friend-code-input" type="text" maxlength="6" placeholder="Enter code" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:15px;font-weight:700;letter-spacing:2px;padding:10px 12px;text-transform:uppercase;outline:none;font-family:monospace">
+      <button onclick="sendFriendRequest(document.getElementById('friend-code-input')?.value)" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:10px 16px;cursor:pointer;flex-shrink:0">Send</button>
+    </div>
+  </div>
+
+  ${requestCards}
+
+  <div>
+    <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+      This week ${friends.length?`· ${friends.length} friend${friends.length!==1?'s':''}`:''}</div>
+    ${!S._friendsLoaded?`<div style="font-size:12px;color:var(--t2);text-align:center;padding:10px 0"><div class="sync-dot"></div> Loading…</div>`:friendCards}
+  </div>
+</div>`;
 }
 
 async function connectAndEnter(){
@@ -3088,7 +3292,7 @@ ${tabs}
 <div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
   <button class="bnav-btn" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')" style="position:relative"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span>${(()=>{const n=Object.keys(S._friendRequests||{}).length;return n>0?`<span style="position:absolute;top:2px;right:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:100px;padding:1px 5px;min-width:14px;text-align:center">${n}</span>`:'';})()}</button>
 </div>
 </div>`;
 }
@@ -3541,7 +3745,7 @@ function _reviewNav(){
   return`<div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
   <button class="bnav-btn" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')" style="position:relative"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span>${(()=>{const n=Object.keys(S._friendRequests||{}).length;return n>0?`<span style="position:absolute;top:2px;right:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:100px;padding:1px 5px;min-width:14px;text-align:center">${n}</span>`:'';})()}</button>
 </div>`;
 }
 
@@ -4162,7 +4366,7 @@ ${!history.length
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
   <button class="bnav-btn on" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn" onclick="go('settings')" style="position:relative"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span>${(()=>{const n=Object.keys(S._friendRequests||{}).length;return n>0?`<span style="position:absolute;top:2px;right:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:100px;padding:1px 5px;min-width:14px;text-align:center">${n}</span>`:'';})()}</button>
 </div>
 </div>`;
 }
@@ -4387,6 +4591,9 @@ ${(()=>{
 </div>`;
 })()}
 
+<div class="sec-hdr">👥 Friends</div>
+${rFriendsSection()}
+
 <div class="sec-hdr">${_T('account')}</div>
 ${S.fbUser
   ?`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
@@ -4457,7 +4664,7 @@ ${hasPIN?`<div class="data-btns" style="margin-top:8px">
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
   <button class="bnav-btn" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
-  <button class="bnav-btn on" onclick="go('settings')"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span></button>
+  <button class="bnav-btn on" onclick="go('settings')" style="position:relative"><span>${_icon('settings-tab.png','⚙️',22)}</span><span>${_T('nav_settings')}</span>${(()=>{const n=Object.keys(S._friendRequests||{}).length;return n>0?`<span style="position:absolute;top:2px;right:4px;background:var(--red);color:#fff;font-size:9px;font-weight:800;border-radius:100px;padding:1px 5px;min-width:14px;text-align:center">${n}</span>`:'';})()}</button>
 </div>
 </div>`;
 }
