@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.70';
+const APP_VERSION='1.71';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.71',d:'Fix: duplicate Monday row; Weekly Advisor shows error state instead of silent failure',det:'Two fixes. (1) A bug could produce duplicate day entries in the plan (two Monday rows). Now deduplicated at render time so only the first entry per date is shown. (2) The Weekly Advisor "Analyse" button was failing silently — if the API returned no data or errored, the card just stayed empty with no feedback. Now shows a specific error message ("not enough data" vs "connection failed") with a retry button, and a success toast when the analysis completes.'},
   {v:'1.70',d:'Weekly Advisor added — AI analysis of your training with weekly focus points',det:'A new 🧠 Weekly Advisor card now appears on the week plan screen. Tap "Analyse my training" and Gemini reviews the last 2 weeks of your actual logged data — gym sets/weights/reps per exercise, Strava rides with HR and power — and returns 4 specific points: Training Load (volume assessment), Trend (what the numbers show — flagging fatigue, progression, plateaus by name), Focus (specific targets for this week), and Recovery (readiness note). Cached per week so it does not re-fetch on every render. Refresh button available to re-run the analysis.'},
   {v:'1.69',d:'Weather refresh preserves exercises; AI Coach uses real training data',det:'Two major upgrades. (1) "Refresh with new weather" now only reschedules which days are rides, gym, or rest — it no longer regenerates exercise selections if the session type is unchanged. Your workout content survives a weather refresh. (2) AI Coach is now data-driven: ride days get coaching based on your last 8 Strava rides (HR, watts, distance trends) with specific targets; gym days now show 4-week set/rep trends per exercise so the coach can flag fatigue (dropped reps), plateaus, or PR opportunities with exact numbers.'},
   {v:'1.68',d:'Plan now uses your goal and Strava rides to decide how many ride days to schedule',det:'Previously the planner always assigned exactly 2 ride days regardless of what you already rode or what your goal is. Now: (1) Your profile goal drives the ride quota — endurance/performance goals get more ride days, muscle goals get mostly gym, fitness goals get a balanced split. (2) Strava rides already done this week count toward that quota first — if you rode Monday and Thursday and your target is 2 rides, no more rides are added to the remaining days.'},
@@ -2940,7 +2941,7 @@ ${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
 return plan?`
 <div class="day-list">
-  ${[...plan].sort((a,b)=>a.date.localeCompare(b.date)).map(d=>rDayRow(d,today)).join('')}
+  ${[...plan].sort((a,b)=>a.date.localeCompare(b.date)).filter((d,i,arr)=>arr.findIndex(x=>x.date===d.date)===i).map(d=>rDayRow(d,today)).join('')}
 </div>
 ${tabs}
 <button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🌤️ Refresh with new weather':'🔄 Regenerate plan'}</button>
@@ -3359,6 +3360,11 @@ function rWeeklyAdvisor(){
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">🧠 Weekly Advisor</div>
   <div style="display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px"><div class="sync-dot"></div>Analysing your training data…</div>
 </div>`;
+  if(S._advisorError)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:12px">${S._advisorError}</div>
+  <button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>
+</div>`;
   if(!data)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Get a data-driven analysis of your recent training — load, trends, what to focus on this week.</div>
@@ -3384,9 +3390,21 @@ function rWeeklyAdvisor(){
 async function loadWeeklyAdvisor(force=false){
   if(S._advisorLoading)return;
   if(force)DB.set('weekly_advisor_'+fd(S.weekStart),null);
-  S._advisorLoading=true;render();
-  await getWeeklyAdvisor(S.weekStart,force);
-  S._advisorLoading=false;render();
+  S._advisorLoading=true;
+  S._advisorError=false;
+  render();
+  try{
+    const result=await getWeeklyAdvisor(S.weekStart,force);
+    if(!result){
+      S._advisorError='Not enough training data yet — log some sessions or sync Strava first.';
+    } else {
+      showToast('🧠 Weekly analysis ready','var(--grn)');
+    }
+  }catch(e){
+    S._advisorError='Analysis failed — check your connection and try again.';
+  }
+  S._advisorLoading=false;
+  render();
 }
 
 /* ── WEEKLY AI REVIEW ── */
