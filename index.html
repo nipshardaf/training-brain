@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.75';
+const APP_VERSION='1.76';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.76',d:'Code cleanup — quota-error helper, stale-flag fix',det:'Internal code review cleanup. (1) The 429/403 quota-error check was copy-pasted in 4 places — now a single isQuotaErr() helper. (2) Fixed a bug where the "AI quota used up" note could linger all session: the _aiQuotaHit flag now clears automatically as soon as any AI call succeeds again. (3) Removed redundant comments.'},
   {v:'1.75',d:'AI Usage dashboard in Settings — see calls today, this week, by type, and quota bar',det:'Added a full AI usage tracker. Every Gemini call (Gym Coach, Ride Coach, Weekly Advisor, Weekly Review) is logged to localStorage with timestamp and success/fail status. The Settings tab now shows: Today / This week / All time counts, a daily quota progress bar vs the ~1500/day free tier limit, a 7-day bar chart, a breakdown by feature type, and the last call time. A Clear button resets the log. Quota warning appears when >85% of daily limit is used.'},
   {v:'1.74',d:'AI quota awareness — clear messages when daily limit is hit',det:'When Gemini\'s free-tier daily quota is exhausted (403/429), the app now shows a specific message: "Daily AI quota is used up — resets at midnight Pacific time" instead of a generic error. The Weekly Advisor hides the retry button (no point retrying until quota resets). The AI Coach shows a small note below the default tip. A global _aiQuotaHit flag is set by any AI call so all components respond consistently.'},
   {v:'1.73',d:'Cross-device sync — plan and log data now syncs live between your phone and PC',det:'Added a Firebase real-time listener that watches for changes from other devices. When you log a session or generate a plan on your phone, your PC picks it up automatically (and vice versa) without needing to reload the app. Uses the existing Firebase Realtime Database — no new setup required. A "Synced from another device" toast appears when remote data is pulled in.'},
@@ -1137,13 +1138,14 @@ const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
 const _coachInFlight={}; // in-memory guard against duplicate concurrent batch calls
 let _aiQuotaHit=false; // set when any AI call returns 429/403 — shown to user
+const isQuotaErr=m=>!!m&&(String(m).includes('429')||String(m).includes('403'));
 
 /* ── AI USAGE TRACKER ── */
 function trackAICall(type,ok){
+  if(ok)_aiQuotaHit=false; // clear stale quota flag once a call succeeds again
   const today=fd(new Date());
   const usage=DB.get('ai_usage',{calls:[]})||{calls:[]};
   usage.calls.push({type,ts:Date.now(),date:today,ok:!!ok});
-  // Keep only last 30 days
   const cutoff=fd(addDays(new Date(),-30));
   usage.calls=usage.calls.filter(c=>c.date>=cutoff);
   DB.set('ai_usage',usage);
@@ -1159,7 +1161,6 @@ function getAIUsageStats(){
   calls.forEach(c=>{byType[c.type]=(byType[c.type]||0)+1;});
   const failed=calls.filter(c=>!c.ok).length;
   const last=calls.length?calls[calls.length-1]:null;
-  // Last 7 days bar data
   const days=[];
   for(let i=6;i>=0;i--){const d=fd(addDays(new Date(),-i));days.push({d,n:calls.filter(c=>c.date===d).length});}
   return{total:calls.length,todayCount:todayCalls.length,todayFailed:todayCalls.filter(c=>!c.ok).length,weekCount:weekCalls.length,byType,failed,last,days};
@@ -1283,7 +1284,7 @@ SORE: [active recovery ride — specific reduced targets]`;
         });
         DB.set(batchKey,true);
       }
-    }catch(e){console.warn('Ride coach failed:',e);if(e.message?.includes('429')||e.message?.includes('403'))_aiQuotaHit=true;}
+    }catch(e){console.warn('Ride coach failed:',e);if(isQuotaErr(e.message))_aiQuotaHit=true;}
     _coachInFlight[batchKey]=false;
     return DB.get(cacheKey,null)||coachMsg(energy,ct);
   }
@@ -1382,7 +1383,7 @@ SORE: [recovery focus — what to skip or go light on]`;
       DB.set(batchKey,true); // mark the batch done only after a successful fetch — a failed call retries
       return _coachCache[cacheKey]||coachMsg(energy,ct);
     }
-  }catch(e){console.warn('AI coach failed:',e);if(e.message?.includes('429')||e.message?.includes('403'))_aiQuotaHit=true;}
+  }catch(e){console.warn('AI coach failed:',e);if(isQuotaErr(e.message))_aiQuotaHit=true;}
   finally{delete _coachInFlight[batchKey];}
   return coachMsg(energy,ct);
 }
@@ -3420,7 +3421,7 @@ function rWeeklyAdvisor(){
   <div style="display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px"><div class="sync-dot"></div>Analysing your training data…</div>
 </div>`;
   if(S._advisorError){
-    const _isQuota=S._advisorError.includes('429')||S._advisorError.includes('403');
+    const _isQuota=isQuotaErr(S._advisorError);
     const _errMsg=_isQuota
       ?`⏳ Daily AI quota is used up — it resets at midnight Pacific time. Come back tonight or tomorrow morning and it'll be good to go again.`
       :`Couldn't reach the AI right now — might just be a connection blip. Give it another go.`;
@@ -3474,7 +3475,7 @@ async function loadWeeklyAdvisor(force=false){
   }catch(e){
     console.warn('Weekly advisor error:',e);
     S._advisorError=e.message||'fetch failed';
-    if(e.message?.includes('429')||e.message?.includes('403'))_aiQuotaHit=true;
+    if(isQuotaErr(e.message))_aiQuotaHit=true;
   }
   S._advisorLoading=false;
   render();
