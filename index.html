@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.80';
+const APP_VERSION='1.81';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.81',d:'Body stats added to profile — weight, height, age fed to AI coach',det:'Added weight, height, and age fields to the profile setup (step 3 — Last few details). Both weight and height have kg/lb and cm/ft unit toggles. A privacy notice explains the data is stored privately in your account and never shared with friends or used outside your own training coach. All three values are now passed to the Weekly Advisor and Gym Coach AI prompts so the AI can calibrate intensity, suggest appropriate loading, and factor in body composition when giving advice (e.g. strength-to-body-weight ratios, appropriate cardio intensity for weight loss goals).'},
   {v:'1.80',d:'Friends — connect with friends and see each other\'s weekly training',det:'Added a full friends system. Each user gets a unique 6-character friend code (e.g. A3K9P2) generated at login. Share your code — your friend enters it to send a request. You get a red badge on the Settings tab when a request comes in. Accept or decline inline. Once connected, you see each other\'s Strava-style weekly card: a 7-dot Mon–Sun activity strip, session counts (gym + rides), total km, and week streak. No weights or PRs are shared — just the summary. Week summary is written to Firebase on every save so friends always see current data. Friend codes are stored in a reverse-lookup table so there\'s no searching the user database.'},
   {v:'1.79',d:'Rest days no longer show "How are you feeling?"',det:'The energy selector (Fresh / Okay / Tired / Sore) is only relevant before a training session. On REST & MOBILITY days it served no purpose and added noise. It is now hidden on rest days — only shown on gym and ride days where the coach uses it to adjust your session targets.'},
   {v:'1.78',d:'Auth: fix half-stuck accounts + smarter error messages',det:'Fixed a scenario where a user (e.g. on a restricted network) could start creating an account, have the network drop mid-way, and then be permanently stuck — unable to create (email already in use) or sign in (unknown password). Now: auth/email-already-in-use shows inline "Sign in instead" and "Reset your password" action buttons. Wrong-password errors on sign-in now show an inline "Forgot password?" link. Added the modern auth/invalid-login-credentials error code to the map (Firebase changed this code and it was falling through to a raw ugly error message). Added auth/network-request-failed with a clear connection error message.'},
@@ -1316,6 +1317,7 @@ SORE: [active recovery ride — specific reduced targets]`;
   const goalDesc=_goals.length?_goals.map(g=>_goalMap[g]||g).join(' + '):'general fitness';
   const genderNote=profile?.gender?`- Sex: ${profile.gender}`:'';
   const levelNote=profile?.level?`- Experience: ${profile.level}`:'- Experience: intermediate';
+  const bodyNote=(()=>{const p=[];if(profile?.weight&&profile?.weightUnit)p.push(`Weight: ${profile.weight}${profile.weightUnit}`);if(profile?.height&&profile?.heightUnit)p.push(`Height: ${profile.height}${profile.heightUnit}`);if(profile?.age)p.push(`Age: ${profile.age}`);return p.length?'- '+p.join(', '):''})();
 
   // Build richer gym history: last 4 weeks of sets per exercise to spot trends
   const trendLines=(dp?.exercises||[]).map(id=>{
@@ -1347,6 +1349,7 @@ Athlete:
 - Goal: ${goalDesc}
 ${levelNote}
 ${genderNote}
+${bodyNote}
 - Sessions this week: ${weekSessions}
 - Last ${dp?.type||ct}: ${lastDone}
 - Exercise history (PR + last 3 sessions):
@@ -1516,6 +1519,11 @@ function openGoalsSetup(isEdit=false,startStep=1){
   let selDays=cur.days||4;
   let selLevel=cur.level||'intermediate';
   let selGender=cur.gender||null; // null = not answered (totally optional)
+  let selWeight=cur.weight||'';
+  let selWeightUnit=cur.weightUnit||(unit()||'kg');
+  let selHeight=cur.height||'';
+  let selHeightUnit=cur.heightUnit||'cm';
+  let selAge=cur.age||'';
 
   const goals=[
     {v:'muscle',     i:'💪', l:'Build muscle & strength', d:'Prioritise lifting, progressive overload'},
@@ -1545,7 +1553,10 @@ function openGoalsSetup(isEdit=false,startStep=1){
     const profile={
       goals:goals_arr,goal:goals_arr[0]||null,
       activities:[...selActs],days:selDays,level:selLevel,
-      gender:selGender,onboarded:true
+      gender:selGender,onboarded:true,
+      weight:selWeight?parseFloat(selWeight):null,weightUnit:selWeightUnit,
+      height:selHeight?parseFloat(selHeight):null,heightUnit:selHeightUnit,
+      age:selAge?parseInt(selAge):null
     };
     DB.set('user_profile',profile);
     if(!selActs.has('cycling'))DB.set('bike_pref','none');
@@ -1625,6 +1636,37 @@ function openGoalsSetup(isEdit=false,startStep=1){
     </div>`}).join('')}
   </div>
 
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px">Body stats <span style="font-size:11px;font-weight:500;color:var(--t2)">(optional — helps personalise intensity & progress tracking)</span></div>
+  <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.18);border-radius:10px;padding:9px 12px;margin-bottom:12px;font-size:11px;color:var(--t2);line-height:1.5">
+    🔒 Stored privately in your account — only you can see this. Never shared with friends, never used outside your own training coach.
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:5px">Weight</div>
+      <div style="display:flex;border:1px solid var(--bord);border-radius:11px;overflow:hidden;background:var(--s2)">
+        <input id="gs-weight" type="number" min="30" max="300" placeholder="—" value="${selWeight}" oninput="selWeight=this.value" style="flex:1;border:none;background:transparent;color:var(--txt);font-size:15px;font-weight:700;padding:10px 10px;width:0;outline:none">
+        <div style="display:flex;background:var(--s3,var(--bord))">
+          <button onclick="selWeightUnit='kg';gsRender()" style="border:none;padding:0 8px;font-size:11px;font-weight:700;cursor:pointer;background:${selWeightUnit==='kg'?'var(--acc)':'transparent'};color:${selWeightUnit==='kg'?'#fff':'var(--t2)'}">kg</button>
+          <button onclick="selWeightUnit='lb';gsRender()" style="border:none;padding:0 8px;font-size:11px;font-weight:700;cursor:pointer;background:${selWeightUnit==='lb'?'var(--acc)':'transparent'};color:${selWeightUnit==='lb'?'#fff':'var(--t2)'}">lb</button>
+        </div>
+      </div>
+    </div>
+    <div>
+      <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:5px">Height</div>
+      <div style="display:flex;border:1px solid var(--bord);border-radius:11px;overflow:hidden;background:var(--s2)">
+        <input id="gs-height" type="number" min="100" max="250" placeholder="—" value="${selHeight}" oninput="selHeight=this.value" style="flex:1;border:none;background:transparent;color:var(--txt);font-size:15px;font-weight:700;padding:10px 10px;width:0;outline:none">
+        <div style="display:flex;background:var(--s3,var(--bord))">
+          <button onclick="selHeightUnit='cm';gsRender()" style="border:none;padding:0 8px;font-size:11px;font-weight:700;cursor:pointer;background:${selHeightUnit==='cm'?'var(--acc)':'transparent'};color:${selHeightUnit==='cm'?'#fff':'var(--t2)'}">cm</button>
+          <button onclick="selHeightUnit='ft';gsRender()" style="border:none;padding:0 8px;font-size:11px;font-weight:700;cursor:pointer;background:${selHeightUnit==='ft'?'var(--acc)':'transparent'};color:${selHeightUnit==='ft'?'#fff':'var(--t2)'}">ft</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div style="margin-bottom:22px">
+    <div style="font-size:11px;font-weight:700;color:var(--t2);margin-bottom:5px">Age</div>
+    <input id="gs-age" type="number" min="13" max="100" placeholder="—" value="${selAge}" oninput="selAge=this.value" style="width:80px;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:15px;font-weight:700;padding:10px 12px;outline:none">
+  </div>
+
   <div style="display:flex;gap:8px">
     <button onclick="gsBack()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:800;padding:15px;cursor:pointer">← Back</button>
     <button onclick="gsSave()" style="flex:2;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:800;padding:15px;cursor:pointer">${isEdit?'Save changes':'Let\'s go 🚀'}</button>
@@ -1638,15 +1680,28 @@ function openGoalsSetup(isEdit=false,startStep=1){
     window.gsDays=n=>{selDays=n;gsRender();};
     window.gsLevel=v=>{selLevel=v;gsRender();};
     window.gsGender=v=>{selGender=selGender===v?null:v;gsRender();};
+    // Capture body stat inputs before re-render wipes them
+    function gsCaptureStats(){
+      const w=document.getElementById('gs-weight');const h=document.getElementById('gs-height');const a=document.getElementById('gs-age');
+      if(w)selWeight=w.value;if(h)selHeight=h.value;if(a)selAge=a.value;
+    }
+    const _origGsRender=gsRender;
+    // Patch unit toggles to capture inputs first
+    const _origNext=window.gsNext;window.gsNext=()=>{gsCaptureStats();step++;gsRender();};
+    window.gsBack=()=>{gsCaptureStats();step--;gsRender();};
     window.gsSkipAll=gsSkipAll;
     window.gsNext=()=>{step++;gsRender();};
     window.gsBack=()=>{step--;gsRender();};
     window.gsSave=()=>{
+      gsCaptureStats();
       const goals_arr=[...selGoals];
       const profile={
         goals:goals_arr,goal:goals_arr[0]||null,
         activities:[...selActs],days:selDays,level:selLevel,
-        gender:selGender,onboarded:true
+        gender:selGender,onboarded:true,
+        weight:selWeight?parseFloat(selWeight):null,weightUnit:selWeightUnit,
+        height:selHeight?parseFloat(selHeight):null,heightUnit:selHeightUnit,
+        age:selAge?parseInt(selAge):null
       };
       DB.set('user_profile',profile);
       if(!selActs.has('cycling'))DB.set('bike_pref','none');
@@ -3616,9 +3671,10 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   const todayStr=fd(new Date());
   const upLines=(upPlan||[]).filter(d=>d.date>=todayStr).map(d=>`  ${d.date}: ${d.type}`);
   const _earlyCtx=isEarlyUser?`\nIMPORTANT: This athlete has ${weeksOfGymHistory===0?'no prior':'only 1 week of'} gym history in this app. All exercise entries marked [baseline — first logged] are first-time measurements, NOT progression over previous sessions. Do NOT say "excellent progression" or compare gym numbers to prior weeks. Instead: acknowledge they are establishing their baseline, note what they lifted/rode, and give forward-looking targets for next session.`:'';
+  const _bodyStats=(()=>{const parts=[];if(profile?.weight&&profile?.weightUnit)parts.push(`${profile.weight}${profile.weightUnit}`);if(profile?.height&&profile?.heightUnit)parts.push(`${profile.height}${profile.heightUnit}`);if(profile?.age)parts.push(`age ${profile.age}`);return parts.length?' | '+parts.join(', '):'';})();
   const prompt=`You are a data-driven personal trainer. Analyze this athlete's recent training data and write a concise weekly advisory. Be specific — use exercise names, weights, distances, HR. Identify patterns: dropped reps at same weight = fatigue; consistent increases = progression; missed sessions = load drop.${_earlyCtx}
 
-Goal: ${goalDesc} | Level: ${profile?.level||'intermediate'}${profile?.gender?' | '+profile.gender:''} | App gym history: ${weeksOfGymHistory===0?'Week 1 — no prior gym data':weeksOfGymHistory+' week(s)'}
+Goal: ${goalDesc} | Level: ${profile?.level||'intermediate'}${profile?.gender?' | '+profile.gender:''}${_bodyStats} | App gym history: ${weeksOfGymHistory===0?'Week 1 — no prior gym data':weeksOfGymHistory+' week(s)'}
 
 Training data:
 ${dataLines.join('\n')}
