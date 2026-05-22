@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.68';
+const APP_VERSION='1.69';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -1179,9 +1179,73 @@ async function getAICoach(energy,ct,dp){
     return line;
   }).filter(Boolean);
 
-  // Not worth calling AI if user has no real data yet — hardcoded is just as good
+  const isRideDay=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp?.type||ct);
+
+  // For ride days: build coaching from Strava history instead of gym PRs
+  if(isRideDay){
+    const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const recentRides=(DB.get('strava_activities',[])||[])
+      .filter(a=>_rSet.has(a.type)||_rSet.has(a.sport_type))
+      .sort((a,b)=>new Date(b.start_date_local)-new Date(a.start_date_local))
+      .slice(0,8);
+    if(!recentRides.length){
+      return coachMsg(energy,ct);
+    }
+    const rideLines=recentRides.map(a=>{
+      const ds=(a.start_date_local||'').slice(0,10);
+      const dur=Math.round((a.moving_time||0)/60);
+      const dist=+((a.distance||0)/1000).toFixed(1);
+      const hr=a.average_heartrate?Math.round(a.average_heartrate):null;
+      const watts=a.average_watts?Math.round(a.average_watts):null;
+      const elev=a.total_elevation_gain?Math.round(a.total_elevation_gain):null;
+      return `${ds}: ${dist}km ${dur}min${hr?' HR '+hr+'bpm':''}${watts?' '+watts+'W':''}${elev?' ↗'+elev+'m':''}`;
+    });
+    const profile2=DB.get('user_profile',null);
+    const _gm2={muscle:'build muscle',lose_weight:'lose weight',fitness:'general fitness',endurance:'endurance/event prep',performance:'sport performance'};
+    const _g2=(profile2?.goals||[profile2?.goal]||[]).filter(Boolean);
+    const gd2=_g2.map(g=>_gm2[g]||g).join(' + ')||'general fitness';
+    const isLong=(dp?.type||ct).includes('LONG');
+    const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history.
+
+Athlete goal: ${gd2}
+Recent rides (newest first):
+${rideLines.join('\n')}
+
+Write exactly 4 notes labelled:
+FRESH: [push harder — specific HR/power/distance target based on their data]
+OKAY: [steady session — what numbers to aim for]
+TIRED: [easier session — what to back off on, specific targets]
+SORE: [active recovery ride — specific reduced targets]`;
+    // Not worth calling AI without real data already checked above
+    _coachInFlight[batchKey]=true;
+    try{
+      const r2=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({contents:[{parts:[{text:ridePrompt}]}],generationConfig:{maxOutputTokens:300,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
+      const raw2=await r2.text();
+      if(!r2.ok)throw new Error('API '+r2.status);
+      const data2=JSON.parse(raw2);
+      const text2=data2.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+      if(text2){
+        const moods2=['FRESH','OKAY','TIRED','SORE'];
+        moods2.forEach(m=>{
+          const rx=new RegExp(m+':\\s*(.+?)(?=(?:FRESH|OKAY|TIRED|SORE):|$)','si');
+          const match=text2.match(rx);
+          if(match){
+            const k='coach_'+m.toLowerCase()+'_'+date;
+            const val=match[1].trim();
+            DB.set(k,val);_coachCache[k]=val;
+          }
+        });
+        DB.set(batchKey,true);
+      }
+    }catch(e){console.warn('Ride coach failed:',e);}
+    _coachInFlight[batchKey]=false;
+    return DB.get(cacheKey,null)||coachMsg(energy,ct);
+  }
+
+  // Not worth calling AI if user has no real gym data yet
   if(hasPRs===0&&hasHistory===0){
-    DB.set(batchKey,false); // allow retry once they have data
+    DB.set(batchKey,false);
     return coachMsg(energy,ct);
   }
 
@@ -1202,23 +1266,47 @@ async function getAICoach(energy,ct,dp){
   const goalDesc=_goals.length?_goals.map(g=>_goalMap[g]||g).join(' + '):'general fitness';
   const genderNote=profile?.gender?`- Sex: ${profile.gender}`:'';
   const levelNote=profile?.level?`- Experience: ${profile.level}`:'- Experience: intermediate';
-  const prompt=`You are a no-nonsense personal trainer. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences max — specific, direct, no fluff. You have real performance data — use it. Reference exercises, weights, and completion rates by name.
 
-Athlete data:
-- Main goal: ${goalDesc}
+  // Build richer gym history: last 4 weeks of sets per exercise to spot trends
+  const trendLines=(dp?.exercises||[]).map(id=>{
+    const ex=EX[id];if(!ex)return null;
+    const sessions=[];
+    for(let i=1;i<=28;i++){
+      const d=addDays(new Date(),-i);
+      const l=DB.get(DB.lk(d),null);
+      if(!l?.exercises)continue;
+      const le=l.exercises.find(e=>e.id===id);
+      if(!le)continue;
+      const done=le.sets.filter(s=>s.done&&s.w&&s.r);
+      if(!done.length)continue;
+      const avgW=Math.round(done.reduce((a,s)=>a+(parseFloat(s.w)||0),0)/done.length*10)/10;
+      const avgR=Math.round(done.reduce((a,s)=>a+(parseInt(s.r)||0),0)/done.length);
+      sessions.push(`${fd(d)}: ${avgW}${unit()}×${avgR} (${done.length} sets)`);
+      if(sessions.length>=3)break;
+    }
+    const pr=DB.get('prs',{})[id];
+    let line=`${ex.n}`;
+    if(pr)line+=` | PR: ${pr.w}${unit()}×${pr.r}`;
+    if(sessions.length)line+=` | Recent: ${sessions.join(', ')}`;
+    return line;
+  }).filter(Boolean);
+
+  const prompt=`You are a no-nonsense strength coach. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences — specific, data-driven. Look at the trend data: if reps dropped at the same weight, flag possible fatigue. If the athlete is close to a PR, push them. Reference exercise names and actual numbers.
+
+Athlete:
+- Goal: ${goalDesc}
 ${levelNote}
 ${genderNote}
-- Workout: ${dp?.type||ct}
-- Sessions completed this week: ${weekSessions}
+- Sessions this week: ${weekSessions}
 - Last ${dp?.type||ct}: ${lastDone}
-- Exercises (with PRs and last session performance):
-  ${exLines.join('\n  ')}
+- Exercise history (PR + last 3 sessions):
+${trendLines.map(l=>'  '+l).join('\n')}
 
-Write exactly 4 notes labelled like this:
-FRESH: [note for feeling great — push for PRs or high reps]
-OKAY: [note for normal day — hit targets, stay consistent]
-TIRED: [note for low energy — adjust weights, don't skip]
-SORE: [note for sore/recovering — what to reduce or focus on]`;
+Write exactly 4 notes:
+FRESH: [push hard — specific target e.g. "add 2.5kg to Bench, aim for 8 clean reps"]
+OKAY: [hit your numbers — specific consistent targets]
+TIRED: [what to cut — specific weights/sets to reduce based on the data]
+SORE: [recovery focus — what to skip or go light on]`;
 
   _coachInFlight[batchKey]=true;
   try{
@@ -2121,10 +2209,15 @@ function buildWeek(wdays){
     });
   }
 
-  // mk: preserves locked days, generates fresh for everything else.
-  // Always uses w.date (from correctly-ordered wdays) so output order is always Mon→Sun.
+  // mk: locked days are fully preserved. Non-locked days preserve exercise content
+  // if the day type is unchanged (weather refresh = move days, don't wipe workouts).
+  // Only regenerates exercises when the day type actually changes.
   const mk=(w,type)=>{
     if(locked[w.date])return{...locked[w.date],weather:w};
+    const existingDay=existingPlan?.find(d=>d.date===w.date);
+    if(existingDay&&existingDay.type===type&&existingDay.exercises?.length){
+      return{...existingDay,weather:w}; // same type → keep exercises, just update weather
+    }
     const exs=GYM_SEQ.includes(type)?genSession(type):null;
     return{date:w.date,type,exercises:exs,weather:w};
   };
