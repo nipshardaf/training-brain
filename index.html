@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.86';
+const APP_VERSION='1.87';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.87',d:'Fix advisor cross-device trigger + merge AI usage counts across devices',det:'Two sync fixes. (1) The advisor was saving to its own Firebase path but never updating the users/{uid}/updated timestamp, so the cross-device listener on other devices never fired. Fixed by re-adding a saveToCloud() call after advisor generates (updates the timestamp), and extending the sync listener to also pull the current week advisor from Firebase when it wakes up. (2) AI usage log was never synced — each device had its own count. Added ai_usage to the sync bundle, and changed loadFromCloud to merge the calls arrays by timestamp union rather than blindly overwriting — so both devices end up with the combined total.'},
   {v:'1.86',d:'Weekly Advisor cross-device sync — fix Firebase array conversion + dedicated storage path',det:'v1.85 had two silent bugs. (1) The PC PWA was cached on v1.84 when the fix shipped, so weekly_advisor_* keys were never included in the Firebase save. (2) Firebase Realtime Database converts JavaScript arrays to objects with numeric keys on round-trip — so even if the data synced, the targets array came back as {"0":{...}} instead of [{...}], breaking the target lookup silently. Fixed by: storing the advisor result directly at users/{uid}/advisor/{weekKey} as a JSON string (strings round-trip perfectly through Firebase), checking that path first on any device before hitting the API, and falling back to the AI only when Firebase has nothing. This means generate-once-use-everywhere with no wasted API calls.'},
   {v:'1.85',d:'Weekly Advisor syncs to Firebase — generate once, available on all your devices',det:'The weekly advisor result (including Smart Targets) was previously stored only in localStorage, meaning each device had to make its own API call. Now weekly_advisor_* keys are included in the Firebase sync bundle. As soon as the advisor generates on any device, it saves to the cloud and your other devices pick it up automatically via the existing cross-device listener — no extra API calls needed.'},
   {v:'1.84',d:'Smart Targets — Weekly Advisor now sets exercise targets that appear in your workout log',det:'The Weekly Advisor now outputs a structured TARGETS block alongside its text advice. When you open an exercise that has a specific target this week (e.g. "Lying Leg Curl at 130lbs × 12"), a green 🎯 badge appears in the exercise body showing exactly what to aim for. When you complete all sets on that exercise, the app checks your best set against the target: hit it and you get a "Target achieved!" toast; close but not quite gets an encouraging nudge. Targets are extracted by the AI from the FOCUS section using the exact exercise names in your training data, so they only appear for exercises the AI actually mentioned.'},
@@ -2953,7 +2954,7 @@ async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest)return;
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','strava_token','strava_activities','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref'];
+    'user_profile','strava_token','strava_activities','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
@@ -2973,7 +2974,23 @@ async function loadFromCloud(){
   if(!S.fbUser||!_fbDb)return;
   try{
     const snap=await _fbDb.ref('users/'+S.fbUser.uid).once('value');
-    if(snap.exists()){const {data}=snap.val()||{};Object.entries(data||{}).forEach(([k,v])=>DB.set(k,v));}
+    if(snap.exists()){
+      const {data}=snap.val()||{};
+      Object.entries(data||{}).forEach(([k,v])=>{
+        if(k==='ai_usage'){
+          // Merge call logs — union by timestamp so both devices keep their counts
+          const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
+          const remote=v||{calls:[]};
+          const seen=new Set((local.calls||[]).map(c=>c.ts));
+          const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
+          merged.sort((a,b)=>a.ts-b.ts);
+          const cutoff=fd(addDays(new Date(),-30));
+          DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
+        } else {
+          DB.set(k,v);
+        }
+      });
+    }
   }catch(_){}
 }
 
@@ -2990,6 +3007,16 @@ function startSyncListener(uid){
     if(remoteTs===_myLastSaveTs)return; // this is our own echo — skip
     // A different device saved — pull their data
     await loadFromCloud();
+    // Also pull current week's advisor (stored separately from the main bundle)
+    try{
+      const weekKey=fd(getMon(new Date()));
+      const aSnap=await _fbDb.ref('users/'+uid+'/advisor/'+weekKey).once('value');
+      if(aSnap.exists()){
+        const fbResult=JSON.parse(aSnap.val());
+        const local=DB.get('weekly_advisor_'+weekKey,null);
+        if(!local||fbResult.ts>(local.ts||0))DB.set('weekly_advisor_'+weekKey,fbResult);
+      }
+    }catch(_){}
     showToast('☁️ Synced from another device','var(--al)');
     render();
   });
@@ -3792,6 +3819,7 @@ async function loadWeeklyAdvisor(force=false){
       S._advisorNoData=true; // genuinely no logged data yet
     } else {
       showToast('🧠 Weekly analysis ready','var(--grn)');
+      saveToCloud(); // update 'updated' timestamp so other devices' listeners wake up and pull the new advisor
     }
   }catch(e){
     console.warn('Weekly advisor error:',e);
