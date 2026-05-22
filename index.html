@@ -1145,6 +1145,7 @@ const _coachCache={};
 const _coachInFlight={}; // in-memory guard against duplicate concurrent batch calls
 let _aiQuotaHit=false; // set when any AI call returns 429/403 — shown to user
 const isQuotaErr=m=>!!m&&(String(m).includes('429')||String(m).includes('403'));
+const isOverloadErr=m=>!!m&&String(m).includes('503');
 
 /* ── AI USAGE TRACKER ── */
 function trackAICall(type,ok){
@@ -3721,13 +3722,16 @@ function rWeeklyAdvisor(){
 </div>`;
   if(S._advisorError){
     const _isQuota=isQuotaErr(S._advisorError);
+    const _isOverload=isOverloadErr(S._advisorError);
     const _errMsg=_isQuota
       ?`⏳ Daily AI quota is used up — it resets at midnight Pacific time. Come back tonight or tomorrow morning and it'll be good to go again.`
+      :_isOverload
+      ?`🌐 Gemini is temporarily overloaded right now — this usually clears up within a minute. Tap Try again.`
       :`Couldn't reach the AI right now — might just be a connection blip. Give it another go.`;
     return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">${_errMsg}</div>
-  ${_isQuota?'':`<button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>`}
+  ${_isQuota&&!_isOverload?'':`<button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>`}
 </div>`;
   }
   if(S._advisorNoData)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">

@@ -1,4 +1,4 @@
-// v6 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
+// v8 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -59,8 +59,8 @@ export default {
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_KEY}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }
       );
-      // Fall through to next provider on quota (429) or auth errors (401/403)
-      if (r.status !== 429 && r.status !== 401 && r.status !== 403) {
+      // Fall through to next provider on quota/auth errors or temporary overload
+      if (r.status !== 429 && r.status !== 401 && r.status !== 403 && r.status !== 503) {
         return new Response(await r.text(), {
           status: r.status,
           headers: { 'Content-Type': 'application/json', ...cors },
