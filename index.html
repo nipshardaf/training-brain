@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.73';
+const APP_VERSION='1.74';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.74',d:'AI quota awareness — clear messages when daily limit is hit',det:'When Gemini\'s free-tier daily quota is exhausted (403/429), the app now shows a specific message: "Daily AI quota is used up — resets at midnight Pacific time" instead of a generic error. The Weekly Advisor hides the retry button (no point retrying until quota resets). The AI Coach shows a small note below the default tip. A global _aiQuotaHit flag is set by any AI call so all components respond consistently.'},
   {v:'1.73',d:'Cross-device sync — plan and log data now syncs live between your phone and PC',det:'Added a Firebase real-time listener that watches for changes from other devices. When you log a session or generate a plan on your phone, your PC picks it up automatically (and vice versa) without needing to reload the app. Uses the existing Firebase Realtime Database — no new setup required. A "Synced from another device" toast appears when remote data is pulled in.'},
   {v:'1.72',d:'Weekly Advisor: fix silent API errors + human-friendly messages',det:'Two improvements to the Weekly Advisor. (1) API errors were being swallowed and mis-reported as "not enough data" — now errors propagate correctly so the right message is shown. (2) All advisor states now use plain human language: connection failures say "might just be a blip", genuinely empty data shows a first-week welcome, and the idle state is shorter and friendlier.'},
   {v:'1.71',d:'Fix: duplicate Monday row; Weekly Advisor shows error state instead of silent failure',det:'Two fixes. (1) A bug could produce duplicate day entries in the plan (two Monday rows). Now deduplicated at render time so only the first entry per date is shown. (2) The Weekly Advisor "Analyse" button was failing silently — if the API returned no data or errored, the card just stayed empty with no feedback. Now shows a specific error message ("not enough data" vs "connection failed") with a retry button, and a success toast when the analysis completes.'},
@@ -1134,6 +1135,7 @@ const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
 const _coachInFlight={}; // in-memory guard against duplicate concurrent batch calls
+let _aiQuotaHit=false; // set when any AI call returns 429/403 — shown to user
 // PR group open/closed state (UI only — not persisted)
 const _prGroupOpen={Push:true,Pull:false,Legs:false,Core:false,Other:false};
 // Map EX.g values → display group
@@ -1252,7 +1254,7 @@ SORE: [active recovery ride — specific reduced targets]`;
         });
         DB.set(batchKey,true);
       }
-    }catch(e){console.warn('Ride coach failed:',e);}
+    }catch(e){console.warn('Ride coach failed:',e);if(e.message?.includes('429')||e.message?.includes('403'))_aiQuotaHit=true;}
     _coachInFlight[batchKey]=false;
     return DB.get(cacheKey,null)||coachMsg(energy,ct);
   }
@@ -1350,7 +1352,7 @@ SORE: [recovery focus — what to skip or go light on]`;
       DB.set(batchKey,true); // mark the batch done only after a successful fetch — a failed call retries
       return _coachCache[cacheKey]||coachMsg(energy,ct);
     }
-  }catch(e){console.warn('AI coach failed:',e);}
+  }catch(e){console.warn('AI coach failed:',e);if(e.message?.includes('429')||e.message?.includes('403'))_aiQuotaHit=true;}
   finally{delete _coachInFlight[batchKey];}
   return coachMsg(energy,ct);
 }
@@ -3386,11 +3388,17 @@ function rWeeklyAdvisor(){
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">🧠 Weekly Advisor</div>
   <div style="display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px"><div class="sync-dot"></div>Analysing your training data…</div>
 </div>`;
-  if(S._advisorError)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  if(S._advisorError){
+    const _isQuota=S._advisorError.includes('429')||S._advisorError.includes('403');
+    const _errMsg=_isQuota
+      ?`⏳ Daily AI quota is used up — it resets at midnight Pacific time. Come back tonight or tomorrow morning and it'll be good to go again.`
+      :`Couldn't reach the AI right now — might just be a connection blip. Give it another go.`;
+    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Couldn't reach the AI right now — might just be a blip. Check your connection and give it another go.</div>
-  <button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">${_errMsg}</div>
+  ${_isQuota?'':`<button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>`}
 </div>`;
+  }
   if(S._advisorNoData)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Looks like this is your first week on the app — welcome! Once you've got a few sessions logged or your Strava rides synced, I'll be able to give you a proper read on your training load, trends and what to focus on next.</div>
@@ -3435,6 +3443,7 @@ async function loadWeeklyAdvisor(force=false){
   }catch(e){
     console.warn('Weekly advisor error:',e);
     S._advisorError=e.message||'fetch failed';
+    if(e.message?.includes('429')||e.message?.includes('403'))_aiQuotaHit=true;
   }
   S._advisorLoading=false;
   render();
@@ -4702,6 +4711,12 @@ function bindEnergy(){
             p2.style.transition='opacity .35s ease';
             p2.style.opacity='0';
             setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
+          }
+          // Show quota note if AI hit its daily limit
+          if(c2&&_aiQuotaHit){
+            let note=c2.querySelector('.quota-note');
+            if(!note){note=document.createElement('div');note.className='quota-note';note.style.cssText='font-size:10px;color:var(--t2);margin-top:7px;opacity:.7';c2.appendChild(note);}
+            note.textContent='⏳ AI quota used up — showing default tips. Resets at midnight.';
           }
         });
       }
