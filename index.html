@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.81';
+const APP_VERSION='1.82';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.82',d:'Weekly Advisor: workout names now human-readable instead of raw code',det:'The AI was receiving internal type constants like UPPER_PUMP, PUSH, PULL, LONG_OUTDOOR in the prompt and echoing them back verbatim in the advice. Added a type label map so the AI always receives plain English names — "Upper Body (Full Upper)", "Push (Chest/Shoulders/Triceps)", "Long Outdoor Ride" etc. Both the training history and the upcoming schedule sections of the prompt are now translated.'},
   {v:'1.81',d:'Body stats added to profile — weight, height, age fed to AI coach',det:'Added weight, height, and age fields to the profile setup (step 3 — Last few details). Both weight and height have kg/lb and cm/ft unit toggles. A privacy notice explains the data is stored privately in your account and never shared with friends or used outside your own training coach. All three values are now passed to the Weekly Advisor and Gym Coach AI prompts so the AI can calibrate intensity, suggest appropriate loading, and factor in body composition when giving advice (e.g. strength-to-body-weight ratios, appropriate cardio intensity for weight loss goals).'},
   {v:'1.80',d:'Friends — connect with friends and see each other\'s weekly training',det:'Added a full friends system. Each user gets a unique 6-character friend code (e.g. A3K9P2) generated at login. Share your code — your friend enters it to send a request. You get a red badge on the Settings tab when a request comes in. Accept or decline inline. Once connected, you see each other\'s Strava-style weekly card: a 7-dot Mon–Sun activity strip, session counts (gym + rides), total km, and week streak. No weights or PRs are shared — just the summary. Week summary is written to Firebase on every save so friends always see current data. Friend codes are stored in a reverse-lookup table so there\'s no searching the user database.'},
   {v:'1.79',d:'Rest days no longer show "How are you feeling?"',det:'The energy selector (Fresh / Okay / Tired / Sore) is only relevant before a training session. On REST & MOBILITY days it served no purpose and added noise. It is now hidden on rest days — only shown on gym and ride days where the coach uses it to adjust your session targets.'},
@@ -3614,6 +3615,9 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   const _goals=profile?.goals||(profile?.goal?[profile.goal]:[]);
   const goalDesc=_goals.map(g=>_gm[g]||g).join(' + ')||'general fitness';
   const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  // Human-readable labels for workout types sent to AI (never raw constants)
+  const _typeLabel={PUSH:'Push (Chest/Shoulders/Triceps)',PULL:'Pull (Back/Biceps)',LEGS:'Legs',UPPER_PUMP:'Upper Body (Full Upper)',LONG_OUTDOOR:'Long Outdoor Ride',SHORT_OUTDOOR:'Short Outdoor Ride',LONG_INDOOR:'Long Indoor Ride',SHORT_INDOOR:'Short Indoor Ride',REST:'Rest & Mobility'};
+  const _tl=t=>_typeLabel[t]||t;
   // Count weeks with actual gym sessions logged (Option A: experience context)
   let weeksOfGymHistory=0;
   for(let w=1;w<=52;w++){
@@ -3659,7 +3663,7 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
           }
           return `    ${ex.n}: ${avgW}${u}×${avgR} avg, ${done.length} sets${prLabel}`;
         }).filter(Boolean);
-        wLines.push(`  ${ds} ${type}:${log.completed?' ✓':''}`);
+        wLines.push(`  ${ds} ${_tl(type)}:${log.completed?' ✓':''}`);
         exLines.forEach(l=>wLines.push(l));
       }
     }
@@ -3669,7 +3673,7 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   // Upcoming days this week for context
   const upPlan=DB.get(DB.pk(weekStartDate),null);
   const todayStr=fd(new Date());
-  const upLines=(upPlan||[]).filter(d=>d.date>=todayStr).map(d=>`  ${d.date}: ${d.type}`);
+  const upLines=(upPlan||[]).filter(d=>d.date>=todayStr).map(d=>`  ${d.date}: ${_tl(d.type)}`);
   const _earlyCtx=isEarlyUser?`\nIMPORTANT: This athlete has ${weeksOfGymHistory===0?'no prior':'only 1 week of'} gym history in this app. All exercise entries marked [baseline — first logged] are first-time measurements, NOT progression over previous sessions. Do NOT say "excellent progression" or compare gym numbers to prior weeks. Instead: acknowledge they are establishing their baseline, note what they lifted/rode, and give forward-looking targets for next session.`:'';
   const _bodyStats=(()=>{const parts=[];if(profile?.weight&&profile?.weightUnit)parts.push(`${profile.weight}${profile.weightUnit}`);if(profile?.height&&profile?.heightUnit)parts.push(`${profile.height}${profile.heightUnit}`);if(profile?.age)parts.push(`age ${profile.age}`);return parts.length?' | '+parts.join(', '):'';})();
   const prompt=`You are a data-driven personal trainer. Analyze this athlete's recent training data and write a concise weekly advisory. Be specific — use exercise names, weights, distances, HR. Identify patterns: dropped reps at same weight = fatigue; consistent increases = progression; missed sessions = load drop.${_earlyCtx}
