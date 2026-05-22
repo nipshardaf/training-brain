@@ -883,7 +883,7 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.67';
+const APP_VERSION='1.68';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
@@ -2155,19 +2155,31 @@ function buildWeek(wdays){
   }
 
   // ── With rides (weather or indoor) ───────────────────────────────────────
-  // 2 ride days (best weather) + (targetDays-2) gym days + rest days
-  // e.g. 4-day user: 2 rides + 2 gym + 3 rest
-  //      6-day user: 2 rides + 4 gym + 1 rest
-  const numRides=Math.min(2,Math.max(1,targetDays-1)); // always keep ≥1 gym slot
-  const numGym=targetDays-numRides;
+  // Strava rides already done this week fill the ride quota — don't double-book
+  const stravaRideIdx=new Set();
+  wdays.forEach((w,i)=>{if(stravaRideOnDate(w.date))stravaRideIdx.add(i);});
+
+  // Goal-based target: how many ride days per week this user should have
+  // endurance/performance → more rides; muscle → mostly gym; fitness/default → balanced
+  const _goals=profile.goals||(profile.goal?[profile.goal]:[]);
+  const _pg=(_goals[0])||'fitness';
+  const ridesTarget=_pg==='endurance'||_pg==='performance'
+    ?Math.min(3,Math.ceil(targetDays*0.5))
+    :_pg==='muscle'?1
+    :Math.max(1,Math.min(2,Math.round(targetDays*0.4)));
+
+  // New ride days still needed after subtracting Strava rides already done
+  const numRides=Math.max(0,ridesTarget-stravaRideIdx.size);
+  const numGym=Math.max(0,targetDays-ridesTarget);
   const numRest=7-targetDays;
   const OT=45;
 
-  // Pre-pass: figure out which gym day gets LEGS so we can avoid placing
-  // the short (quality) ride the day after it
-  const tentativeRideSet=new Set(ranked.slice(0,numRides).map(r=>r.i));
-  const tentativeNonRide=[0,1,2,3,4,5,6].filter(i=>!tentativeRideSet.has(i));
-  // Among non-ride days, worst weather = rest
+  // Days available for NEW ride assignment (not already ridden, not locked)
+  const _rideAvail=ranked.filter(r=>!stravaRideIdx.has(r.i)&&!locked[wdays[r.i]?.date]);
+
+  // Pre-pass: find where LEGS lands so short ride avoids the day after it
+  const tentativeRideSet=new Set(_rideAvail.slice(0,numRides).map(r=>r.i));
+  const tentativeNonRide=[0,1,2,3,4,5,6].filter(i=>!tentativeRideSet.has(i)&&!stravaRideIdx.has(i)&&!locked[wdays[i]?.date]);
   const tentativeRestSet=new Set(
     rankedAsc.filter(r=>tentativeNonRide.includes(r.i)).slice(0,numRest).map(r=>r.i)
   );
@@ -2177,27 +2189,27 @@ function buildWeek(wdays){
     let lastType=getLastGymType();
     let si=(GYM_SEQ.indexOf(lastType)+1)%GYM_SEQ.length;
     for(const i of tentativeGymDays){
-      if(locked[i]){if(locked[i]==='LEGS')legsIdx=i;}
+      const ld=locked[wdays[i]?.date];
+      if(ld){if(ld.type==='LEGS')legsIdx=i;}
       else{if(GYM_SEQ[si]==='LEGS')legsIdx=i;si=(si+1)%GYM_SEQ.length;}
     }
   }
   const postLegsIdx=legsIdx>=0?(legsIdx+1)%7:-1;
 
-  // Pick ride days: long ride on best-weather day; short ride on best remaining
-  // day but penalised if it falls the day after LEGS
-  const longCandidates=[...ranked];
-  const shortCandidates=[...ranked].map(r=>({...r,s:r.i===postLegsIdx?r.s-40:r.s})).sort((a,b)=>b.s-a.s);
-  const r1=longCandidates[0];
-  const r2=numRides>1?(shortCandidates.find(r=>r.i!==r1.i)||shortCandidates[1]):null;
-  const rideSet=new Set([r1.i,...(r2?[r2.i]:[])]);
+  // Pick actual ride days: long on best weather, short on next best (penalised post-LEGS)
+  const longCandidates=[..._rideAvail];
+  const shortCandidates=[..._rideAvail].map(r=>({...r,s:r.i===postLegsIdx?r.s-40:r.s})).sort((a,b)=>b.s-a.s);
+  const r1=numRides>=1?longCandidates[0]:null;
+  const r2=numRides>=2?(shortCandidates.find(r=>r.i!==r1?.i)||null):null;
+  const rideSet=new Set([...(r1?[r1.i]:[]),...(r2?[r2.i]:[])]);
 
-  const t1=bikePref==='indoor'?'LONG_INDOOR':r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR';
+  const t1=r1?(bikePref==='indoor'?'LONG_INDOOR':r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR'):null;
   const t2=r2?(bikePref==='indoor'?'SHORT_INDOOR':r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR'):null;
 
-  // Non-ride days: worst weather = rest, rest = gym
-  const nonRide=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i));
+  // Remaining days (no new ride, no Strava ride, not locked) → gym or rest
+  const nonRide=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i)&&!stravaRideIdx.has(i)&&!locked[wdays[i]?.date]);
   const restSet=new Set(
-    rankedAsc.filter(r=>nonRide.includes(r.i)).slice(0,numRest).map(r=>r.i)
+    rankedAsc.filter(r=>nonRide.includes(r.i)).slice(0,Math.min(numRest,nonRide.length)).map(r=>r.i)
   );
   const gymDays=nonRide.filter(i=>!restSet.has(i));
   const asgn={};
@@ -2205,8 +2217,9 @@ function buildWeek(wdays){
 
   return wdays.map((w,i)=>{
     let type;
-    if(i===r1.i)type=t1;
+    if(r1&&i===r1.i)type=t1;
     else if(r2&&i===r2.i)type=t2;
+    else if(stravaRideIdx.has(i))type='REST'; // already rode — REST type; rDayRow shows Strava override
     else if(restSet.has(i))type='REST';
     else type=asgn[i]||'REST';
     return mk(w,type);
