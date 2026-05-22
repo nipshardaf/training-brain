@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.83';
+const APP_VERSION='1.84';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.84',d:'Smart Targets — Weekly Advisor now sets exercise targets that appear in your workout log',det:'The Weekly Advisor now outputs a structured TARGETS block alongside its text advice. When you open an exercise that has a specific target this week (e.g. "Lying Leg Curl at 130lbs × 12"), a green 🎯 badge appears in the exercise body showing exactly what to aim for. When you complete all sets on that exercise, the app checks your best set against the target: hit it and you get a "Target achieved!" toast; close but not quite gets an encouraging nudge. Targets are extracted by the AI from the FOCUS section using the exact exercise names in your training data, so they only appear for exercises the AI actually mentioned.'},
   {v:'1.83',d:'Handle Gemini 503 overload — better error messages for all AI failure types',det:'Gemini occasionally returns 503 (temporarily overloaded) in addition to 429 (quota) and 403 (auth). The Cloudflare Worker now falls through to the next provider on 503 as well. The app now distinguishes three error states: quota exhausted (no retry, reset at midnight), overloaded (retry shown, "usually clears in a minute"), and connection blip (retry shown). Previously 503 looked the same as a connection blip with no explanation.'},
   {v:'1.82',d:'Weekly Advisor: workout names now human-readable instead of raw code',det:'The AI was receiving internal type constants like UPPER_PUMP, PUSH, PULL, LONG_OUTDOOR in the prompt and echoing them back verbatim in the advice. Added a type label map so the AI always receives plain English names — "Upper Body (Full Upper)", "Push (Chest/Shoulders/Triceps)", "Long Outdoor Ride" etc. Both the training history and the upcoming schedule sections of the prompt are now translated.'},
   {v:'1.81',d:'Body stats added to profile — weight, height, age fed to AI coach',det:'Added weight, height, and age fields to the profile setup (step 3 — Last few details). Both weight and height have kg/lb and cm/ft unit toggles. A privacy notice explains the data is stored privately in your account and never shared with friends or used outside your own training coach. All three values are now passed to the Weekly Advisor and Gym Coach AI prompts so the AI can calibrate intensity, suggest appropriate loading, and factor in body composition when giving advice (e.g. strength-to-body-weight ratios, appropriate cardio intensity for weight loss goals).'},
@@ -2190,7 +2191,7 @@ function energyTargets(exId,energy){
 }
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false,_friendCode:null,_friendRequests:{},_friendSummaries:{},_friendsLoaded:false};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false,_friendCode:null,_friendRequests:{},_friendSummaries:{},_friendsLoaded:false,_weekTargets:{}};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -3686,11 +3687,12 @@ Training data:
 ${dataLines.join('\n')}
 ${upLines.length?'\nUpcoming this week:\n'+upLines.join('\n'):''}
 
-Write exactly 4 advisor points:
+Write exactly 5 sections:
 LOAD: [1 sentence: overall load — sessions completed, volume, any rides]
 TREND: [1-2 sentences: what the numbers show — name specific exercises or rides; for early users note these are baselines not progressions]
-FOCUS: [1-2 sentences: what to prioritise this week — specific targets to aim for]
-RECOVERY: [1 sentence: recovery or readiness note]`;
+FOCUS: [1-2 sentences: what to prioritise this week — specific targets to aim for, using exact exercise names and numbers]
+RECOVERY: [1 sentence: recovery or readiness note]
+TARGETS: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array only, no prose. Use the EXACT exercise names from the training data above. Include ONLY exercises where FOCUS gives a specific numeric weight AND rep target. Empty array [] if none.`;
   // Let fetch errors throw — caller distinguishes "no data" (null) from "API error" (thrown)
   const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
     body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:400,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
@@ -3701,10 +3703,12 @@ RECOVERY: [1 sentence: recovery or readiness note]`;
   if(!text)throw new Error('empty response');
   const sections={};
   ['LOAD','TREND','FOCUS','RECOVERY'].forEach(k=>{
-    const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY)[:\\*]|$)','si');
+    const rx=new RegExp(k+'[:\\*]+\\s*(.+?)(?=(?:LOAD|TREND|FOCUS|RECOVERY|TARGETS)[:\\*]|$)','si');
     const m=text.match(rx);if(m)sections[k]=m[1].trim().replace(/\*\*/g,'');
   });
-  const result={sections,ts:Date.now()};
+  let targets=[];
+  try{const tm=text.match(/TARGETS:\s*(\[[\s\S]*?\])/);if(tm)targets=JSON.parse(tm[1]);}catch(_){}
+  const result={sections,targets,ts:Date.now()};
   DB.set(cacheKey,result);
   return result;
 }
@@ -4057,6 +4061,22 @@ function setLabel(si,set){
   if(set.side==='R')return'<span style="font-size:10px;font-weight:800;color:#f472b6">R</span>';
   return String(si+1);
 }
+function findWeekTarget(exName,targets){
+  if(!targets?.length)return null;
+  const name=exName.toLowerCase();
+  // 1. exact match
+  let t=targets.find(t=>t.ex?.toLowerCase()===name);if(t)return t;
+  // 2. one contains the other
+  t=targets.find(t=>t.ex&&(name.includes(t.ex.toLowerCase())||t.ex.toLowerCase().includes(name)));if(t)return t;
+  // 3. two or more significant words overlap
+  const words=name.split(' ').filter(w=>w.length>3);
+  return targets.find(t=>{
+    if(!t.ex)return false;
+    const tw=t.ex.toLowerCase().split(' ').filter(w=>w.length>3);
+    return words.filter(w=>tw.includes(w)).length>=2;
+  })||null;
+}
+
 function rLogEx(le,ei){
   const ex=EX[le.id];if(!ex)return'';
   const pr=DB.get('prs',{})[le.id];
@@ -4066,6 +4086,9 @@ function rLogEx(le,ei){
   const isOpen=S.openLogEx===ei;
   const wPh=tgt.sugW?`~${tgt.sugW}${unit()}`:'—';
   const rPh=tgt.reps||'—';
+  // Weekly advisor target for this exercise
+  const _advData=DB.get('weekly_advisor_'+fd(getMon(S.viewDate)),null);
+  const _wTgt=findWeekTarget(ex.n,_advData?.targets||[]);
   // compact summary for when collapsed and done
   const bestSet=allDone?le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0]:null;
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
@@ -4078,6 +4101,7 @@ function rLogEx(le,ei){
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar()}
+  ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
   <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
@@ -4141,6 +4165,16 @@ function togSet(ei,si){
     const best=le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0];
     const sumEl=document.getElementById('sum'+ei);
     if(sumEl&&best)sumEl.textContent=`${best.w}${unit()} × ${best.r}`;
+    // Weekly target feedback — only fire when just completing (not un-completing)
+    if(set.done&&best){
+      const _aData=DB.get('weekly_advisor_'+fd(getMon(S.viewDate)),null);
+      const _wt=findWeekTarget(EX[le.id]?.n||'',_aData?.targets||[]);
+      if(_wt){
+        const hitW=parseFloat(best.w)>=_wt.w,hitR=parseInt(best.r)>=_wt.r;
+        if(hitW&&hitR)showToast('🎯 Target achieved!','var(--grn)');
+        else if(hitW||hitR)showToast('💪 Close to your target — keep going','var(--amb)');
+      }
+    }
   }
   if(allDone&&set.done){
     setTimeout(()=>{
