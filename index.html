@@ -883,10 +883,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.78';
+const APP_VERSION='1.79';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.79',d:'Rest days no longer show "How are you feeling?"',det:'The energy selector (Fresh / Okay / Tired / Sore) is only relevant before a training session. On REST & MOBILITY days it served no purpose and added noise. It is now hidden on rest days — only shown on gym and ride days where the coach uses it to adjust your session targets.'},
   {v:'1.78',d:'Auth: fix half-stuck accounts + smarter error messages',det:'Fixed a scenario where a user (e.g. on a restricted network) could start creating an account, have the network drop mid-way, and then be permanently stuck — unable to create (email already in use) or sign in (unknown password). Now: auth/email-already-in-use shows inline "Sign in instead" and "Reset your password" action buttons. Wrong-password errors on sign-in now show an inline "Forgot password?" link. Added the modern auth/invalid-login-credentials error code to the map (Firebase changed this code and it was falling through to a raw ugly error message). Added auth/network-request-failed with a clear connection error message.'},
   {v:'1.77',d:'Weekly Advisor: smarter context for new users + better PR labels',det:'Two improvements to the Weekly Advisor. (1) The advisor now counts how many weeks of gym history exist in the app and passes that context to the AI — on week 1 it explicitly tells the AI these are baseline measurements, not progressions, so it stops saying "excellent progression" when everything is a first-time entry. (2) PR labels in the training data sent to the AI now distinguish between [baseline — first logged], [NEW PR], and [below PR: X×Y] so the AI has real signal about whether a number is a first-time baseline, a genuine new personal record, or a below-best session.'},
   {v:'1.76',d:'Code cleanup — quota-error helper, stale-flag fix',det:'Internal code review cleanup. (1) The 429/403 quota-error check was copy-pasted in 4 places — now a single isQuotaErr() helper. (2) Fixed a bug where the "AI quota used up" note could linger all session: the _aiQuotaHit flag now clears automatically as soon as any AI call succeeds again. (3) Removed redundant comments.'},
@@ -3157,11 +3158,11 @@ ${isGym?(()=>{const hd=DB.get('home_day_'+ds,false);return`<div onclick="toggleH
   <div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:${hd?'var(--al)':'var(--txt)'}">${hd?'Gym at home — bodyweight exercises':'Training at home today?'}</div>
   <div style="background:${hd?'var(--acc)':'var(--s2)'};border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;color:${hd?'#fff':'var(--t2)'};flex-shrink:0">${hd?'On':'Off'}</div>
 </div>`;})():''}
-<div class="sec-lbl">${_T('how_feeling')}</div>
+${ct!=='rest'?`<div class="sec-lbl">${_T('how_feeling')}</div>
 <div class="egrid">
   ${eBtn('fresh','🔥',_T('e_fresh'))}${eBtn('okay','💪',_T('e_okay'))}${eBtn('tired','😪',_T('e_tired'))}${eBtn('sore','🤕',_T('e_sore'))}
-</div>
-<div class="coach${S.energy?' on':''}" id="coach-card">
+</div>`:''}
+<div class="coach${S.energy&&ct!=='rest'?' on':''}" id="coach-card">
   <div class="coach-lbl">${_T('coach_says')}</div>
   <p>${S.energy?coachMsg(S.energy,ct):''}</p>
   ${S.guest&&S.energy?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bord);font-size:11px;color:var(--t2)">🔒 <a href="#" onclick="lockApp();return false;" style="color:var(--al);text-decoration:none;font-weight:700">Sign in</a> for personalised advice based on your actual lifts and history</div>`:''}
