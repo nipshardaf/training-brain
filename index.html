@@ -110,16 +110,11 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .back-btn{background:var(--s1);border:none;color:var(--al);font-size:14px;font-weight:700;padding:8px 13px;border-radius:10px;cursor:pointer;-webkit-appearance:none;flex-shrink:0}
 .back-btn:active{transform:scale(.95)}
 /* iOS-style slide transitions for navigation */
-@keyframes nav-in-right{from{transform:translate3d(22%,0,0);opacity:.3}to{transform:translate3d(0,0,0);opacity:1}}
-@keyframes nav-in-left{from{transform:translate3d(-22%,0,0);opacity:.3}to{transform:translate3d(0,0,0);opacity:1}}
-.screen.nav-fwd{animation:nav-in-right .3s cubic-bezier(.32,.72,0,1) both;will-change:transform,opacity}
-.screen.nav-back{animation:nav-in-left .3s cubic-bezier(.32,.72,0,1) both;will-change:transform,opacity}
+@keyframes nav-in-right{from{transform:translate3d(35%,0,0);opacity:.25}to{transform:translate3d(0,0,0);opacity:1}}
+@keyframes nav-in-left{from{transform:translate3d(-35%,0,0);opacity:.25}to{transform:translate3d(0,0,0);opacity:1}}
+.screen.nav-fwd{animation:nav-in-right .42s cubic-bezier(.32,.72,0,1) both}
+.screen.nav-back{animation:nav-in-left .42s cubic-bezier(.32,.72,0,1) both}
 @media(prefers-reduced-motion:reduce){.screen.nav-fwd,.screen.nav-back{animation:none}}
-/* Swipe-back keyframe animations — use @keyframes (not transitions) for reliable iOS playback */
-@keyframes sb-slide-off-right{from{transform:translate3d(0,0,0)}to{transform:translate3d(100vw,0,0)}}
-@keyframes sb-slide-in-from-left{from{transform:translate3d(-100vw,0,0)}to{transform:translate3d(0,0,0)}}
-.sb-animating-out{animation:sb-slide-off-right .32s cubic-bezier(.32,.72,0,1) forwards;position:relative;z-index:2;background:var(--bg);box-shadow:-12px 0 30px rgba(0,0,0,.4);will-change:transform}
-.sb-behind-anim{position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;pointer-events:none;overflow:hidden;background:var(--bg);animation:sb-slide-in-from-left .32s cubic-bezier(.32,.72,0,1) forwards;will-change:transform}
 .day-hdr-r{font-size:16px;font-weight:700}
 
 .day-hero{border-radius:22px;padding:18px 20px;margin-bottom:18px;background:var(--s1);border:1px solid transparent}
@@ -904,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.02';
+const APP_VERSION='2.03';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.03',d:'Fix wrong week on open, bottom nav bar out of place, and swipe-back too fast',det:'Three fixes: (1) On weekends, init() was advancing weekStart to next Monday — removed that logic so the app always opens on the current week. (2) The nav slide animations used will-change:transform,opacity which creates a CSS stacking context, causing position:fixed on the bottom nav bar to anchor to the .screen element instead of the viewport, making it appear in the wrong place after any navigation animation. Fixed by removing will-change from the animation CSS and adding an animationend listener to strip the animation class as soon as it finishes. Also removed dead sb-slide-off-right/sb-slide-in-from-left keyframes and .sb-animating-out/.sb-behind-anim classes left over from v2.00. (3) Nav transition duration increased from 300ms to 420ms and slide distance from 22% to 35% — the previous values made the transition barely perceptible; the new values match iOS native navigation feel.'},
   {v:'2.02',d:'Swipe-back diagnostic toast removed now that the gesture is confirmed working',det:'v2.01 added a green debug toast on every detected swipe to verify the gesture was firing. User confirmed the swipe + animation works end-to-end, so the toast is no longer needed. Removed in this version for a clean, silent gesture experience. The simplified animation approach (using the existing .nav-back slide-in keyframes that the back button also uses) is the keeper.'},
   {v:'2.01',d:'Swipe-back simplified to use the existing back-button animation + diagnostic toast to verify the gesture is even being detected',det:'After six failed attempts (v1.96 through v2.00) to get a two-screen swipe animation working on iPhone, ripped out all the custom code and made the swipe gesture do exactly the same thing as tapping the back button: render the week view with the existing .nav-back CSS slide-in animation (which already works — you can see it when you tap the back button). The trade-off: only the new screen animates in from the left, the workout page doesn\'t slide off to the right. But that is far better than zero animation. Also added a green debug toast on every detected swipe showing the measured dx and velocity, so we can confirm in your next test whether the gesture is firing at all — if you see the toast but no animation, the issue is somewhere in the rendering path; if you do not see the toast, the gesture detection itself is broken.'},
   {v:'2.00',d:'Swipe-back animation rewritten with CSS @keyframes — fixes the long-running issue where the workout page wasn\'t actually animating',det:'After three attempts to fix the swipe-back animation with CSS transitions (v1.96, v1.97, v1.99) the workout page was still not moving. Switched to CSS @keyframes which have explicit from/to states baked in — no inline transform timing tricks, no double-rAF dance, no transitionend race conditions. The outgoing screen gets a class with animation: sb-slide-off-right which animates from translate3d(0,0,0) to translate3d(100vw,0,0). The destination (week view) is layered behind with its own animation from translate3d(-100vw,0,0) to translate3d(0,0,0). Both slide a full screen width across (was only 25% before, which was too subtle to see clearly). Cleanup happens on the animationend event when the outgoing screen finishes, with a 500ms setTimeout safety net. Also bumped to v2.00 as a milestone — this should be the last gesture-related fix.'},
@@ -3341,7 +3337,11 @@ function go(screen,opts={}){
   S.screen=screen;Object.assign(S,opts);render();
   if(_navDir&&!_noAnim){
     const sEl=document.querySelector('#app > .screen');
-    if(sEl)sEl.classList.add('nav-'+_navDir);
+    if(sEl){
+      sEl.classList.add('nav-'+_navDir);
+      // Remove class after animation so bnav position:fixed is never inside a stacking context
+      sEl.addEventListener('animationend',()=>{sEl.classList.remove('nav-fwd','nav-back');},{once:true});
+    }
   }
   // Reset scroll on every screen change so new screen always opens at top
   window.scrollTo(0,0);
@@ -5564,8 +5564,6 @@ function init(){
   }
   const today=new Date();
   S.weekStart=getMon(today);
-  const dow=today.getDay();
-  if(dow===0||dow===6)S.weekStart=getMon(addDays(today,7));
   // Handle Strava OAuth callback (?code=... in URL after redirect)
   const _qp=new URLSearchParams(window.location.search);
   const _stravaCode=_qp.get('code');
