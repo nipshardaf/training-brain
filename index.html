@@ -2316,16 +2316,27 @@ function buildWeek(wdays){
 
   // Lock days that already have completed activity — preserve on refresh.
   // Keyed by DATE STRING (not position) so a previously disordered plan can't corrupt a fresh rebuild.
-  // Locks: completed gym sets OR a Strava ride on a planned ride day.
+  // Locks: day marked completed OR any sets done OR a Strava ride on a planned ride day.
   const existingPlan=DB.get(DB.pk(S.weekStart),null);
   const locked={}; // dateStr → existing plan entry
+  // Primary lock scan: walk all 7 days directly from logs (doesn't rely on plan entry existing)
+  for(let _li=0;_li<7;_li++){
+    const _ld=addDays(S.weekStart,_li);
+    const _lds=fd(_ld);
+    const _ll=DB.get(DB.lk(_ld),null);
+    const _hasActivity=_ll?.completed||_ll?.exercises?.some(e=>e?.sets?.some(s=>s?.done));
+    if(_hasActivity){
+      const _lp=existingPlan?.find(dp=>dp.date===_lds);
+      if(_lp)locked[_lds]=_lp;
+    }
+  }
   if(existingPlan){
     existingPlan.forEach(dp=>{
+      if(locked[dp.date])return; // already locked above
       const log=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null);
-      const gymDone=log?.exercises?.some(e=>e.sets.some(s=>s.done))&&GYM_SEQ.includes(dp.type);
       const rideTypes=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'];
       const rideDone=(stravaRideOnDate(dp.date)||log?.ride?.dur!=null)&&rideTypes.includes(dp.type);
-      if(gymDone||rideDone)locked[dp.date]=dp;
+      if(rideDone)locked[dp.date]=dp;
     });
   }
 
@@ -4448,7 +4459,7 @@ ${(()=>{const _bp=DB.get('bike_pref','weather');const _pr3=DB.get('user_profile'
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
 ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:8px">Workout preference</div>
 <div style="display:flex;gap:6px;margin-bottom:14px">${_cyOpts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${_bp===o.v?'var(--acc)':'var(--bord)'};background:${_bp===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${_bp===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${_bp===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:''}
-<button onclick="go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
+<button onclick="S.weekStart=getMon(new Date());go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
 </div>`;})()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
