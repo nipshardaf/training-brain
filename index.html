@@ -5213,7 +5213,7 @@ function doExSwap(oldId,exIdx,ds,type,newId){
     S.activeLog.exercises[exIdx]={id:newId,sets:makeSets(newId,S.energy||'okay',last)};
     DB.set(DB.lk(S.viewDate),S.activeLog);
   }
-  closeExSwap();render();
+  closeExSwap();debouncedSync();render();
 }
 
 /* ── ENERGY ── */
@@ -5511,6 +5511,19 @@ function init(){
       .catch(e=>console.warn('SW register failed:',e));
   }
 }
+// Pull latest data from Firebase whenever the app comes back to the foreground
+// (iOS suspends WebSocket connections when the PWA is backgrounded, so the real-time
+// listener misses any changes made on another device while this one was inactive)
+let _lastVisibilitySync=0;
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState!=='visible')return;
+  if(!S.fbUser||!_fbDb||S.guest)return;
+  const now=Date.now();
+  if(now-_lastVisibilitySync<30000)return; // debounce: at most once per 30s
+  _lastVisibilitySync=now;
+  loadFromCloud().then(()=>render());
+});
+
 // Firebase scripts are deferred — DOMContentLoaded fires after them, so init() is safe here
 document.addEventListener('DOMContentLoaded', init);
 </script>
