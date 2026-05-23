@@ -3736,7 +3736,10 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   // Upcoming days this week for context
   const upPlan=DB.get(DB.pk(weekStartDate),null);
   const todayStr=fd(new Date());
-  const upLines=(upPlan||[]).filter(d=>d.date>=todayStr).map(d=>`  ${d.date}: ${_tl(d.type)}`);
+  const upLines=(upPlan||[]).filter(d=>d.date>=todayStr).map(d=>{
+    const exNames=d.exercises?.map(id=>EX[id]?.n).filter(Boolean).join(', ');
+    return`  ${d.date}: ${_tl(d.type)}${exNames?' → '+exNames:''}`;
+  });
   const _earlyCtx=isEarlyUser?`\nIMPORTANT: This athlete has ${weeksOfGymHistory===0?'no prior':'only 1 week of'} gym history in this app. All exercise entries marked [baseline — first logged] are first-time measurements, NOT progression over previous sessions. Do NOT say "excellent progression" or compare gym numbers to prior weeks. Instead: acknowledge they are establishing their baseline, note what they lifted/rode, and give forward-looking targets for next session.`:'';
   const _bodyStats=(()=>{const parts=[];if(profile?.weight&&profile?.weightUnit)parts.push(`${profile.weight}${profile.weightUnit}`);if(profile?.height&&profile?.heightUnit)parts.push(`${profile.height}${profile.heightUnit}`);if(profile?.age)parts.push(`age ${profile.age}`);return parts.length?' | '+parts.join(', '):'';})();
   const prompt=`You are a data-driven personal trainer. Analyze this athlete's recent training data and write a concise weekly advisory. Be specific — use exercise names, weights, distances, HR. Identify patterns: dropped reps at same weight = fatigue; consistent increases = progression; missed sessions = load drop.${_earlyCtx}
