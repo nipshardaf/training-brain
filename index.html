@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.95';
+const APP_VERSION='1.96';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.96',d:'Safari-style interactive swipe-back — current page follows your finger, week view peeks in from the left with parallax + drop shadow',det:'The previous version just played a slide-in animation after a swipe completed, which is why it still felt jumpy. This release rewrites the gesture as a real interactive drag: when you start swiping right inside a workout, the week view is pre-rendered behind the current page, then both pages move together while your finger is on the screen. The current page tracks 1:1 with your finger and has a soft drop shadow on its left edge; the week view behind it parallax-scrolls in from -25% to 0% as you drag, matching iOS Safari\'s native behavior. Release past 35% of the screen width commits the navigation (smooth 280ms ease-out completion); release before that snaps both pages back to their starting positions. The previous slide-in animation is suppressed during a completed swipe (via a new _noAnim option on go()) so you don\'t see two animations stacked. Activation only fires after 12px of clear horizontal motion, so vertical scrolling through long workouts doesn\'t accidentally trigger it.'},
   {v:'1.95',d:'Smooth iOS-style slide transitions on navigation — back-and-forward now actually feels like a real app',det:'Previously every screen change was an instant innerHTML swap with zero animation, which felt jarring even when the data was right. Added two CSS keyframe animations on the .screen container: nav-fwd slides in from the right when you drill into a workout from the week view, nav-back slides in from the left when you swipe right or tap the back button. 300ms with an iOS-style ease curve (cubic-bezier(.32,.72,0,1)). The go() function now accepts a _dir option that applies the matching class to the freshly rendered screen. All back buttons (← Week, ← Back) and the swipe-right gesture pass _dir:back; tapping into a day passes _dir:fwd. Also added a window.scrollTo(0,0) on every navigation so the new screen always opens at the top instead of inheriting the previous screen\'s scroll position. Respects prefers-reduced-motion for accessibility.'},
   {v:'1.94',d:'Swipe-right to go back (matches iOS convention) — previously had the direction inverted',det:'Earlier versions implemented swipe LEFT to go back based on a wording miscommunication. iOS uses swipe RIGHT as its universal back gesture (Safari, Mail, Messages, every native and web app). Flipped the detection: a clear swipe to the right inside a workout now navigates back to the week view. Threshold widened slightly to 60px of vertical tolerance now that we are matching user muscle memory.'},
   {v:'1.93',d:'Sticky back button in workouts — the back arrow now stays pinned to the top of the screen as you scroll through exercises',det:'The v1.92 debug toast revealed why swipe-left was never triggering: real "swipes" on a scrollable workout list end up dominated by vertical motion (dy ~240px vs dx ~50px). Tuning thresholds wasn\'t going to fix that — the only reliable solution is a back button that\'s always visible. The day header (← Week  ·  Sat 23  ·  Swap ↕) is now sticky-positioned with a translucent backdrop blur, so it follows the page as you scroll. The swipe-left gesture still exists as a power-user shortcut, but it now requires a very horizontal swipe (90px+ left, <50px of vertical drift, completed in <600ms). Debug toast removed.'},
@@ -3320,13 +3321,14 @@ function go(screen,opts={}){
   Object.keys(_animTimers).forEach(k=>{clearInterval(_animTimers[k]);delete _animTimers[k];});
   // clear PR search when leaving progress tab
   if(screen!=='prs')DB.set('_pr_search','');
-  // Extract optional navigation direction for slide animation (fwd / back).
-  // Pull it off opts so it doesn't pollute S.
+  // Extract optional navigation direction (slide-in animation) and _noAnim
+  // (used when a manual gesture has already animated the transition).
   const _navDir=opts._dir;
+  const _noAnim=opts._noAnim;
   if(_navDir)delete opts._dir;
+  if(_noAnim)delete opts._noAnim;
   S.screen=screen;Object.assign(S,opts);render();
-  // Apply slide animation class to the freshly rendered screen
-  if(_navDir){
+  if(_navDir&&!_noAnim){
     const sEl=document.querySelector('#app > .screen');
     if(sEl)sEl.classList.add('nav-'+_navDir);
   }
@@ -5590,44 +5592,141 @@ async function manualSync(){
   render();
 }
 
-// ── SWIPE-BACK GESTURE ─────────────────────────────────────────────────────
-// Inside a workout, a leftward swipe anywhere on the page navigates back to the
-// week view. Listening on window in the capture phase so no inner handler can
-// stop the event before we see it. Debug mode shows the measured dx/dy/dt as a
-// toast on every touchend so we can diagnose why a swipe isn't being detected.
-const _SWIPE_DEBUG=false; // diagnosed in v1.92 — vertical scroll dominates, sticky header is the real fix
-let _swStartX=0,_swStartY=0,_swStartTs=0,_swValid=false;
-function _onSwipeStart(e){
-  if(S.screen!=='day'&&S.screen!=='log'){_swValid=false;return;}
-  if(document.querySelector('.swap-ov')){_swValid=false;return;}
+// ── SAFARI-STYLE SWIPE-BACK GESTURE ────────────────────────────────────────
+// As you drag right on a workout page, the current screen follows your finger
+// and the destination screen (week view) peeks in from the left with parallax.
+// Release past 35% of screen width commits the navigation; otherwise snaps back.
+let _sb=null; // active gesture state {startX, startY, started, currentEl, behindWrap, w}
+
+function _sbScreenSupportsBack(){return S.screen==='day'||S.screen==='log';}
+
+function _sbBuildBehind(){
+  // Render the destination screen (week) and stack it underneath the current.
+  // We temporarily flip S.screen so the existing render function gives us week HTML.
+  const saved=S.screen;
+  S.screen='week';
+  const html=rWeek();
+  S.screen=saved;
+  const wrap=document.createElement('div');
+  wrap.className='sb-behind-wrap';
+  wrap.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;pointer-events:none;overflow:hidden;will-change:transform;background:var(--bg)';
+  wrap.innerHTML=html;
+  // The week HTML includes its own .bnav (fixed), which would stack on top of
+  // the current screen's bnav. Remove it from the behind layer.
+  const innerBnav=wrap.querySelector('.bnav');
+  if(innerBnav)innerBnav.remove();
+  document.getElementById('app').insertBefore(wrap,_sb.currentEl);
+  return wrap;
+}
+
+function _sbActivate(){
+  _sb.currentEl=document.querySelector('#app > .screen');
+  if(!_sb.currentEl)return false;
+  _sb.behindWrap=_sbBuildBehind();
+  // Make the current screen a slideable layer above the behind one
+  _sb.currentEl.style.position='relative';
+  _sb.currentEl.style.zIndex='2';
+  _sb.currentEl.style.background='var(--bg)';
+  _sb.currentEl.style.willChange='transform';
+  _sb.currentEl.style.minHeight='100vh';
+  _sb.started=true;
+  return true;
+}
+
+function _sbCleanupStyles(){
+  if(_sb&&_sb.currentEl){
+    const el=_sb.currentEl;
+    el.style.transform='';
+    el.style.transition='';
+    el.style.boxShadow='';
+    el.style.position='';
+    el.style.zIndex='';
+    el.style.background='';
+    el.style.willChange='';
+    el.style.minHeight='';
+  }
+  if(_sb&&_sb.behindWrap){try{_sb.behindWrap.remove();}catch(_){}}
+}
+
+function _sbOnStart(e){
+  if(!_sbScreenSupportsBack())return;
+  if(document.querySelector('.swap-ov'))return; // modal open
   const t=e.touches?e.touches[0]:e;
   if(!t)return;
-  _swStartX=t.clientX;_swStartY=t.clientY;_swStartTs=Date.now();_swValid=true;
+  _sb={startX:t.clientX,startY:t.clientY,started:false,currentEl:null,behindWrap:null,w:window.innerWidth};
 }
-function _onSwipeEnd(e){
-  if(!_swValid)return;
-  _swValid=false;
-  if(S.screen!=='day'&&S.screen!=='log')return;
-  const t=e.changedTouches?e.changedTouches[0]:e;
+
+function _sbOnMove(e){
+  if(!_sb)return;
+  const t=e.touches?e.touches[0]:e;
   if(!t)return;
-  const dx=t.clientX-_swStartX,dy=t.clientY-_swStartY,dt=Date.now()-_swStartTs;
-  // Only show debug for actual swipe attempts (not taps) so it isn't noisy
-  if(_SWIPE_DEBUG && (Math.abs(dx)>25 || Math.abs(dy)>25)){
-    showToast(`dx=${Math.round(dx)} dy=${Math.round(dy)} dt=${dt}ms screen=${S.screen}`,dx<-60?'var(--grn)':'var(--t2)');
+  const dx=t.clientX-_sb.startX;
+  const dy=t.clientY-_sb.startY;
+  if(!_sb.started){
+    // Activation: clear rightward intent, mostly horizontal
+    if(dx<12)return;
+    if(Math.abs(dy)>Math.abs(dx)*0.7){_sb=null;return;} // vertical scroll wins
+    if(!_sbActivate()){_sb=null;return;}
   }
-  // iOS-standard back gesture: swipe RIGHT to go back (matches Safari, Mail,
-  // and every other iOS app). Requires a clearly horizontal swipe so it doesn't
-  // conflict with vertical scrolling on a tall workout page.
-  if(dx>90&&Math.abs(dy)<60&&dt<700){
-    go('week',{_dir:'back'});
+  const drag=Math.max(0,Math.min(dx,_sb.w));
+  _sb.currentEl.style.transform=`translate3d(${drag}px,0,0)`;
+  _sb.currentEl.style.transition='none';
+  _sb.currentEl.style.boxShadow='-12px 0 30px rgba(0,0,0,0.35)';
+  if(_sb.behindWrap){
+    // Parallax: behind moves from -25% to 0% as drag goes 0 → full width
+    const peek=-_sb.w*0.25*(1-drag/_sb.w);
+    _sb.behindWrap.style.transform=`translate3d(${peek}px,0,0)`;
+    _sb.behindWrap.style.transition='none';
   }
 }
-// Touch (iOS/Android)
-window.addEventListener('touchstart',_onSwipeStart,{passive:true,capture:true});
-window.addEventListener('touchend',_onSwipeEnd,{passive:true,capture:true});
-// Pointer (Edge/some Android) as a fallback path
-window.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')_onSwipeStart(e);},{passive:true,capture:true});
-window.addEventListener('pointerup',e=>{if(e.pointerType==='touch')_onSwipeEnd(e);},{passive:true,capture:true});
+
+function _sbOnEnd(e){
+  if(!_sb){return;}
+  if(!_sb.started){_sb=null;return;}
+  const t=e.changedTouches?e.changedTouches[0]:e;
+  const dx=t?(t.clientX-_sb.startX):0;
+  const drag=Math.max(0,dx);
+  const commit=drag>_sb.w*0.35;
+  const ease='cubic-bezier(.32,.72,0,1)';
+  const dur=280;
+  if(commit){
+    _sb.currentEl.style.transition=`transform ${dur}ms ${ease}`;
+    _sb.currentEl.style.transform=`translate3d(${_sb.w}px,0,0)`;
+    if(_sb.behindWrap){
+      _sb.behindWrap.style.transition=`transform ${dur}ms ${ease}`;
+      _sb.behindWrap.style.transform='translate3d(0,0,0)';
+    }
+    setTimeout(()=>{
+      _sbCleanupStyles();
+      _sb=null;
+      go('week',{_noAnim:true}); // skip the standard slide-in, we just animated
+    },dur);
+  }else{
+    _sb.currentEl.style.transition=`transform ${dur}ms ${ease}`;
+    _sb.currentEl.style.transform='translate3d(0,0,0)';
+    _sb.currentEl.style.boxShadow='';
+    if(_sb.behindWrap){
+      _sb.behindWrap.style.transition=`transform ${dur}ms ${ease}`;
+      _sb.behindWrap.style.transform=`translate3d(${-_sb.w*0.25}px,0,0)`;
+    }
+    setTimeout(()=>{_sbCleanupStyles();_sb=null;},dur);
+  }
+}
+
+function _sbOnCancel(){
+  if(!_sb)return;
+  if(_sb.started){
+    // Snap back if cancelled mid-gesture
+    _sb.currentEl.style.transition='transform .2s ease-out';
+    _sb.currentEl.style.transform='translate3d(0,0,0)';
+    setTimeout(()=>{_sbCleanupStyles();_sb=null;},200);
+  }else{_sb=null;}
+}
+
+window.addEventListener('touchstart',_sbOnStart,{passive:true,capture:true});
+window.addEventListener('touchmove',_sbOnMove,{passive:true,capture:true});
+window.addEventListener('touchend',_sbOnEnd,{passive:true,capture:true});
+window.addEventListener('touchcancel',_sbOnCancel,{passive:true,capture:true});
 
 // ── AUTO-SYNC ORCHESTRATION ────────────────────────────────────────────────
 // Three independent mechanisms, layered so the user never has to think about sync:
