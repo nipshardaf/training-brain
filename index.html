@@ -4849,15 +4849,16 @@ ${S.fbUser
     const lastPull=DB.get('fb_last_pull',null);
     return`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
       <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span>
-      <div style="margin-top:10px;padding-top:10px;border-top:1px solid rgba(16,185,129,.2);font-size:11px;color:var(--t2);line-height:1.6">
-        <div><span class="sync-dot"></span>☁️ Auto-sync ${syncErr?'<span style="color:var(--red)">— issue detected</span>':'active'}${syncAge===null?' · never backed up':syncAge<2?' · backed up just now':syncAge<60?` · backed up ${syncAge}m ago`:` · backed up ${Math.round(syncAge/60)}h ago`}</div>
-        ${syncErr?`<div style="color:var(--red);margin-top:4px;font-size:10px">Error: ${syncErr}</div>`:''}
-        ${lastPull?`<div style="font-size:10px;margin-top:2px;opacity:.8">Last pulled: ${fmt(lastPull)}</div>`:''}
+      <div onclick="manualSync()" style="margin-top:10px;padding:10px;border-top:1px solid rgba(16,185,129,.2);margin:10px -15px -13px -15px;padding:10px 15px 13px;cursor:pointer;border-bottom-left-radius:14px;border-bottom-right-radius:14px;transition:background .15s ease" onmouseover="this.style.background='rgba(16,185,129,.06)'" onmouseout="this.style.background='transparent'">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--t2);line-height:1.6">
+          <div>
+            <div><span class="sync-dot"></span>☁️ Auto-sync ${syncErr?'<span style="color:var(--red)">— issue detected</span>':'active'}${syncAge===null?' · never backed up':syncAge<2?' · just now':syncAge<60?` · ${syncAge}m ago`:` · ${Math.round(syncAge/60)}h ago`}</div>
+            ${syncErr?`<div style="color:var(--red);margin-top:4px;font-size:10px">Error: ${syncErr}</div>`:''}
+            ${lastPull?`<div style="font-size:10px;margin-top:2px;opacity:.8">Last pulled: ${fmt(lastPull)}</div>`:''}
+          </div>
+          <span style="color:var(--al);font-size:11px;font-weight:700;white-space:nowrap;padding-left:10px">🔄 Sync now</span>
+        </div>
       </div>
-      ${syncErr?`<div style="display:flex;gap:6px;margin-top:10px">
-        <button onclick="saveToCloud(true)" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--txt);font-size:11px;font-weight:700;padding:7px;cursor:pointer">⬆️ Retry push</button>
-        <button onclick="loadFromCloud(true).then(()=>render())" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--txt);font-size:11px;font-weight:700;padding:7px;cursor:pointer">⬇️ Retry pull</button>
-      </div>`:''}
     </div>
     <div class="data-btns">
       <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
@@ -5554,6 +5555,47 @@ function init(){
       .catch(e=>console.warn('SW register failed:',e));
   }
 }
+// Manual sync — push local changes up, then pull anything fresh from cloud.
+// Triggered by tapping the sync status block in Account settings.
+async function manualSync(){
+  if(!S.fbUser||!_fbDb||S.guest){showToast('⚠️ Not signed in','var(--red)');return;}
+  showToast('🔄 Syncing…','var(--al)');
+  await saveToCloud(false);
+  await loadFromCloud(false);
+  const err=DB.get('fb_last_sync_err',null)||DB.get('fb_last_pull_err',null);
+  if(err)showToast(`⚠️ Sync issue: ${err}`,'var(--red)');
+  else showToast('☁️ Synced','var(--grn)');
+  render();
+}
+
+// ── SWIPE-BACK GESTURE ─────────────────────────────────────────────────────
+// Inside a workout (log screen), a leftward swipe anywhere on the page navigates
+// back to the week view. Saves scrolling all the way up to find the back button.
+let _swStartX=0,_swStartY=0,_swStartTs=0,_swValid=false;
+document.addEventListener('touchstart',e=>{
+  if(S.screen!=='log')return;
+  // Ignore swipes that start on interactive elements or inside a modal overlay
+  const t=e.target;
+  if(!t||t.closest('button,input,textarea,select,a,.swap-ov,#exlog-modal,#swap-modal,#ex-swap-modal,#act-info-modal'))return;
+  // Ignore if any modal is currently visible
+  if(document.querySelector('.swap-ov'))return;
+  _swStartX=e.touches[0].clientX;
+  _swStartY=e.touches[0].clientY;
+  _swStartTs=Date.now();
+  _swValid=true;
+},{passive:true});
+document.addEventListener('touchend',e=>{
+  if(!_swValid||S.screen!=='log'){_swValid=false;return;}
+  _swValid=false;
+  const dx=e.changedTouches[0].clientX-_swStartX;
+  const dy=e.changedTouches[0].clientY-_swStartY;
+  const dt=Date.now()-_swStartTs;
+  // Leftward swipe: dx very negative, mostly horizontal, completed within 600ms
+  if(dx<-90&&Math.abs(dx)>Math.abs(dy)*1.5&&dt<600){
+    go('week');
+  }
+},{passive:true});
+
 // ── AUTO-SYNC ORCHESTRATION ────────────────────────────────────────────────
 // Three independent mechanisms, layered so the user never has to think about sync:
 //   1. Real-time listener (startSyncListener) — instant when active, fragile on mobile
