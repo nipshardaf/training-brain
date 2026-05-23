@@ -50,7 +50,7 @@
 }
 html{height:-webkit-fill-available}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:100vh;min-height:-webkit-fill-available;overflow-x:hidden;-webkit-font-smoothing:antialiased}
-.screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) 16px calc(var(--sb) + 88px)}
+.screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) 16px calc(var(--sb) + 88px);background:var(--bg)}
 
 /* header */
 .hdr{text-align:center;margin-bottom:18px}
@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.07';
+const APP_VERSION='2.08';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.08',d:'Swipe-back: fix workout page losing background + vertical scroll during drag',det:'Two bugs from v2.07: (1) The .screen element had no background colour set, so as it slid right the week view injected behind it was visible through the page — the workout appeared to lose its background. Fixed by adding background:var(--bg) to .screen. (2) The touchmove listener was passive:true so the browser could still scroll the page vertically while a horizontal drag was in progress. Fixed by attaching a non-passive touchmove listener (with preventDefault) only for the duration of an active horizontal tracking session — it is added when tracking starts and removed immediately on touchend/touchcancel/cancel, so scroll performance everywhere else is unaffected.'},
   {v:'2.07',d:'Swipe-back: week view now visible behind the workout page as you drag',det:'Previously the area behind the sliding workout page was black (just the app background). Now when you start swiping right, the week view is rendered behind the current screen immediately. As you drag, it scales up from 95% to 100% and fades from 70% to full opacity — the same parallax depth effect iOS uses. On release: if you commit, the behind element is removed and the week view appears; if you cancel, the behind element is removed and the workout page snaps back. No jank: the week HTML is generated once when tracking starts and reused for the entire gesture.'},
   {v:'2.06',d:'Swipe-back is now interactive — page follows your finger like Safari',det:'Rewrote the gesture from a trigger-and-animate model to a true finger-following model. The workout page now moves with your finger in real-time as you swipe right, with a growing left-edge shadow for depth. On release: if you committed (strong flick or past 40% screen width) the page slides off to the right and the week view appears; if you released early the page springs back to its original position. Vertical scroll intent is detected early and cancels the gesture immediately so scrolling in workouts still works. Activation thresholds are unchanged from v2.05.'},
   {v:'2.05',d:'Swipe-back activation toned down further',det:'Raised thresholds again: quick-flick now requires 80px travel (was 50px) at velocity >0.65 px/ms (was 0.5), and slow-drag requires 160px (~40% of screen width, was 120px). The gesture should now only fire on a clear, strong intentional swipe.'},
@@ -5610,7 +5611,10 @@ async function manualSync(){
 //   COMMIT  → page slides off to the right, week view appears
 //   CANCEL  → page snaps back to its original position
 // Directional lock: gesture is ignored once vertical intent is detected.
+// Scroll lock: a non-passive touchmove listener is added only while actively
+// tracking so the page cannot scroll vertically while being dragged horizontally.
 let _sb=null;
+let _sbScrollBlock=null; // non-passive listener ref, added only during active tracking
 function _sbScreenSupportsBack(){return S.screen==='day'||S.screen==='log';}
 
 function _sbOnStart(e){
@@ -5635,10 +5639,19 @@ function _sbOnMove(e){
   const dx=t.clientX-_sb.startX;
   const dy=t.clientY-_sb.startY;
   // Directional lock — cancel early if clearly scrolling vertically
-  if(!_sb.tracking&&Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){_sb.cancelled=true;return;}
+  if(!_sb.tracking&&Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){
+    _sb.cancelled=true;
+    if(_sbScrollBlock){window.removeEventListener('touchmove',_sbScrollBlock,{capture:true});_sbScrollBlock=null;}
+    return;
+  }
   // Start tracking once we see clear rightward horizontal intent
   if(!_sb.tracking&&dx>10){
     _sb.tracking=true;
+    // Block vertical scroll while we're doing a horizontal drag
+    if(!_sbScrollBlock){
+      _sbScrollBlock=(ev)=>{if(_sb&&_sb.tracking)ev.preventDefault();};
+      window.addEventListener('touchmove',_sbScrollBlock,{passive:false,capture:true});
+    }
     // Inject week view behind the current screen so it's visible as the page slides away
     if(!document.getElementById('_sb_behind')){
       const savedScreen=S.screen;
@@ -5687,6 +5700,8 @@ function _sbOnEnd(){
   const sw=window.innerWidth;
   // Same thresholds as before: strong flick OR dragged past 40% of screen
   const commit=(sb.vX>0.65&&dx>80)||(dx>sw*0.4);
+  // Remove non-passive scroll blocker
+  if(_sbScrollBlock){window.removeEventListener('touchmove',_sbScrollBlock,{capture:true});_sbScrollBlock=null;}
   const removeBehind=()=>{const b=document.getElementById('_sb_behind');if(b)b.remove();};
   if(!sEl){if(commit){removeBehind();go('week',{_noAnim:true});}else{removeBehind();}return;}
   if(commit){
