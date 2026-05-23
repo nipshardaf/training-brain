@@ -3717,14 +3717,16 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
           const pr=prs[le.id];
           const avgW=Math.round(done.reduce((a,s)=>a+(parseFloat(s.w)||0),0)/done.length*10)/10;
           const avgR=Math.round(done.reduce((a,s)=>a+(parseInt(s.r)||0),0)/done.length);
-          // Option B: smarter PR label — baseline vs new PR vs below PR
+          const bestSet=done.reduce((b,s)=>(((parseFloat(s.w)||0)*(parseInt(s.r)||0))>((parseFloat(b.w)||0)*(parseInt(b.r)||0))?s:b),done[0]);
+          const bestW=Math.round((parseFloat(bestSet?.w)||0)*10)/10;
+          const bestR=parseInt(bestSet?.r)||0;
           let prLabel='';
           if(pr){
-            const atOrAbovePR=avgW>=pr.w&&avgR>=pr.r;
-            if(atOrAbovePR){prLabel=isEarlyUser?' [baseline — first logged]':' [NEW PR]';}
+            const atOrAbovePR=bestW>=pr.w&&bestR>=pr.r;
+            if(atOrAbovePR){prLabel=isEarlyUser?' [baseline]':' [NEW PR]';}
             else{prLabel=` [below PR: ${pr.w}${u}×${pr.r}]`;}
           }
-          return `    ${ex.n}: ${avgW}${u}×${avgR} avg, ${done.length} sets${prLabel}`;
+          return `    ${ex.n}: best ${bestW}${u}×${bestR}, avg ${avgW}${u}×${avgR}, ${done.length} sets${prLabel}`;
         }).filter(Boolean);
         wLines.push(`  ${ds} ${_tl(type)}:${log.completed?' ✓':''}`);
         exLines.forEach(l=>wLines.push(l));
@@ -3755,11 +3757,11 @@ LOAD: [1 sentence: overall load — sessions completed, volume, any rides]
 TREND: [1-2 sentences: what the numbers show — name specific exercises or rides; for early users note these are baselines not progressions]
 FOCUS: [1-2 sentences: what to prioritise this week — specific targets to aim for, using exact exercise names and numbers]
 RECOVERY: [1 sentence: recovery or readiness note]
-TARGETS: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array only, no prose. Use EXACT exercise names from the training data. Include ONLY exercises where FOCUS gives a specific numeric weight AND rep target. Empty array [] if none.
+TARGETS: For every exercise listed in the Upcoming section, look up its most recent "best" entry in the training data above and set a next-session target using this rule: if reps were met at that weight → increase weight by 2.5${u}; if reps fell short → keep same weight and add 1 rep; if no prior data → omit that exercise. Use the EXACT exercise name as shown in Upcoming. Format: [{"ex":"Exact Exercise Name","w":number,"r":number}] — JSON array only, no prose. Cover ALL upcoming exercises that have prior data.
 SWAPS: [{"current":"Exact Exercise Name","suggested":"Exact Alternative Name","reason":"one sentence"}] — JSON array only. Recommend a swap ONLY if: (a) the same exercise appears in 3+ sessions with zero weight or rep progression, (b) a key movement pattern is missing for their stated goal, or (c) a clearly more effective alternative exists for their training level. Use EXACT names from the training data for "current". "suggested" must be a real gym exercise. Max 2 swaps. Empty array [] if no swap is warranted.`;
   // Let fetch errors throw — caller distinguishes "no data" (null) from "API error" (thrown)
   const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:550,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
+    body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:700,temperature:0.65,thinkingConfig:{thinkingBudget:0}}})});
   trackAICall('weekly_advisor',r.ok);
   if(!r.ok)throw new Error('API '+r.status);
   const data=await r.json();
