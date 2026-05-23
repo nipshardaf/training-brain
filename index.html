@@ -4446,7 +4446,7 @@ ${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:_icon('gym-weights
 
 ${(()=>{const _bp=DB.get('bike_pref','weather');const _pr3=DB.get('user_profile',null);const _hasCy=(_pr3?.activities||[]).includes('cycling');const _cyOpts=[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}];return`<div class="sec-hdr">Training Plan</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:8px">Ride preference</div>
+${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:8px">Workout preference</div>
 <div style="display:flex;gap:6px;margin-bottom:14px">${_cyOpts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${_bp===o.v?'var(--acc)':'var(--bord)'};background:${_bp===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${_bp===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${_bp===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:''}
 <button onclick="go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
 </div>`;})()}
