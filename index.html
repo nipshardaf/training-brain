@@ -2979,7 +2979,7 @@ async function doAuth(isNew){
 }
 
 async function saveToCloud(manual=false){
-  if(!S.fbUser||!_fbDb||S.guest)return;
+  if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
     'user_profile','strava_token','strava_activities','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage'];
@@ -2987,39 +2987,66 @@ async function saveToCloud(manual=false){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
   }
+  // Diagnostic: capture payload size so we can spot Firebase write limit failures
+  let _payloadKb=0;try{_payloadKb=Math.round(JSON.stringify(data).length/1024);}catch(_){}
   try{
     const _ts=new Date().toISOString();
     _myLastSaveTs=_ts; // stamp before the write so the listener can recognise our own echo
     await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:_ts});
     DB.set('fb_last_sync',_ts);
+    DB.set('fb_last_sync_err',null);
     // Write public week summary so friends can see this user's weekly stats
     try{await _fbDb.ref('public/'+S.fbUser.uid+'/weekSummary').set(computeWeekSummary());}catch(_){}
-    if(manual){const b=document.querySelector('.sync-bar');if(b)b.innerHTML=`<span><span class="sync-dot"></span>☁️ Backed up just now</span><button onclick="saveToCloud(true)" style="background:none;border:none;color:var(--al);font-size:11px;font-weight:700;cursor:pointer">Back up now</button>`;render();}
-  }catch(_){}
+    if(manual){showToast(`☁️ Synced to cloud (${_payloadKb}KB)`,'var(--grn)');render();}
+  }catch(e){
+    const msg=e?.message||String(e)||'unknown';
+    DB.set('fb_last_sync_err',msg+' ['+_payloadKb+'KB]');
+    if(manual)showToast(`⚠️ Sync failed: ${msg}`,'var(--red)');
+    console.error('[saveToCloud failed]',msg,'payload='+_payloadKb+'KB',e);
+  }
 }
 
-async function loadFromCloud(){
-  if(!S.fbUser||!_fbDb)return;
+async function loadFromCloud(manual=false){
+  if(!S.fbUser||!_fbDb){if(manual)showToast('⚠️ Not signed in','var(--red)');return;}
   try{
     const snap=await _fbDb.ref('users/'+S.fbUser.uid).once('value');
-    if(snap.exists()){
-      const {data}=snap.val()||{};
-      Object.entries(data||{}).forEach(([k,v])=>{
-        if(k==='ai_usage'){
-          // Merge call logs — union by timestamp so both devices keep their counts
-          const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
-          const remote=v||{calls:[]};
-          const seen=new Set((local.calls||[]).map(c=>c.ts));
-          const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
-          merged.sort((a,b)=>a.ts-b.ts);
-          const cutoff=fd(addDays(new Date(),-30));
-          DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
-        } else {
-          DB.set(k,v);
-        }
-      });
+    if(!snap.exists()){
+      if(manual)showToast('☁️ No cloud data yet','var(--amb)');
+      return;
     }
-  }catch(_){}
+    const val=snap.val()||{};
+    const data=val.data||{};
+    const remoteUpdated=val.updated;
+    let planCount=0,logCount=0,otherCount=0;
+    Object.entries(data).forEach(([k,v])=>{
+      if(k==='ai_usage'){
+        const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
+        const remote=v||{calls:[]};
+        const seen=new Set((local.calls||[]).map(c=>c.ts));
+        const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
+        merged.sort((a,b)=>a.ts-b.ts);
+        const cutoff=fd(addDays(new Date(),-30));
+        DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
+      } else {
+        DB.set(k,v);
+        if(k.startsWith('plan_'))planCount++;
+        else if(k.startsWith('log_'))logCount++;
+        else otherCount++;
+      }
+    });
+    DB.set('fb_last_pull',new Date().toISOString());
+    DB.set('fb_last_pull_remote_ts',remoteUpdated||'');
+    DB.set('fb_last_pull_err',null);
+    if(manual){
+      const age=remoteUpdated?Math.round((Date.now()-new Date(remoteUpdated).getTime())/1000):null;
+      showToast(`☁️ Pulled ${planCount} plans, ${logCount} logs${age!==null?` (${age}s old)`:''}`,'var(--grn)');
+    }
+  }catch(e){
+    const msg=e?.message||String(e)||'unknown';
+    DB.set('fb_last_pull_err',msg);
+    if(manual)showToast(`⚠️ Pull failed: ${msg}`,'var(--red)');
+    console.error('[loadFromCloud failed]',msg,e);
+  }
 }
 
 // Real-time cross-device listener — watches the 'updated' timestamp on Firebase.
@@ -4670,6 +4697,28 @@ ${(()=>{
     </div>`).join(''):`<div style="font-size:12px;color:var(--t2);text-align:center;padding:6px 0">No calls logged yet</div>`}
   </div>
   <div style="font-size:10px;color:var(--t2)">Last call: ${lastStr}</div>
+</div>`;
+})()}
+
+<div class="sec-hdr">☁️ Cloud Sync</div>
+${(()=>{
+  const lastSync=DB.get('fb_last_sync',null);
+  const lastSyncErr=DB.get('fb_last_sync_err',null);
+  const lastPull=DB.get('fb_last_pull',null);
+  const lastPullErr=DB.get('fb_last_pull_err',null);
+  const lastPullRemoteTs=DB.get('fb_last_pull_remote_ts','');
+  const fmt=t=>t?new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Never';
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;gap:8px;margin-bottom:12px">
+    <button onclick="saveToCloud(true)" style="flex:1;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:9px;cursor:pointer">⬆️ Push to cloud</button>
+    <button onclick="loadFromCloud(true).then(()=>render())" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:12px;font-weight:700;padding:9px;cursor:pointer">⬇️ Pull from cloud</button>
+  </div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.7">
+    <div><strong>Last push:</strong> ${fmt(lastSync)}${lastSyncErr?` <span style="color:var(--red)">✗ ${lastSyncErr}</span>`:lastSync?' ✓':''}</div>
+    <div><strong>Last pull:</strong> ${fmt(lastPull)}${lastPullErr?` <span style="color:var(--red)">✗ ${lastPullErr}</span>`:lastPull?' ✓':''}</div>
+    ${lastPullRemoteTs?`<div><strong>Cloud data updated:</strong> ${fmt(lastPullRemoteTs)}</div>`:''}
+    <div style="margin-top:6px;color:var(--t2);font-size:10px">Push to cloud uploads your local data. Pull from cloud overwrites local with what's stored in Firebase. Use Pull on the device that's missing updates.</div>
+  </div>
 </div>`;
 })()}
 
