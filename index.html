@@ -893,10 +893,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.93';
+const APP_VERSION='1.94';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.94',d:'Swipe-right to go back (matches iOS convention) — previously had the direction inverted',det:'Earlier versions implemented swipe LEFT to go back based on a wording miscommunication. iOS uses swipe RIGHT as its universal back gesture (Safari, Mail, Messages, every native and web app). Flipped the detection: a clear swipe to the right inside a workout now navigates back to the week view. Threshold widened slightly to 60px of vertical tolerance now that we are matching user muscle memory.'},
   {v:'1.93',d:'Sticky back button in workouts — the back arrow now stays pinned to the top of the screen as you scroll through exercises',det:'The v1.92 debug toast revealed why swipe-left was never triggering: real "swipes" on a scrollable workout list end up dominated by vertical motion (dy ~240px vs dx ~50px). Tuning thresholds wasn\'t going to fix that — the only reliable solution is a back button that\'s always visible. The day header (← Week  ·  Sat 23  ·  Swap ↕) is now sticky-positioned with a translucent backdrop blur, so it follows the page as you scroll. The swipe-left gesture still exists as a power-user shortcut, but it now requires a very horizontal swipe (90px+ left, <50px of vertical drift, completed in <600ms). Debug toast removed.'},
   {v:'1.92',d:'Swipe-back diagnostic build — added pointer-event fallback, broadened thresholds, and a temporary debug toast that shows the measured swipe values on every touch',det:'The swipe-left-to-go-back gesture still wasn\'t triggering on iPhone after the screen-name fix in v1.91. This release attaches the listener to window (not document) and adds a parallel pointer-event listener as a fallback path in case iOS isn\'t bubbling touch events the way we expected. Distance threshold lowered to 60px, time window widened to 800ms, horizontal-vs-vertical ratio relaxed to 1.2:1. Debug toast is temporarily enabled so any swipe with dx or dy >25px shows the actual measured values — green if it would have triggered back navigation, gray if it didn\'t. Use this to tell us whether the gesture is being detected at all, and if so what the measurements look like. Will remove the debug toast in 1.93 once we know what\'s happening.'},
   {v:'1.91',d:'Bulletproof cross-device sync, swipe-left to leave a workout, tap-to-sync on Account, and a stack of plan/advisor fixes',det:'Sync now actually works on every app open — a long-standing bug meant returning users never re-pulled from Firebase because S.authed was set early by init() before the auth listener fired. Added a four-layer auto-sync system: instant Firebase listener while active, foreground refresh when the PWA wakes from background, 60-second polling safety net, and an online-event trigger when the network reconnects. The Account section now folds the sync status, last-pulled timestamp, and error display into one block — tap the green card to manually push+pull on demand. Removed the redundant JSON backup/import (cloud sync replaces them; import was actually dangerous because it could overwrite synced data) and the dead "Feedback & Wishlist coming soon" section. Inside a workout, swiping left anywhere on the page now navigates back to the week view — the screen identifier was "day" not "log" so the original gesture never fired. Other fixes shipped this round: regenerate plan now locks any day with completed sets (was relying solely on per-set done flags and could overwrite logged workouts); filterSlot now prefers gym exercises and only falls back to bodyweight when no gym option exists (was mixing push-ups into your GoodLife Push days); weekly advisor now sends planned exercises for upcoming sessions plus the best set from history, with rules to suggest +2.5 of weight or +1 rep targets across every upcoming exercise; exercise-swap now pushes to Firebase (was localStorage-only); subtle "Synced 2m ago" indicator on the Week view footer.'},
@@ -5596,9 +5597,10 @@ function _onSwipeEnd(e){
   if(_SWIPE_DEBUG && (Math.abs(dx)>25 || Math.abs(dy)>25)){
     showToast(`dx=${Math.round(dx)} dy=${Math.round(dy)} dt=${dt}ms screen=${S.screen}`,dx<-60?'var(--grn)':'var(--t2)');
   }
-  // Bonus swipe-back: very horizontal swipe only (dy must be small) — the
-  // sticky header is the primary way to go back, this is a power-user shortcut
-  if(dx<-90&&Math.abs(dy)<50&&dt<600){
+  // iOS-standard back gesture: swipe RIGHT to go back (matches Safari, Mail,
+  // and every other iOS app). Requires a clearly horizontal swipe so it doesn't
+  // conflict with vertical scrolling on a tall workout page.
+  if(dx>90&&Math.abs(dy)<60&&dt<700){
     go('week');
   }
 }
