@@ -904,10 +904,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.00';
+const APP_VERSION='2.01';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.01',d:'Swipe-back simplified to use the existing back-button animation + diagnostic toast to verify the gesture is even being detected',det:'After six failed attempts (v1.96 through v2.00) to get a two-screen swipe animation working on iPhone, ripped out all the custom code and made the swipe gesture do exactly the same thing as tapping the back button: render the week view with the existing .nav-back CSS slide-in animation (which already works — you can see it when you tap the back button). The trade-off: only the new screen animates in from the left, the workout page doesn\'t slide off to the right. But that is far better than zero animation. Also added a green debug toast on every detected swipe showing the measured dx and velocity, so we can confirm in your next test whether the gesture is firing at all — if you see the toast but no animation, the issue is somewhere in the rendering path; if you do not see the toast, the gesture detection itself is broken.'},
   {v:'2.00',d:'Swipe-back animation rewritten with CSS @keyframes — fixes the long-running issue where the workout page wasn\'t actually animating',det:'After three attempts to fix the swipe-back animation with CSS transitions (v1.96, v1.97, v1.99) the workout page was still not moving. Switched to CSS @keyframes which have explicit from/to states baked in — no inline transform timing tricks, no double-rAF dance, no transitionend race conditions. The outgoing screen gets a class with animation: sb-slide-off-right which animates from translate3d(0,0,0) to translate3d(100vw,0,0). The destination (week view) is layered behind with its own animation from translate3d(-100vw,0,0) to translate3d(0,0,0). Both slide a full screen width across (was only 25% before, which was too subtle to see clearly). Cleanup happens on the animationend event when the outgoing screen finishes, with a 500ms setTimeout safety net. Also bumped to v2.00 as a milestone — this should be the last gesture-related fix.'},
   {v:'1.99',d:'Swipe-back animation actually visible now — workout page slides off to the right instead of just teleporting away',det:'Diagnosed from the video: the wrap (week view behind) was animating correctly because its initial transform was set explicitly, but the workout page itself was not animating because I never set its initial transform, and browsers (especially iOS Safari) fail to animate a transform change when the previous value was the "none" keyword instead of an actual transform value. The result was: workout sits still for 300ms while the wrap silently slides in behind it (invisible because the workout was layered on top), then setTimeout fires and replaces the workout with the week view — looking like an instant teleport. Fixed by explicitly setting transform:translate3d(0,0,0) on the workout page before the transition, forcing a layout commit with getBoundingClientRect, using a double requestAnimationFrame to ensure the transition is registered before the transform changes, and switching from setTimeout-based cleanup to the transitionend event so cleanup happens after the animation actually finishes (with a setTimeout fallback in case transitionend never fires).'},
   {v:'1.98',d:'Swipe-back rewritten with velocity detection — no more finger-dragging, just flick right and the page slides off cleanly',det:'Watched a screen recording of v1.97 and saw the problem: the finger-follow approach made the gesture feel sluggish during slow swipes (the screen literally only moved as much as the user\'s finger did, which on a slow drag is barely any) and required a long deliberate drag to commit. Replaced the entire gesture with a velocity + distance trigger model: tracks finger velocity via an exponential moving average; once velocity exceeds 0.4 px/ms with at least 25px traveled (a quick flick) OR a slower drag passes 70px (deliberate), the back animation fires. The animation is now a clean 300ms slide-off — the workout page glides to the right with a drop shadow while the week view parallaxes in from the left. No more finger-dragging. This matches how React Native\'s default navigation handles back-swipe, not Safari\'s exact gesture, but feels far more responsive on iPhone. Layout commit is forced with offsetWidth + the transform change is deferred via requestAnimationFrame so the transition always actually plays.'},
@@ -5640,37 +5641,21 @@ function _sbOnMove(e){
   const far=dx>70;
   if(fast||far){
     _sb.fired=true;
+    // Diagnostic: show that the swipe WAS detected. If the toast appears but no
+    // animation runs, the problem is in the animation code (not the detection).
+    showToast(`Swipe detected dx=${Math.round(dx)} v=${_sb.vX.toFixed(2)}`,'var(--grn)');
     _sbPlayBackAnimation();
   }
 }
 
 function _sbOnEnd(){_sb=null;}
 
+// SIMPLIFIED: use the existing .nav-back slide-in animation that we already
+// know works (the back button uses it). The new screen will slide in from the
+// left. No more two-screen stacking, no more inline transforms, no more
+// keyframe layer juggling — just the same code path as a button tap.
 function _sbPlayBackAnimation(){
-  const currentEl=document.querySelector('#app > .screen');
-  if(!currentEl){go('week',{_dir:'back'});return;}
-  // Build the destination (week) HTML layer
-  const saved=S.screen;S.screen='week';const html=rWeek();S.screen=saved;
-  const wrap=document.createElement('div');
-  wrap.className='sb-behind-anim';
-  wrap.innerHTML=html;
-  const innerBnav=wrap.querySelector('.bnav');if(innerBnav)innerBnav.remove();
-  document.getElementById('app').insertBefore(wrap,currentEl);
-  // Trigger CSS keyframe animations by adding the class. Keyframes have explicit
-  // from/to values so they always animate properly — no transition-state guesswork
-  // and no inline style timing tricks needed.
-  currentEl.classList.add('sb-animating-out');
-  // Cleanup when the outgoing screen's animation finishes
-  let cleaned=false;
-  const cleanup=()=>{
-    if(cleaned)return;
-    cleaned=true;
-    try{wrap.remove();}catch(_){}
-    go('week',{_noAnim:true});
-  };
-  currentEl.addEventListener('animationend',cleanup,{once:true});
-  // Belt & suspenders: setTimeout fallback if animationend somehow doesn't fire
-  setTimeout(cleanup,500);
+  go('week',{_dir:'back'});
 }
 
 window.addEventListener('touchstart',_sbOnStart,{passive:true,capture:true});
