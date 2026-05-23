@@ -840,12 +840,18 @@ function exAvail(id){
 }
 function filterSlot(slot,bwOnly=false){
   if(bwOnly){
-    // Home-week mode: prefer bodyweight-tagged exercises
+    // Home mode: prefer bodyweight-tagged exercises
     const bw=slot.filter(id=>EX[id]?.bw&&exAvail(id));
     if(bw.length)return bw;
     // No BW option in this slot — fall through to normal equipment filter
   }
   const filtered=slot.filter(id=>exAvail(id));
+  if(!bwOnly){
+    // Gym mode: prefer exercises that require equipment — exclude BW-only moves
+    const gym=filtered.filter(id=>!EX[id]?.bw);
+    if(gym.length)return gym;
+    // No gym option available in this slot (e.g. minimal home setup) — allow BW as fallback
+  }
   return filtered.length>0?filtered:slot;
 }
 
