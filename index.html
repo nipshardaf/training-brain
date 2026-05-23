@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.97';
+const APP_VERSION='1.98';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.98',d:'Swipe-back rewritten with velocity detection — no more finger-dragging, just flick right and the page slides off cleanly',det:'Watched a screen recording of v1.97 and saw the problem: the finger-follow approach made the gesture feel sluggish during slow swipes (the screen literally only moved as much as the user\'s finger did, which on a slow drag is barely any) and required a long deliberate drag to commit. Replaced the entire gesture with a velocity + distance trigger model: tracks finger velocity via an exponential moving average; once velocity exceeds 0.4 px/ms with at least 25px traveled (a quick flick) OR a slower drag passes 70px (deliberate), the back animation fires. The animation is now a clean 300ms slide-off — the workout page glides to the right with a drop shadow while the week view parallaxes in from the left. No more finger-dragging. This matches how React Native\'s default navigation handles back-swipe, not Safari\'s exact gesture, but feels far more responsive on iPhone. Layout commit is forced with offsetWidth + the transform change is deferred via requestAnimationFrame so the transition always actually plays.'},
   {v:'1.97',d:'Swipe-back fix: slow swipes no longer get stuck mid-screen — release now always smoothly commits or snaps back',det:'In v1.96 a slow swipe would visually move the workout page with your finger but then "stick" at the release point without animating to commit or snap-back. Root cause: when transition was set to "none" during the drag, then both transition and transform were changed in the same synchronous block at touchend, the browser would skip the animation and either jump instantly to the end state or appear frozen. Fixed by separating the transition change from the transform change with requestAnimationFrame and a forced layout commit (offsetWidth read) in between — the browser registers the new transition value before the transform changes, so the animation actually plays. Also: activation threshold dropped from 12px to 8px (more responsive feedback), commit threshold dropped from 35% to 30% of screen width (easier to complete), commit duration scales with drag distance so a near-full swipe finishes faster than a partial one.'},
   {v:'1.96',d:'Safari-style interactive swipe-back — current page follows your finger, week view peeks in from the left with parallax + drop shadow',det:'The previous version just played a slide-in animation after a swipe completed, which is why it still felt jumpy. This release rewrites the gesture as a real interactive drag: when you start swiping right inside a workout, the week view is pre-rendered behind the current page, then both pages move together while your finger is on the screen. The current page tracks 1:1 with your finger and has a soft drop shadow on its left edge; the week view behind it parallax-scrolls in from -25% to 0% as you drag, matching iOS Safari\'s native behavior. Release past 35% of the screen width commits the navigation (smooth 280ms ease-out completion); release before that snaps both pages back to their starting positions. The previous slide-in animation is suppressed during a completed swipe (via a new _noAnim option on go()) so you don\'t see two animations stacked. Activation only fires after 12px of clear horizontal motion, so vertical scrolling through long workouts doesn\'t accidentally trigger it.'},
   {v:'1.95',d:'Smooth iOS-style slide transitions on navigation — back-and-forward now actually feels like a real app',det:'Previously every screen change was an instant innerHTML swap with zero animation, which felt jarring even when the data was right. Added two CSS keyframe animations on the .screen container: nav-fwd slides in from the right when you drill into a workout from the week view, nav-back slides in from the left when you swipe right or tap the back button. 300ms with an iOS-style ease curve (cubic-bezier(.32,.72,0,1)). The go() function now accepts a _dir option that applies the matching class to the freshly rendered screen. All back buttons (← Week, ← Back) and the swipe-right gesture pass _dir:back; tapping into a day passes _dir:fwd. Also added a window.scrollTo(0,0) on every navigation so the new screen always opens at the top instead of inheriting the previous screen\'s scroll position. Respects prefers-reduced-motion for accessibility.'},
@@ -5593,149 +5594,93 @@ async function manualSync(){
   render();
 }
 
-// ── SAFARI-STYLE SWIPE-BACK GESTURE ────────────────────────────────────────
-// As you drag right on a workout page, the current screen follows your finger
-// and the destination screen (week view) peeks in from the left with parallax.
-// Release past 35% of screen width commits the navigation; otherwise snaps back.
-let _sb=null; // active gesture state {startX, startY, started, currentEl, behindWrap, w}
-
+// ── SWIPE-BACK GESTURE (velocity + distance based, not finger-following) ──
+// Detects rightward swipe intent (with velocity OR distance) and plays a clean
+// slide-off animation on the current screen + slide-in on the new one. No more
+// finger-dragging — that was the source of the "stuck" feeling. This matches
+// how most cross-platform RN/Flutter apps handle back-swipe.
+let _sb=null;
 function _sbScreenSupportsBack(){return S.screen==='day'||S.screen==='log';}
-
-function _sbBuildBehind(){
-  // Render the destination screen (week) and stack it underneath the current.
-  // We temporarily flip S.screen so the existing render function gives us week HTML.
-  const saved=S.screen;
-  S.screen='week';
-  const html=rWeek();
-  S.screen=saved;
-  const wrap=document.createElement('div');
-  wrap.className='sb-behind-wrap';
-  wrap.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;pointer-events:none;overflow:hidden;will-change:transform;background:var(--bg)';
-  wrap.innerHTML=html;
-  // The week HTML includes its own .bnav (fixed), which would stack on top of
-  // the current screen's bnav. Remove it from the behind layer.
-  const innerBnav=wrap.querySelector('.bnav');
-  if(innerBnav)innerBnav.remove();
-  document.getElementById('app').insertBefore(wrap,_sb.currentEl);
-  return wrap;
-}
-
-function _sbActivate(){
-  _sb.currentEl=document.querySelector('#app > .screen');
-  if(!_sb.currentEl)return false;
-  _sb.behindWrap=_sbBuildBehind();
-  // Make the current screen a slideable layer above the behind one
-  _sb.currentEl.style.position='relative';
-  _sb.currentEl.style.zIndex='2';
-  _sb.currentEl.style.background='var(--bg)';
-  _sb.currentEl.style.willChange='transform';
-  _sb.currentEl.style.minHeight='100vh';
-  _sb.started=true;
-  return true;
-}
-
-function _sbCleanupStyles(){
-  if(_sb&&_sb.currentEl){
-    const el=_sb.currentEl;
-    el.style.transform='';
-    el.style.transition='';
-    el.style.boxShadow='';
-    el.style.position='';
-    el.style.zIndex='';
-    el.style.background='';
-    el.style.willChange='';
-    el.style.minHeight='';
-  }
-  if(_sb&&_sb.behindWrap){try{_sb.behindWrap.remove();}catch(_){}}
-}
 
 function _sbOnStart(e){
   if(!_sbScreenSupportsBack())return;
-  if(document.querySelector('.swap-ov'))return; // modal open
+  if(document.querySelector('.swap-ov'))return;
   const t=e.touches?e.touches[0]:e;
   if(!t)return;
-  _sb={startX:t.clientX,startY:t.clientY,started:false,currentEl:null,behindWrap:null,w:window.innerWidth};
+  _sb={startX:t.clientX,startY:t.clientY,lastX:t.clientX,lastTs:Date.now(),vX:0,fired:false};
 }
 
 function _sbOnMove(e){
-  if(!_sb)return;
+  if(!_sb||_sb.fired)return;
   const t=e.touches?e.touches[0]:e;
   if(!t)return;
+  const now=Date.now();
+  const dt=now-_sb.lastTs;
+  if(dt>0){
+    // Exponential moving average of horizontal velocity (px/ms)
+    const inst=(t.clientX-_sb.lastX)/dt;
+    _sb.vX=_sb.vX*0.6+inst*0.4;
+  }
+  _sb.lastX=t.clientX;_sb.lastTs=now;
   const dx=t.clientX-_sb.startX;
   const dy=t.clientY-_sb.startY;
-  if(!_sb.started){
-    // Activation: lower threshold (8px) for immediate feedback, allow more
-    // vertical drift so slow honest swipes don't get cancelled
-    if(dx<8)return;
-    if(Math.abs(dy)>Math.abs(dx)){_sb=null;return;}
-    if(!_sbActivate()){_sb=null;return;}
-  }
-  const drag=Math.max(0,Math.min(dx,_sb.w));
-  // During the drag we need transition: none so the screen tracks the finger
-  // 1:1. We'll switch to an eased transition only at touchend, then defer the
-  // transform change with rAF so the browser commits the transition change first.
-  _sb.currentEl.style.transition='none';
-  _sb.currentEl.style.transform=`translate3d(${drag}px,0,0)`;
-  _sb.currentEl.style.boxShadow='-12px 0 30px rgba(0,0,0,0.35)';
-  if(_sb.behindWrap){
-    const peek=-_sb.w*0.25*(1-drag/_sb.w);
-    _sb.behindWrap.style.transition='none';
-    _sb.behindWrap.style.transform=`translate3d(${peek}px,0,0)`;
+  // Cancel if the gesture turns into a vertical scroll
+  if(Math.abs(dy)>40&&Math.abs(dy)>Math.abs(dx)*1.2){_sb=null;return;}
+  // Trigger conditions (whichever hits first):
+  //   FAST: velocity > 0.4 px/ms with at least 25px traveled = a quick flick
+  //   FAR:  distance > 70px regardless of speed (deliberate drag)
+  const fast=_sb.vX>0.4&&dx>25;
+  const far=dx>70;
+  if(fast||far){
+    _sb.fired=true;
+    _sbPlayBackAnimation();
   }
 }
 
-function _sbAnimateTo(currentX,behindX,dur,onDone){
-  // Two-step animation: set transition first, then change transform in the next
-  // frame. This forces the browser to actually animate instead of snapping to
-  // the end state (which happens when both properties change in one frame after
-  // transition:none was previously applied).
+function _sbOnEnd(){_sb=null;}
+
+function _sbPlayBackAnimation(){
+  // Render the destination (week) below current, then slide current off to the
+  // right while the destination parallax-eases in from -25% → 0%.
+  const currentEl=document.querySelector('#app > .screen');
+  if(!currentEl){go('week',{_dir:'back'});return;}
+  const w=window.innerWidth;
+  // Build behind layer
+  const saved=S.screen;S.screen='week';const html=rWeek();S.screen=saved;
+  const wrap=document.createElement('div');
+  wrap.className='sb-behind-wrap';
+  wrap.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;pointer-events:none;overflow:hidden;background:var(--bg);transform:translate3d('+(-w*0.25)+'px,0,0);will-change:transform';
+  wrap.innerHTML=html;
+  const innerBnav=wrap.querySelector('.bnav');if(innerBnav)innerBnav.remove();
+  document.getElementById('app').insertBefore(wrap,currentEl);
+  // Layer current screen on top
+  currentEl.style.position='relative';
+  currentEl.style.zIndex='2';
+  currentEl.style.background='var(--bg)';
+  currentEl.style.willChange='transform';
+  currentEl.style.boxShadow='-12px 0 30px rgba(0,0,0,0.4)';
+  currentEl.style.minHeight='100vh';
+  // Force layout commit BEFORE applying transitions
+  void currentEl.offsetWidth;
   const ease='cubic-bezier(.32,.72,0,1)';
-  const c=_sb.currentEl, b=_sb.behindWrap;
-  c.style.transition=`transform ${dur}ms ${ease}`;
-  if(b)b.style.transition=`transform ${dur}ms ${ease}`;
-  // Force layout commit so the transition change is registered
-  void c.offsetWidth;
+  const dur=300;
+  currentEl.style.transition='transform '+dur+'ms '+ease;
+  wrap.style.transition='transform '+dur+'ms '+ease;
+  // Trigger animation in next frame (separate from transition assignment)
   requestAnimationFrame(()=>{
-    if(c)c.style.transform=`translate3d(${currentX}px,0,0)`;
-    if(b)b.style.transform=`translate3d(${behindX}px,0,0)`;
-    setTimeout(onDone,dur);
+    currentEl.style.transform='translate3d('+w+'px,0,0)';
+    wrap.style.transform='translate3d(0,0,0)';
   });
-}
-
-function _sbOnEnd(e){
-  if(!_sb)return;
-  if(!_sb.started){_sb=null;return;}
-  const t=e.changedTouches&&e.changedTouches[0]?e.changedTouches[0]:null;
-  const dx=t?(t.clientX-_sb.startX):0;
-  const drag=Math.max(0,dx);
-  // Lowered commit threshold to 30% so the gesture feels easier to complete
-  const commit=drag>_sb.w*0.3;
-  const dur=commit?Math.max(180,260-Math.round(drag/_sb.w*100)):220;
-  if(commit){
-    _sbAnimateTo(_sb.w,0,dur,()=>{
-      _sbCleanupStyles();
-      _sb=null;
-      go('week',{_noAnim:true});
-    });
-  }else{
-    _sbAnimateTo(0,-_sb.w*0.25,dur,()=>{
-      _sbCleanupStyles();
-      _sb=null;
-    });
-  }
-}
-
-function _sbOnCancel(){
-  if(!_sb)return;
-  if(_sb.started){
-    _sbAnimateTo(0,-_sb.w*0.25,200,()=>{_sbCleanupStyles();_sb=null;});
-  }else{_sb=null;}
+  setTimeout(()=>{
+    try{wrap.remove();}catch(_){}
+    go('week',{_noAnim:true});
+  },dur);
 }
 
 window.addEventListener('touchstart',_sbOnStart,{passive:true,capture:true});
 window.addEventListener('touchmove',_sbOnMove,{passive:true,capture:true});
 window.addEventListener('touchend',_sbOnEnd,{passive:true,capture:true});
-window.addEventListener('touchcancel',_sbOnCancel,{passive:true,capture:true});
+window.addEventListener('touchcancel',_sbOnEnd,{passive:true,capture:true});
 
 // ── AUTO-SYNC ORCHESTRATION ────────────────────────────────────────────────
 // Three independent mechanisms, layered so the user never has to think about sync:
