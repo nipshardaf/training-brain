@@ -3430,6 +3430,15 @@ return plan?`
   <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'🌤️ Generate (outdoor + gym)':p==='indoor'?'🏠 Generate (indoor + gym)':'🏋️ Generate (gym only)'}</button>
 </div>`;
 })();})()}
+${(()=>{
+  if(S.guest||!S.fbUser)return'';
+  const ls=DB.get('fb_last_sync',null)||DB.get('fb_last_pull',null);
+  if(!ls)return'';
+  const secs=Math.round((Date.now()-new Date(ls).getTime())/1000);
+  const txt=secs<60?'just now':secs<3600?Math.floor(secs/60)+'m ago':secs<86400?Math.floor(secs/3600)+'h ago':Math.floor(secs/86400)+'d ago';
+  const err=DB.get('fb_last_sync_err',null)||DB.get('fb_last_pull_err',null);
+  return`<div style="text-align:center;font-size:10px;color:${err?'var(--red)':'var(--t2)'};padding:8px 0;opacity:0.6">${err?'⚠️ Sync issue — see Settings':'☁️ Synced '+txt}</div>`;
+})()}
 <div class="bnav">
   <button class="bnav-btn on" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
   <button class="bnav-btn" onclick="go('prs')"><span>${_icon('my-training-tab.png','🏆',22)}</span><span>${_T('nav_training')}</span></button>
@@ -5564,18 +5573,50 @@ function init(){
       .catch(e=>console.warn('SW register failed:',e));
   }
 }
-// Pull latest data from Firebase whenever the app comes back to the foreground
-// (iOS suspends WebSocket connections when the PWA is backgrounded, so the real-time
-// listener misses any changes made on another device while this one was inactive)
+// ── AUTO-SYNC ORCHESTRATION ────────────────────────────────────────────────
+// Three independent mechanisms, layered so the user never has to think about sync:
+//   1. Real-time listener (startSyncListener) — instant when active, fragile on mobile
+//   2. Visibility change — fires when PWA comes back to foreground
+//   3. Polling (this section) — safety net for missed real-time events
+//
+// Each pull only re-renders if the remote 'updated' timestamp is actually newer than
+// what we last pulled. Avoids unnecessary work and prevents flickers.
+
 let _lastVisibilitySync=0;
+async function _autoPullIfNewer(reason){
+  if(!S.fbUser||!_fbDb||S.guest)return false;
+  try{
+    const snap=await _fbDb.ref('users/'+S.fbUser.uid+'/updated').once('value');
+    const remoteUpdated=snap.val();
+    if(!remoteUpdated)return false;
+    if(remoteUpdated===_myLastSaveTs)return false; // our own save echo
+    const lastPullRemote=DB.get('fb_last_pull_remote_ts','');
+    if(remoteUpdated===lastPullRemote)return false; // already have this version
+    await loadFromCloud();
+    render();
+    console.log('[auto-sync] pulled fresh data via',reason,'remote_ts=',remoteUpdated);
+    return true;
+  }catch(e){console.warn('[auto-sync] check failed',reason,e);return false;}
+}
+
+// Foreground refresh — covers PWA backgrounding (iOS suspends WebSockets when hidden)
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible')return;
-  if(!S.fbUser||!_fbDb||S.guest)return;
   const now=Date.now();
-  if(now-_lastVisibilitySync<30000)return; // debounce: at most once per 30s
+  if(now-_lastVisibilitySync<10000)return; // 10s debounce
   _lastVisibilitySync=now;
-  loadFromCloud().then(()=>render());
+  _autoPullIfNewer('visibilitychange');
 });
+
+// Polling safety net — every 60s while visible, lightweight read of just the updated
+// timestamp. Only triggers a full pull if the timestamp differs from what we last saw.
+setInterval(()=>{
+  if(document.visibilityState!=='visible')return;
+  _autoPullIfNewer('poll');
+},60000);
+
+// Also pull when the network comes back online (e.g. phone leaves elevator/tunnel)
+window.addEventListener('online',()=>{_autoPullIfNewer('online');});
 
 // Firebase scripts are deferred — DOMContentLoaded fires after them, so init() is safe here
 document.addEventListener('DOMContentLoaded', init);
