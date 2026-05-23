@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.05';
+const APP_VERSION='2.06';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.06',d:'Swipe-back is now interactive — page follows your finger like Safari',det:'Rewrote the gesture from a trigger-and-animate model to a true finger-following model. The workout page now moves with your finger in real-time as you swipe right, with a growing left-edge shadow for depth. On release: if you committed (strong flick or past 40% screen width) the page slides off to the right and the week view appears; if you released early the page springs back to its original position. Vertical scroll intent is detected early and cancels the gesture immediately so scrolling in workouts still works. Activation thresholds are unchanged from v2.05.'},
   {v:'2.05',d:'Swipe-back activation toned down further',det:'Raised thresholds again: quick-flick now requires 80px travel (was 50px) at velocity >0.65 px/ms (was 0.5), and slow-drag requires 160px (~40% of screen width, was 120px). The gesture should now only fire on a clear, strong intentional swipe.'},
   {v:'2.04',d:'Swipe-back requires a more deliberate swipe to activate',det:'The gesture was firing too easily on accidental brushes. Raised the quick-flick threshold from 25px to 50px travel (and velocity from 0.4 to 0.5 px/ms), and the slow-drag threshold from 70px to 120px (~quarter of the screen width). You now need a clear intentional swipe to go back rather than a small nudge.'},
   {v:'2.03',d:'Fix wrong week on open, bottom nav bar out of place, and swipe-back too fast',det:'Three fixes: (1) On weekends, init() was advancing weekStart to next Monday — removed that logic so the app always opens on the current week. (2) The nav slide animations used will-change:transform,opacity which creates a CSS stacking context, causing position:fixed on the bottom nav bar to anchor to the .screen element instead of the viewport, making it appear in the wrong place after any navigation animation. Fixed by removing will-change from the animation CSS and adding an animationend listener to strip the animation class as soon as it finishes. Also removed dead sb-slide-off-right/sb-slide-in-from-left keyframes and .sb-animating-out/.sb-behind-anim classes left over from v2.00. (3) Nav transition duration increased from 300ms to 420ms and slide distance from 22% to 35% — the previous values made the transition barely perceptible; the new values match iOS native navigation feel.'},
@@ -5603,11 +5604,11 @@ async function manualSync(){
   render();
 }
 
-// ── SWIPE-BACK GESTURE (velocity + distance based, not finger-following) ──
-// Detects rightward swipe intent (with velocity OR distance) and plays a clean
-// slide-off animation on the current screen + slide-in on the new one. No more
-// finger-dragging — that was the source of the "stuck" feeling. This matches
-// how most cross-platform RN/Flutter apps handle back-swipe.
+// ── SWIPE-BACK GESTURE (interactive finger-follow, Safari-style) ──
+// The page follows the finger live. On release:
+//   COMMIT  → page slides off to the right, week view appears
+//   CANCEL  → page snaps back to its original position
+// Directional lock: gesture is ignored once vertical intent is detected.
 let _sb=null;
 function _sbScreenSupportsBack(){return S.screen==='day'||S.screen==='log';}
 
@@ -5616,44 +5617,75 @@ function _sbOnStart(e){
   if(document.querySelector('.swap-ov'))return;
   const t=e.touches?e.touches[0]:e;
   if(!t)return;
-  _sb={startX:t.clientX,startY:t.clientY,lastX:t.clientX,lastTs:Date.now(),vX:0,fired:false};
+  _sb={startX:t.clientX,startY:t.clientY,lastX:t.clientX,lastTs:Date.now(),vX:0,tracking:false,cancelled:false};
 }
 
 function _sbOnMove(e){
-  if(!_sb||_sb.fired)return;
+  if(!_sb||_sb.cancelled)return;
   const t=e.touches?e.touches[0]:e;
   if(!t)return;
   const now=Date.now();
   const dt=now-_sb.lastTs;
   if(dt>0){
-    // Exponential moving average of horizontal velocity (px/ms)
     const inst=(t.clientX-_sb.lastX)/dt;
     _sb.vX=_sb.vX*0.6+inst*0.4;
   }
   _sb.lastX=t.clientX;_sb.lastTs=now;
   const dx=t.clientX-_sb.startX;
   const dy=t.clientY-_sb.startY;
-  // Cancel if the gesture turns into a vertical scroll
-  if(Math.abs(dy)>40&&Math.abs(dy)>Math.abs(dx)*1.2){_sb=null;return;}
-  // Trigger conditions (whichever hits first):
-  //   FAST: velocity > 0.65 px/ms with at least 80px traveled = a strong deliberate flick
-  //   FAR:  distance > 160px regardless of speed (slow deliberate drag ~40% screen width)
-  const fast=_sb.vX>0.65&&dx>80;
-  const far=dx>160;
-  if(fast||far){
-    _sb.fired=true;
-    _sbPlayBackAnimation();
+  // Directional lock — cancel early if clearly scrolling vertically
+  if(!_sb.tracking&&Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){_sb.cancelled=true;return;}
+  // Start tracking once we see clear rightward horizontal intent
+  if(!_sb.tracking&&dx>10)_sb.tracking=true;
+  if(!_sb.tracking)return;
+  // Move the screen with the finger (clamp to rightward only)
+  const clampedDx=Math.max(0,dx);
+  const sEl=document.querySelector('#app > .screen');
+  if(sEl){
+    sEl.style.transform=`translateX(${clampedDx}px)`;
+    // Grow a left-edge shadow as you pull — gives depth cue like iOS
+    const sh=(Math.min(0.32,clampedDx/220)).toFixed(2);
+    sEl.style.boxShadow=`-8px 0 28px rgba(0,0,0,${sh})`;
   }
 }
 
-function _sbOnEnd(){_sb=null;}
-
-// SIMPLIFIED: use the existing .nav-back slide-in animation that we already
-// know works (the back button uses it). The new screen will slide in from the
-// left. No more two-screen stacking, no more inline transforms, no more
-// keyframe layer juggling — just the same code path as a button tap.
-function _sbPlayBackAnimation(){
-  go('week',{_dir:'back'});
+function _sbOnEnd(){
+  if(!_sb)return;
+  const sb=_sb;_sb=null;
+  const sEl=document.querySelector('#app > .screen');
+  if(!sb.tracking){
+    if(sEl){sEl.style.transform='';sEl.style.boxShadow='';}
+    return;
+  }
+  const dx=sb.lastX-sb.startX;
+  const sw=window.innerWidth;
+  // Same thresholds as before: strong flick OR dragged past 40% of screen
+  const commit=(sb.vX>0.65&&dx>80)||(dx>sw*0.4);
+  if(!sEl){if(commit)go('week',{_noAnim:true});return;}
+  if(commit){
+    // Slide page off to the right from wherever the finger left it
+    sEl.getBoundingClientRect(); // force reflow so browser registers current transform
+    sEl.style.transition='transform 0.32s cubic-bezier(.32,.72,0,1),box-shadow 0.32s linear';
+    requestAnimationFrame(()=>{
+      sEl.style.transform=`translateX(${sw+40}px)`;
+      sEl.style.boxShadow='none';
+    });
+    let done=false;
+    const finish=()=>{if(done)return;done=true;go('week',{_noAnim:true});};
+    sEl.addEventListener('transitionend',finish,{once:true});
+    setTimeout(finish,450); // fallback in case transitionend doesn't fire
+  }else{
+    // Snap back to original position
+    sEl.getBoundingClientRect();
+    sEl.style.transition='transform 0.3s cubic-bezier(.32,.72,0,1),box-shadow 0.3s linear';
+    requestAnimationFrame(()=>{
+      sEl.style.transform='translateX(0)';
+      sEl.style.boxShadow='';
+    });
+    const cleanup=()=>{sEl.style.transition='';sEl.style.transform='';sEl.style.boxShadow='';};
+    sEl.addEventListener('transitionend',cleanup,{once:true});
+    setTimeout(cleanup,400);
+  }
 }
 
 window.addEventListener('touchstart',_sbOnStart,{passive:true,capture:true});
