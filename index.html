@@ -109,6 +109,12 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .day-hdr{display:flex;align-items:center;gap:12px;margin-bottom:18px;position:sticky;top:0;background:var(--bg);padding:calc(var(--st) + 6px) 0 10px;margin-top:calc(0px - var(--st) - 18px);z-index:50;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
 .back-btn{background:var(--s1);border:none;color:var(--al);font-size:14px;font-weight:700;padding:8px 13px;border-radius:10px;cursor:pointer;-webkit-appearance:none;flex-shrink:0}
 .back-btn:active{transform:scale(.95)}
+/* iOS-style slide transitions for navigation */
+@keyframes nav-in-right{from{transform:translate3d(22%,0,0);opacity:.3}to{transform:translate3d(0,0,0);opacity:1}}
+@keyframes nav-in-left{from{transform:translate3d(-22%,0,0);opacity:.3}to{transform:translate3d(0,0,0);opacity:1}}
+.screen.nav-fwd{animation:nav-in-right .3s cubic-bezier(.32,.72,0,1) both;will-change:transform,opacity}
+.screen.nav-back{animation:nav-in-left .3s cubic-bezier(.32,.72,0,1) both;will-change:transform,opacity}
+@media(prefers-reduced-motion:reduce){.screen.nav-fwd,.screen.nav-back{animation:none}}
 .day-hdr-r{font-size:16px;font-weight:700}
 
 .day-hero{border-radius:22px;padding:18px 20px;margin-bottom:18px;background:var(--s1);border:1px solid transparent}
@@ -893,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.94';
+const APP_VERSION='1.95';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.95',d:'Smooth iOS-style slide transitions on navigation — back-and-forward now actually feels like a real app',det:'Previously every screen change was an instant innerHTML swap with zero animation, which felt jarring even when the data was right. Added two CSS keyframe animations on the .screen container: nav-fwd slides in from the right when you drill into a workout from the week view, nav-back slides in from the left when you swipe right or tap the back button. 300ms with an iOS-style ease curve (cubic-bezier(.32,.72,0,1)). The go() function now accepts a _dir option that applies the matching class to the freshly rendered screen. All back buttons (← Week, ← Back) and the swipe-right gesture pass _dir:back; tapping into a day passes _dir:fwd. Also added a window.scrollTo(0,0) on every navigation so the new screen always opens at the top instead of inheriting the previous screen\'s scroll position. Respects prefers-reduced-motion for accessibility.'},
   {v:'1.94',d:'Swipe-right to go back (matches iOS convention) — previously had the direction inverted',det:'Earlier versions implemented swipe LEFT to go back based on a wording miscommunication. iOS uses swipe RIGHT as its universal back gesture (Safari, Mail, Messages, every native and web app). Flipped the detection: a clear swipe to the right inside a workout now navigates back to the week view. Threshold widened slightly to 60px of vertical tolerance now that we are matching user muscle memory.'},
   {v:'1.93',d:'Sticky back button in workouts — the back arrow now stays pinned to the top of the screen as you scroll through exercises',det:'The v1.92 debug toast revealed why swipe-left was never triggering: real "swipes" on a scrollable workout list end up dominated by vertical motion (dy ~240px vs dx ~50px). Tuning thresholds wasn\'t going to fix that — the only reliable solution is a back button that\'s always visible. The day header (← Week  ·  Sat 23  ·  Swap ↕) is now sticky-positioned with a translucent backdrop blur, so it follows the page as you scroll. The swipe-left gesture still exists as a power-user shortcut, but it now requires a very horizontal swipe (90px+ left, <50px of vertical drift, completed in <600ms). Debug toast removed.'},
   {v:'1.92',d:'Swipe-back diagnostic build — added pointer-event fallback, broadened thresholds, and a temporary debug toast that shows the measured swipe values on every touch',det:'The swipe-left-to-go-back gesture still wasn\'t triggering on iPhone after the screen-name fix in v1.91. This release attaches the listener to window (not document) and adds a parallel pointer-event listener as a fallback path in case iOS isn\'t bubbling touch events the way we expected. Distance threshold lowered to 60px, time window widened to 800ms, horizontal-vs-vertical ratio relaxed to 1.2:1. Debug toast is temporarily enabled so any swipe with dx or dy >25px shows the actual measured values — green if it would have triggered back navigation, gray if it didn\'t. Use this to tell us whether the gesture is being detected at all, and if so what the measurements look like. Will remove the debug toast in 1.93 once we know what\'s happening.'},
@@ -3313,7 +3320,18 @@ function go(screen,opts={}){
   Object.keys(_animTimers).forEach(k=>{clearInterval(_animTimers[k]);delete _animTimers[k];});
   // clear PR search when leaving progress tab
   if(screen!=='prs')DB.set('_pr_search','');
+  // Extract optional navigation direction for slide animation (fwd / back).
+  // Pull it off opts so it doesn't pollute S.
+  const _navDir=opts._dir;
+  if(_navDir)delete opts._dir;
   S.screen=screen;Object.assign(S,opts);render();
+  // Apply slide animation class to the freshly rendered screen
+  if(_navDir){
+    const sEl=document.querySelector('#app > .screen');
+    if(sEl)sEl.classList.add('nav-'+_navDir);
+  }
+  // Reset scroll on every screen change so new screen always opens at top
+  window.scrollTo(0,0);
 }
 function openDay(dateStr){
   S.viewDate=new Date(dateStr+'T12:00:00');
@@ -3322,7 +3340,7 @@ function openDay(dateStr){
   S.energy=null;
   // Reset collapse state for fresh day view
   S.exCollapsed=new Set();S.exExpanded=new Set();
-  go('day');
+  go('day',{_dir:'fwd'});
 }
 
 /* ── RENDER ROOT ── */
@@ -3487,10 +3505,10 @@ function rDayRow(day,today){
 function rDay(){
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
-  if(!plan)return`<div class="screen"><button class="back-btn" onclick="go('week')">← Week</button><p style="padding:20px;color:var(--t2)">No plan found.</p></div>`;
+  if(!plan)return`<div class="screen"><button class="back-btn" onclick="go('week',{_dir:'back'})">← Week</button><p style="padding:20px;color:var(--t2)">No plan found.</p></div>`;
   const ds=fd(S.viewDate);
   const dp=plan.find(d=>d.date===ds);
-  if(!dp)return`<div class="screen"><button class="back-btn" onclick="go('week')">← Week</button><p style="padding:20px;color:var(--t2)">Day not found.</p></div>`;
+  if(!dp)return`<div class="screen"><button class="back-btn" onclick="go('week',{_dir:'back'})">← Week</button><p style="padding:20px;color:var(--t2)">Day not found.</p></div>`;
   const wi=WI[dp.type]||WI.REST;
   const w=dp.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
@@ -3500,7 +3518,7 @@ function rDay(){
   const v=verdict(w.score);
   return`<div class="screen">
 <div class="day-hdr">
-  <button class="back-btn" onclick="go('week')">← ${_T('back_week')}</button>
+  <button class="back-btn" onclick="go('week',{_dir:'back'})">← ${_T('back_week')}</button>
   <div class="day-hdr-r">${shortD(S.viewDate)}</div>
   <button class="back-btn" style="color:var(--al)" onclick="openSwap('${ds}')">${_T('swap')} ↕</button>
 </div>
@@ -3937,7 +3955,7 @@ function rReview(){
   const curMon=getMon(new Date());
   const review=DB.get('weekreview_'+fd(curMon),null);
   const hdr=`<div class="day-hdr">
-  <button class="back-btn" onclick="go('week')">← ${_T('nav_plan')}</button>
+  <button class="back-btn" onclick="go('week',{_dir:'back'})">← ${_T('nav_plan')}</button>
   <div class="day-hdr-r">${_T('wr_screen_title')}</div>
   <div style="width:54px"></div>
 </div>`;
@@ -4157,11 +4175,11 @@ function getLastLog(exId){
 
 function rLog(){
   const log=S.activeLog;
-  if(!log)return`<div class="screen"><button class="back-btn" onclick="go('day')">← Back</button></div>`;
+  if(!log)return`<div class="screen"><button class="back-btn" onclick="go('day',{_dir:'back'})">← Back</button></div>`;
   const wi=WI[log.type]||WI.REST;
   return`<div class="screen">
 <div class="day-hdr">
-  <button class="back-btn" onclick="go('day',{viewDate:S.viewDate})">← Back</button>
+  <button class="back-btn" onclick="go('day',{viewDate:S.viewDate,_dir:'back'})">← Back</button>
   <div class="day-hdr-r">Log: ${typeof wi.l==='function'?wi.l():wi.l}</div>
 </div>
 <div class="log-list">
@@ -5601,7 +5619,7 @@ function _onSwipeEnd(e){
   // and every other iOS app). Requires a clearly horizontal swipe so it doesn't
   // conflict with vertical scrolling on a tall workout page.
   if(dx>90&&Math.abs(dy)<60&&dt<700){
-    go('week');
+    go('week',{_dir:'back'});
   }
 }
 // Touch (iOS/Android)
