@@ -1,5 +1,8 @@
-// Training Brain service worker — cache-first with background update
-const CACHE = 'tb-v3';
+// Training Brain service worker
+// index.html → network-first (always fresh, fallback to cache when offline)
+// Exercise GIFs → cache-forever (immutable CDN assets)
+// Everything else → cache-first with background update
+const CACHE = 'tb-v4';
 const ASSETS = [
   '/training-brain/',
   '/training-brain/index.html',
@@ -29,20 +32,42 @@ self.addEventListener('fetch', e => {
       url.hostname.includes('strava') || url.hostname.includes('workers.dev')) return;
 
   // Exercise GIFs/images from the free-exercise-db CDN are immutable — cache them permanently.
-  // Cross-origin responses are "opaque" (res.ok is false), so they need explicit handling.
   const isExerciseImg = url.hostname === 'yuhonas.github.io';
+  if (isExerciseImg) {
+    e.respondWith(
+      caches.open(CACHE).then(async cache => {
+        const cached = await cache.match(e.request);
+        if (cached) return cached;
+        return fetch(e.request).then(res => {
+          if (res.type === 'opaque' || res.ok) cache.put(e.request, res.clone());
+          return res;
+        });
+      })
+    );
+    return;
+  }
 
+  // index.html and the app root: network-first so updates land immediately
+  const isAppShell = url.pathname === '/training-brain/' ||
+                     url.pathname === '/training-brain/index.html';
+  if (isAppShell) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        if (res.ok) caches.open(CACHE).then(c => c.put(e.request, res.clone()));
+        return res;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Everything else: cache-first with background update
   e.respondWith(
     caches.open(CACHE).then(async cache => {
       const cached = await cache.match(e.request);
-      // Exercise images never change — once stored, always serve from cache (no network)
-      if (cached && isExerciseImg) return cached;
       const fetchPromise = fetch(e.request).then(res => {
-        // Store normal responses, plus opaque exercise images
-        if (res.ok || (isExerciseImg && res.type === 'opaque')) cache.put(e.request, res.clone());
+        if (res.ok) cache.put(e.request, res.clone());
         return res;
-      }).catch(() => cached); // network fail → fall back to cache
-      // Serve cache instantly, update in background
+      }).catch(() => cached);
       return cached || fetchPromise;
     })
   );

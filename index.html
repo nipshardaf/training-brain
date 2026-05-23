@@ -887,10 +887,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.89';
+const APP_VERSION='1.90';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.90',d:'Cycling preference tabs moved to My Training — week view decluttered, Regenerate shortcut added to header',det:'The three cycling mode buttons (Outdoor + Gym / Indoor + Gym / Gym only) have been moved from the week view into a new Training Plan section on the My Training tab. They were only useful once at initial setup and were cluttering the week screen on every visit. A 🔄 icon in the week-nav header now lets you regenerate the current plan without scrolling. The week view empty state is simplified — it just shows a Generate button and points to My Training to change the cycling preference.'},
   {v:'1.89',d:'Advisor exercise swap suggestions — AI recommends specific exercise changes, wired directly into your workout',det:'The Weekly Advisor now outputs a SWAPS section alongside TARGETS. When the AI spots stalled progress on an exercise (3+ sessions with no weight or rep improvement), a missing movement pattern for your goal, or a clearly better alternative for your level — it flags it with a specific swap: e.g. "Switch Lying Leg Curl → Nordic Curl — better eccentric hamstring load". That suggestion appears as an amber badge inside the exercise card when you open it in your workout. One tap on Swap → applies it immediately to your session and plan, exactly like the existing machine-busy swap. The sequencing research (NSCA compound-before-isolation guidelines, agonist-antagonist pairing for Upper Pump) is also documented inline in the slot templates.'},
   {v:'1.88',d:'Exercise sequencing overhaul — proper movement order and slot logic for all workout types',det:'Four fixes to how sessions are built. (1) PUSH: shoulder compound (OHP/DB press) was sitting in slot 3, after chest accessories — it now comes immediately after flat bench as slot 2, which is the standard push protocol. (2) PULL: had two separate bicep slots meaning every pull session forced two bicep exercises. Merged into one slot — biceps already get significant work from all the rows. (3) LEGS: BSS, lunges, and step-ups (heavy unilateral compound movements) were in slot 3 alongside leg press and leg extension. Moved all unilateral compounds to slot 1/3 properly — slot 3 is now secondary compound and machine work, slot 4 is pure isolation. (4) Sort bug: the exercise variety sort had ai-bi inverted — it was silently picking the MOST recently used exercise each time instead of the least recently used. Fixed to bi-ai so the app correctly rotates exercises across sessions.'},
   {v:'1.87',d:'Fix advisor cross-device trigger + merge AI usage counts across devices',det:'Two sync fixes. (1) The advisor was saving to its own Firebase path but never updating the users/{uid}/updated timestamp, so the cross-device listener on other devices never fired. Fixed by re-adding a saveToCloud() call after advisor generates (updates the timestamp), and extending the sync listener to also pull the current week advisor from Firebase when it wakes up. (2) AI usage log was never synced — each device had its own count. Added ai_usage to the sync bundle, and changed loadFromCloud to merge the calls arrays by timestamp union rather than blindly overwriting — so both devices end up with the combined total.'},
@@ -3310,17 +3311,16 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
 <div class="week-nav">
   <button class="wnav-btn" onclick="shiftWeek(-1)">‹</button>
   <div class="week-label">${lbl}</div>
+  ${plan?`<button onclick="genPlan()" title="Regenerate plan" style="background:none;border:none;font-size:15px;cursor:pointer;padding:4px 6px;color:var(--t2);line-height:1;opacity:0.7">🔄</button>`:''}
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rReviewCard()}
 ${rWeeklyAdvisor()}
-${(()=>{const p=DB.get('bike_pref','weather');const _pr=DB.get('user_profile',{});const hasCycling=(_pr.activities||[]).includes('cycling');const opts=hasCycling?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];const tabs=opts.length>1?`<div style="display:flex;gap:6px;margin-bottom:14px">${opts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${p===o.v?'var(--acc)':'var(--bord)'};background:${p===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${p===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${p===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:'';
+${(()=>{const p=DB.get('bike_pref','weather');
 return plan?`
 <div class="day-list">
   ${[...plan].sort((a,b)=>a.date.localeCompare(b.date)).filter((d,i,arr)=>arr.findIndex(x=>x.date===d.date)===i).map(d=>rDayRow(d,today)).join('')}
 </div>
-${tabs}
-<button class="btn btn-s" onclick="genPlan()">${p==='weather'?'🌤️ Refresh with new weather':'🔄 Regenerate plan'}</button>
 `:(()=>{
   const _np=DB.get('user_profile',null);
   const _hasProfile=_np&&(_np.activities||[]).length>0;
@@ -3372,14 +3372,13 @@ ${tabs}
         const fakeDay={date:ds,type:log?.type||'REST',weather:{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0},exercises:log?.exercises||[]};
         return rDayRow(fakeDay,today);
       }).join('');
-      return`<div class="day-list">${_rows}</div>${tabs}<button class="btn btn-s" onclick="genPlan()">🔄 Generate plan for this week</button>`;
+      return`<div class="day-list">${_rows}</div><button class="btn btn-s" onclick="genPlan()">🔄 Generate plan for this week</button>`;
     }
   }
   return`<div class="empty-wrap">
   <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'🌤️'}</div>
   <div class="empty-title">Ready to generate your plan</div>
-  <div style="font-size:13px;color:var(--t2);margin-bottom:16px;text-align:center;line-height:1.6">Choose your preference below then tap Generate — the app builds your full week in seconds.</div>
-  ${tabs}
+  <div style="font-size:13px;color:var(--t2);margin-bottom:16px;text-align:center;line-height:1.6">Tap Generate to build your full week. To change your cycling preference, go to <strong>My Training</strong>.</div>
   <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'🌤️ Generate (outdoor + gym)':p==='indoor'?'🏠 Generate (indoor + gym)':'🏋️ Generate (gym only)'}</button>
 </div>`;
 })();})()}
@@ -4444,6 +4443,13 @@ ${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-
 
 <div class="sec-hdr">${_T('your_activities')}</div>
 ${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:_icon('gym-weights.png','🏋️',20),l:'Gym & Weights'},cycling:{i:_icon('cycling.png','🚴',20),l:'Cycling'},running:{i:_icon('running.png','🏃',20),l:'Running'},cardio:{i:_icon('cardio-classes.png','🏊',20),l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
+
+${(()=>{const _bp=DB.get('bike_pref','weather');const _pr3=DB.get('user_profile',null);const _hasCy=(_pr3?.activities||[]).includes('cycling');const _cyOpts=_hasCy?[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}]:[{v:'none',i:'🏋️',l:'Gym only'}];return`<div class="sec-hdr">Training Plan</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:8px">Cycling preference</div>
+<div style="display:flex;gap:6px;margin-bottom:14px">${_cyOpts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${_bp===o.v?'var(--acc)':'var(--bord)'};background:${_bp===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${_bp===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${_bp===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:''}
+<button onclick="genPlan();go('week')" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
+</div>`;})()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
   <span>${_T('prs')}</span>
