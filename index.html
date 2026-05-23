@@ -2851,6 +2851,10 @@ function initFirebase(){
         ensureFriendCode().then(()=>loadFriendData());
         if(!S.authed&&!DB.get('pin',null)){
           S.authed=true;render();
+        }
+        // Always pull from cloud when Firebase confirms the session — covers returning
+        // users where S.authed was already set by init() so the block above was skipped
+        if(S.authed){
           loadFromCloud().then(()=>{syncUp();render();});
         }
       }
