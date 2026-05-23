@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.06';
+const APP_VERSION='2.07';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.07',d:'Swipe-back: week view now visible behind the workout page as you drag',det:'Previously the area behind the sliding workout page was black (just the app background). Now when you start swiping right, the week view is rendered behind the current screen immediately. As you drag, it scales up from 95% to 100% and fades from 70% to full opacity — the same parallax depth effect iOS uses. On release: if you commit, the behind element is removed and the week view appears; if you cancel, the behind element is removed and the workout page snaps back. No jank: the week HTML is generated once when tracking starts and reused for the entire gesture.'},
   {v:'2.06',d:'Swipe-back is now interactive — page follows your finger like Safari',det:'Rewrote the gesture from a trigger-and-animate model to a true finger-following model. The workout page now moves with your finger in real-time as you swipe right, with a growing left-edge shadow for depth. On release: if you committed (strong flick or past 40% screen width) the page slides off to the right and the week view appears; if you released early the page springs back to its original position. Vertical scroll intent is detected early and cancels the gesture immediately so scrolling in workouts still works. Activation thresholds are unchanged from v2.05.'},
   {v:'2.05',d:'Swipe-back activation toned down further',det:'Raised thresholds again: quick-flick now requires 80px travel (was 50px) at velocity >0.65 px/ms (was 0.5), and slow-drag requires 160px (~40% of screen width, was 120px). The gesture should now only fire on a clear, strong intentional swipe.'},
   {v:'2.04',d:'Swipe-back requires a more deliberate swipe to activate',det:'The gesture was firing too easily on accidental brushes. Raised the quick-flick threshold from 25px to 50px travel (and velocity from 0.4 to 0.5 px/ms), and the slow-drag threshold from 70px to 120px (~quarter of the screen width). You now need a clear intentional swipe to go back rather than a small nudge.'},
@@ -5636,16 +5637,41 @@ function _sbOnMove(e){
   // Directional lock — cancel early if clearly scrolling vertically
   if(!_sb.tracking&&Math.abs(dy)>10&&Math.abs(dy)>Math.abs(dx)){_sb.cancelled=true;return;}
   // Start tracking once we see clear rightward horizontal intent
-  if(!_sb.tracking&&dx>10)_sb.tracking=true;
+  if(!_sb.tracking&&dx>10){
+    _sb.tracking=true;
+    // Inject week view behind the current screen so it's visible as the page slides away
+    if(!document.getElementById('_sb_behind')){
+      const savedScreen=S.screen;
+      S.screen='week';
+      const weekHtml=rWeek();
+      S.screen=savedScreen;
+      const behind=document.createElement('div');
+      behind.id='_sb_behind';
+      behind.style.cssText='position:fixed;inset:0;overflow:hidden;pointer-events:none;transform:scale(0.95);transform-origin:center;opacity:0.7;transition:transform 0.1s,opacity 0.1s';
+      behind.innerHTML=weekHtml;
+      const appEl=document.getElementById('app');
+      const screenEl=document.querySelector('#app > .screen');
+      if(appEl&&screenEl)appEl.insertBefore(behind,screenEl);
+    }
+  }
   if(!_sb.tracking)return;
   // Move the screen with the finger (clamp to rightward only)
   const clampedDx=Math.max(0,dx);
   const sEl=document.querySelector('#app > .screen');
   if(sEl){
     sEl.style.transform=`translateX(${clampedDx}px)`;
-    // Grow a left-edge shadow as you pull — gives depth cue like iOS
+    // Grow a left-edge shadow as the page slides — gives depth like iOS
     const sh=(Math.min(0.32,clampedDx/220)).toFixed(2);
     sEl.style.boxShadow=`-8px 0 28px rgba(0,0,0,${sh})`;
+  }
+  // Scale and brighten the week view behind as you drag (parallax depth)
+  const behindEl=document.getElementById('_sb_behind');
+  if(behindEl){
+    const prog=Math.min(1,clampedDx/(window.innerWidth*0.4));
+    const sc=(0.95+0.05*prog).toFixed(3);
+    const op=(0.7+0.3*prog).toFixed(3);
+    behindEl.style.transform=`scale(${sc})`;
+    behindEl.style.opacity=op;
   }
 }
 
@@ -5661,7 +5687,8 @@ function _sbOnEnd(){
   const sw=window.innerWidth;
   // Same thresholds as before: strong flick OR dragged past 40% of screen
   const commit=(sb.vX>0.65&&dx>80)||(dx>sw*0.4);
-  if(!sEl){if(commit)go('week',{_noAnim:true});return;}
+  const removeBehind=()=>{const b=document.getElementById('_sb_behind');if(b)b.remove();};
+  if(!sEl){if(commit){removeBehind();go('week',{_noAnim:true});}else{removeBehind();}return;}
   if(commit){
     // Slide page off to the right from wherever the finger left it
     sEl.getBoundingClientRect(); // force reflow so browser registers current transform
@@ -5671,7 +5698,7 @@ function _sbOnEnd(){
       sEl.style.boxShadow='none';
     });
     let done=false;
-    const finish=()=>{if(done)return;done=true;go('week',{_noAnim:true});};
+    const finish=()=>{if(done)return;done=true;removeBehind();go('week',{_noAnim:true});};
     sEl.addEventListener('transitionend',finish,{once:true});
     setTimeout(finish,450); // fallback in case transitionend doesn't fire
   }else{
@@ -5682,7 +5709,7 @@ function _sbOnEnd(){
       sEl.style.transform='translateX(0)';
       sEl.style.boxShadow='';
     });
-    const cleanup=()=>{sEl.style.transition='';sEl.style.transform='';sEl.style.boxShadow='';};
+    const cleanup=()=>{sEl.style.transition='';sEl.style.transform='';sEl.style.boxShadow='';removeBehind();};
     sEl.addEventListener('transitionend',cleanup,{once:true});
     setTimeout(cleanup,400);
   }
