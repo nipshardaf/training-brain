@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='1.98';
+const APP_VERSION='1.99';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'1.99',d:'Swipe-back animation actually visible now — workout page slides off to the right instead of just teleporting away',det:'Diagnosed from the video: the wrap (week view behind) was animating correctly because its initial transform was set explicitly, but the workout page itself was not animating because I never set its initial transform, and browsers (especially iOS Safari) fail to animate a transform change when the previous value was the "none" keyword instead of an actual transform value. The result was: workout sits still for 300ms while the wrap silently slides in behind it (invisible because the workout was layered on top), then setTimeout fires and replaces the workout with the week view — looking like an instant teleport. Fixed by explicitly setting transform:translate3d(0,0,0) on the workout page before the transition, forcing a layout commit with getBoundingClientRect, using a double requestAnimationFrame to ensure the transition is registered before the transform changes, and switching from setTimeout-based cleanup to the transitionend event so cleanup happens after the animation actually finishes (with a setTimeout fallback in case transitionend never fires).'},
   {v:'1.98',d:'Swipe-back rewritten with velocity detection — no more finger-dragging, just flick right and the page slides off cleanly',det:'Watched a screen recording of v1.97 and saw the problem: the finger-follow approach made the gesture feel sluggish during slow swipes (the screen literally only moved as much as the user\'s finger did, which on a slow drag is barely any) and required a long deliberate drag to commit. Replaced the entire gesture with a velocity + distance trigger model: tracks finger velocity via an exponential moving average; once velocity exceeds 0.4 px/ms with at least 25px traveled (a quick flick) OR a slower drag passes 70px (deliberate), the back animation fires. The animation is now a clean 300ms slide-off — the workout page glides to the right with a drop shadow while the week view parallaxes in from the left. No more finger-dragging. This matches how React Native\'s default navigation handles back-swipe, not Safari\'s exact gesture, but feels far more responsive on iPhone. Layout commit is forced with offsetWidth + the transform change is deferred via requestAnimationFrame so the transition always actually plays.'},
   {v:'1.97',d:'Swipe-back fix: slow swipes no longer get stuck mid-screen — release now always smoothly commits or snaps back',det:'In v1.96 a slow swipe would visually move the workout page with your finger but then "stick" at the release point without animating to commit or snap-back. Root cause: when transition was set to "none" during the drag, then both transition and transform were changed in the same synchronous block at touchend, the browser would skip the animation and either jump instantly to the end state or appear frozen. Fixed by separating the transition change from the transform change with requestAnimationFrame and a forced layout commit (offsetWidth read) in between — the browser registers the new transition value before the transform changes, so the animation actually plays. Also: activation threshold dropped from 12px to 8px (more responsive feedback), commit threshold dropped from 35% to 30% of screen width (easier to complete), commit duration scales with drag distance so a near-full swipe finishes faster than a partial one.'},
   {v:'1.96',d:'Safari-style interactive swipe-back — current page follows your finger, week view peeks in from the left with parallax + drop shadow',det:'The previous version just played a slide-in animation after a swipe completed, which is why it still felt jumpy. This release rewrites the gesture as a real interactive drag: when you start swiping right inside a workout, the week view is pre-rendered behind the current page, then both pages move together while your finger is on the screen. The current page tracks 1:1 with your finger and has a soft drop shadow on its left edge; the week view behind it parallax-scrolls in from -25% to 0% as you drag, matching iOS Safari\'s native behavior. Release past 35% of the screen width commits the navigation (smooth 280ms ease-out completion); release before that snaps both pages back to their starting positions. The previous slide-in animation is suppressed during a completed swipe (via a new _noAnim option on go()) so you don\'t see two animations stacked. Activation only fires after 12px of clear horizontal motion, so vertical scrolling through long workouts doesn\'t accidentally trigger it.'},
@@ -5640,41 +5641,64 @@ function _sbOnMove(e){
 function _sbOnEnd(){_sb=null;}
 
 function _sbPlayBackAnimation(){
-  // Render the destination (week) below current, then slide current off to the
-  // right while the destination parallax-eases in from -25% → 0%.
   const currentEl=document.querySelector('#app > .screen');
   if(!currentEl){go('week',{_dir:'back'});return;}
   const w=window.innerWidth;
-  // Build behind layer
+  // Render destination (week view) into a fixed-position layer behind the current screen
   const saved=S.screen;S.screen='week';const html=rWeek();S.screen=saved;
   const wrap=document.createElement('div');
   wrap.className='sb-behind-wrap';
-  wrap.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;pointer-events:none;overflow:hidden;background:var(--bg);transform:translate3d('+(-w*0.25)+'px,0,0);will-change:transform';
+  wrap.style.cssText='position:fixed;top:0;left:0;right:0;bottom:0;z-index:1;pointer-events:none;overflow:hidden;background:var(--bg);will-change:transform';
   wrap.innerHTML=html;
   const innerBnav=wrap.querySelector('.bnav');if(innerBnav)innerBnav.remove();
+  // CRITICAL: set the EXPLICIT starting transform before insertion. Without an
+  // initial transform value, browsers (especially iOS Safari) will not animate
+  // the change to a new transform value — they jump straight to the end state.
+  wrap.style.transform='translate3d('+(-Math.round(w*0.25))+'px,0,0)';
   document.getElementById('app').insertBefore(wrap,currentEl);
-  // Layer current screen on top
+
+  // Same fix for the current screen: explicitly set transform:none equivalent
+  // (translate3d 0,0,0) so the browser has a real starting value to animate FROM.
   currentEl.style.position='relative';
   currentEl.style.zIndex='2';
   currentEl.style.background='var(--bg)';
   currentEl.style.willChange='transform';
   currentEl.style.boxShadow='-12px 0 30px rgba(0,0,0,0.4)';
-  currentEl.style.minHeight='100vh';
-  // Force layout commit BEFORE applying transitions
-  void currentEl.offsetWidth;
+  currentEl.style.transform='translate3d(0,0,0)'; // explicit start
+  // Force the browser to commit the initial state to the rendering pipeline.
+  // Without this, the transition that follows can be optimized away.
+  void currentEl.getBoundingClientRect();
+  void wrap.getBoundingClientRect();
+
   const ease='cubic-bezier(.32,.72,0,1)';
-  const dur=300;
+  const dur=320;
   currentEl.style.transition='transform '+dur+'ms '+ease;
   wrap.style.transition='transform '+dur+'ms '+ease;
-  // Trigger animation in next frame (separate from transition assignment)
+
+  // Use double rAF: first frame to make sure transition is applied, second to
+  // change the transform. This is the standard FLIP technique for reliable CSS
+  // transitions on Safari.
   requestAnimationFrame(()=>{
-    currentEl.style.transform='translate3d('+w+'px,0,0)';
-    wrap.style.transform='translate3d(0,0,0)';
+    requestAnimationFrame(()=>{
+      currentEl.style.transform='translate3d('+w+'px,0,0)';
+      wrap.style.transform='translate3d(0,0,0)';
+    });
   });
-  setTimeout(()=>{
+
+  // Cleanup when the actual animation finishes — not on a timer. This is more
+  // reliable than setTimeout(dur) because the browser may delay the start of
+  // the animation by a frame or two.
+  let cleaned=false;
+  const cleanup=()=>{
+    if(cleaned)return;
+    cleaned=true;
+    currentEl.removeEventListener('transitionend',cleanup);
     try{wrap.remove();}catch(_){}
     go('week',{_noAnim:true});
-  },dur);
+  };
+  currentEl.addEventListener('transitionend',cleanup,{once:true});
+  // Fallback in case transitionend never fires (some edge cases on iOS)
+  setTimeout(cleanup,dur+150);
 }
 
 window.addEventListener('touchstart',_sbOnStart,{passive:true,capture:true});
