@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.11';
+const APP_VERSION='2.12';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.12',d:'Sign in / sign up no longer hang forever on bad connections',det:'Firebase auth calls (signInWithEmailAndPassword and createUserWithEmailAndPassword) had no timeout — on a slow or flaky connection they would spin on "..." indefinitely with no feedback. Added a 12-second timeout to both: if Firebase doesn\'t respond within 12s the user sees "Connection timed out — check your internet and try again." and the button re-enables so they can retry.'},
   {v:'2.11',d:'Fix 4 signup bugs: mangled username, orphaned accounts, missing rules guidance, login hang',det:'(1) Username was derived from the full email including domain — helenlenlau@gmail.com became "helenlenlaugmailcom". Fixed to extract only the local part before @, giving "helenlenlau". (2) Firebase rules for /usernames/ were missing entirely — added to docs and the rules block is now in the setup guide. (3) If auth account creation succeeded but the DB transaction failed (network drop etc), the auth account became orphaned — user gets email-already-in-use on retry with no recovery path. Improved the error message to explain the situation and guide toward password reset. (4) loadFromCloud() after signup had no timeout — could leave the user stuck on the loading button forever. Added an 8s timeout so the app always proceeds.'},
   {v:'2.10',d:'Fix account creation error: permission_denied when signing up',det:'Creating an account was failing with "permission_denied at /usernames/..." for new users. Root cause: the code was reading /usernames/ to check if the username was taken BEFORE creating the Firebase Auth account — so the user was unauthenticated and Firebase blocked the read. Fixed by creating the auth account first, then using a Firebase transaction to atomically claim the username while authenticated. The transaction aborts if the username is already taken, rolls back the auth account, and shows the "already taken" message. This also makes the username claim atomic, preventing two users from racing to claim the same username.'},
   {v:'2.09',d:'Swipe-back: eliminate lag — pre-build behind layer at touchstart, cache DOM refs',det:'The lag in v2.07/2.08 had two causes: (1) rWeek() + innerHTML was called on the first touchmove frame, causing a visible jank spike right as the drag started. Moved to touchstart so the DOM work is done before any finger movement. (2) The parallax behind element had transition:0.1s which fought against direct style updates every frame, making it sluggish. Removed the transition entirely — parallax is now a direct assignment each frame. (3) document.querySelector was being called on every touchmove event — replaced with cached sEl/behindEl references stored in the _sb state object. Behind layer now starts fully transparent (opacity:0) and fades in as you drag, which also looks better.'},
@@ -2951,7 +2952,9 @@ async function doAuth(isNew){
       if(pass.length<6){if(errEl)errEl.textContent='Password must be at least 6 characters.';if(btn){btn.textContent='Create Account';btn.disabled=false;}return;}
       // Create auth account FIRST so we are authenticated before touching the DB
       // (reading /usernames/ without auth triggers permission_denied)
-      result=await _fbAuth.createUserWithEmailAndPassword(internalEmail,pass);
+      // 12s timeout so a bad connection shows an error instead of hanging forever
+      const _tout=(p,ms,msg)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(Object.assign(new Error(msg),{code:'auth/network-request-failed'})),ms))]);
+      result=await _tout(_fbAuth.createUserWithEmailAndPassword(internalEmail,pass),12000,'Connection timed out — check your internet and try again.');
       try{
         // Atomically claim the username — transaction aborts if already taken
         const tx=await _fbDb.ref('usernames/'+username).transaction(cur=>{
@@ -2973,7 +2976,9 @@ async function doAuth(isNew){
       }
     }else{
       // Sign in: look up username → internal email
-      result=await _fbAuth.signInWithEmailAndPassword(internalEmail,pass);
+      // 12s timeout so a bad connection shows an error instead of hanging forever
+      const _tout=(p,ms,msg)=>Promise.race([p,new Promise((_,rej)=>setTimeout(()=>rej(Object.assign(new Error(msg),{code:'auth/network-request-failed'})),ms))]);
+      result=await _tout(_fbAuth.signInWithEmailAndPassword(internalEmail,pass),12000,'Connection timed out — check your internet and try again.');
     }
     S.fbUser={uid:result.user.uid,name:username,email:internalEmail,username};
     DB.set('fb_user',S.fbUser);
