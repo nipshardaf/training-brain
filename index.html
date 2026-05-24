@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.14';
+const APP_VERSION='2.15';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.15',d:'Fix login hanging in Safari — set Firebase auth persistence to LOCAL',det:'Safari\'s Intelligent Tracking Prevention (ITP) blocks the hidden cross-origin iframe that Firebase Auth uses to restore sessions and complete sign-in. This caused login to hang indefinitely in Safari while working fine in Chrome. Fixed by explicitly calling setPersistence(LOCAL) when Firebase initialises, which forces Firebase to use localStorage for auth state instead of the iframe/cookie mechanism. This is the standard fix for Firebase + Safari.'},
   {v:'2.14',d:'Sign-in field label changed to "Username"'},
   {v:'2.13',d:'Sign-up now uses username instead of email — simpler and no more derivation issues',det:'The sign-up form showed "Email" which caused users to enter their full email address (e.g. helenlenlau@gmail.com). The code then had to strip the domain and special characters to derive a username, which was confusing and error-prone. Changed sign-up to ask for a plain username (letters, numbers, _ only — no @ allowed). Sign-in still accepts username or email for existing users. Added validation: min 3 chars, no @ allowed on sign-up, clear hint text under the field.'},
   {v:'2.12',d:'Sign in / sign up no longer hang forever on bad connections',det:'Firebase auth calls (signInWithEmailAndPassword and createUserWithEmailAndPassword) had no timeout — on a slow or flaky connection they would spin on "..." indefinitely with no feedback. Added a 12-second timeout to both: if Firebase doesn\'t respond within 12s the user sees "Connection timed out — check your internet and try again." and the button re-enables so they can retry.'},
@@ -2871,6 +2872,9 @@ function initFirebase(){
     _fb=firebase.initializeApp(FB_CFG,'tb');
     _fbAuth=firebase.auth(_fb);
     _fbDb=firebase.database(_fb);
+    // Safari ITP blocks Firebase's hidden auth iframe — force LOCAL persistence
+    // (localStorage) so auth state survives without cross-origin cookies.
+    _fbAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{});
     // When Firebase resolves its own session (handles PWA re-open on iOS)
     _fbAuth.onAuthStateChanged(async user=>{
       if(user){
