@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.09';
+const APP_VERSION='2.10';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.10',d:'Fix account creation error: permission_denied when signing up',det:'Creating an account was failing with "permission_denied at /usernames/..." for new users. Root cause: the code was reading /usernames/ to check if the username was taken BEFORE creating the Firebase Auth account — so the user was unauthenticated and Firebase blocked the read. Fixed by creating the auth account first, then using a Firebase transaction to atomically claim the username while authenticated. The transaction aborts if the username is already taken, rolls back the auth account, and shows the "already taken" message. This also makes the username claim atomic, preventing two users from racing to claim the same username.'},
   {v:'2.09',d:'Swipe-back: eliminate lag — pre-build behind layer at touchstart, cache DOM refs',det:'The lag in v2.07/2.08 had two causes: (1) rWeek() + innerHTML was called on the first touchmove frame, causing a visible jank spike right as the drag started. Moved to touchstart so the DOM work is done before any finger movement. (2) The parallax behind element had transition:0.1s which fought against direct style updates every frame, making it sluggish. Removed the transition entirely — parallax is now a direct assignment each frame. (3) document.querySelector was being called on every touchmove event — replaced with cached sEl/behindEl references stored in the _sb state object. Behind layer now starts fully transparent (opacity:0) and fades in as you drag, which also looks better.'},
   {v:'2.08',d:'Swipe-back: fix workout page losing background + vertical scroll during drag',det:'Two bugs from v2.07: (1) The .screen element had no background colour set, so as it slid right the week view injected behind it was visible through the page — the workout appeared to lose its background. Fixed by adding background:var(--bg) to .screen. (2) The touchmove listener was passive:true so the browser could still scroll the page vertically while a horizontal drag was in progress. Fixed by attaching a non-passive touchmove listener (with preventDefault) only for the duration of an active horizontal tracking session — it is added when tracking starts and removed immediately on touchend/touchcancel/cancel, so scroll performance everywhere else is unaffected.'},
   {v:'2.07',d:'Swipe-back: week view now visible behind the workout page as you drag',det:'Previously the area behind the sliding workout page was black (just the app background). Now when you start swiping right, the week view is rendered behind the current screen immediately. As you drag, it scales up from 95% to 100% and fades from 70% to full opacity — the same parallax depth effect iOS uses. On release: if you commit, the behind element is removed and the week view appears; if you cancel, the behind element is removed and the workout page snaps back. No jank: the week HTML is generated once when tracking starts and reused for the entire gesture.'},
@@ -2943,18 +2944,23 @@ async function doAuth(isNew){
   try{
     let result;
     if(isNew){
-      // Check username not taken
-      const snap=await _fbDb.ref('usernames/'+username).once('value');
-      if(snap.exists()){
-        if(errEl)errEl.textContent='Username already taken — choose another.';
-        if(btn){btn.textContent='Create Account';btn.disabled=false;}
-        return;
-      }
       if(pass.length<6){if(errEl)errEl.textContent='Password must be at least 6 characters.';if(btn){btn.textContent='Create Account';btn.disabled=false;}return;}
+      // Create auth account FIRST so we are authenticated before touching the DB
+      // (reading /usernames/ without auth triggers permission_denied)
       result=await _fbAuth.createUserWithEmailAndPassword(internalEmail,pass);
-      // Store username → uid mapping — if this fails, roll back auth user to prevent orphaned accounts
       try{
-        await _fbDb.ref('usernames/'+username).set({uid:result.user.uid,created:new Date().toISOString()});
+        // Atomically claim the username — transaction aborts if already taken
+        const tx=await _fbDb.ref('usernames/'+username).transaction(cur=>{
+          if(cur!==null)return undefined; // abort — taken
+          return{uid:result.user.uid,created:new Date().toISOString()};
+        });
+        if(!tx.committed){
+          // Username was taken — roll back the auth account
+          try{await result.user.delete();}catch(_){}
+          if(errEl)errEl.textContent='Username already taken — choose another.';
+          if(btn){btn.textContent='Create Account';btn.disabled=false;}
+          return;
+        }
         if(recovery)await _fbDb.ref('users/'+result.user.uid+'/profile').set({username,recovery});
         else await _fbDb.ref('users/'+result.user.uid+'/profile').set({username});
       }catch(dbErr){
