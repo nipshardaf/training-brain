@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.12';
+const APP_VERSION='2.13';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.13',d:'Sign-up now uses username instead of email — simpler and no more derivation issues',det:'The sign-up form showed "Email" which caused users to enter their full email address (e.g. helenlenlau@gmail.com). The code then had to strip the domain and special characters to derive a username, which was confusing and error-prone. Changed sign-up to ask for a plain username (letters, numbers, _ only — no @ allowed). Sign-in still accepts username or email for existing users. Added validation: min 3 chars, no @ allowed on sign-up, clear hint text under the field.'},
   {v:'2.12',d:'Sign in / sign up no longer hang forever on bad connections',det:'Firebase auth calls (signInWithEmailAndPassword and createUserWithEmailAndPassword) had no timeout — on a slow or flaky connection they would spin on "..." indefinitely with no feedback. Added a 12-second timeout to both: if Firebase doesn\'t respond within 12s the user sees "Connection timed out — check your internet and try again." and the button re-enables so they can retry.'},
   {v:'2.11',d:'Fix 4 signup bugs: mangled username, orphaned accounts, missing rules guidance, login hang',det:'(1) Username was derived from the full email including domain — helenlenlau@gmail.com became "helenlenlaugmailcom". Fixed to extract only the local part before @, giving "helenlenlau". (2) Firebase rules for /usernames/ were missing entirely — added to docs and the rules block is now in the setup guide. (3) If auth account creation succeeded but the DB transaction failed (network drop etc), the auth account became orphaned — user gets email-already-in-use on retry with no recovery path. Improved the error message to explain the situation and guide toward password reset. (4) loadFromCloud() after signup had no timeout — could leave the user stuck on the loading button forever. Added an 8s timeout so the app always proceeds.'},
   {v:'2.10',d:'Fix account creation error: permission_denied when signing up',det:'Creating an account was failing with "permission_denied at /usernames/..." for new users. Root cause: the code was reading /usernames/ to check if the username was taken BEFORE creating the Firebase Auth account — so the user was unauthenticated and Firebase blocked the read. Fixed by creating the auth account first, then using a Firebase transaction to atomically claim the username while authenticated. The transaction aborts if the username is already taken, rolls back the auth account, and shows the "already taken" message. This also makes the username claim atomic, preventing two users from racing to claim the same username.'},
@@ -2667,8 +2668,13 @@ function rLock(){
 <div class="lock-title">Training Brain</div>
 <div class="lock-sub" style="margin-bottom:24px">Your personal gym &amp; cycling tracker</div>
 <div style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:10px" autocomplete="off">
-  <input id="auth-user" type="email" placeholder="Email" autocomplete="email" autocapitalize="none" spellcheck="false" inputmode="email"
-    style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+  ${isNew
+    ?`<input id="auth-user" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="text"
+        style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
+      <div style="font-size:11px;color:var(--t2);text-align:center;margin-top:-4px">Letters, numbers and _ only — no spaces or @</div>`
+    :`<input id="auth-user" type="text" placeholder="Username or email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email"
+        style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">`
+  }
   <input id="auth-pass" type="password" placeholder="Password" autocomplete="${isNew?'new-password':'current-password'}"
     style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
   ${isNew?`<input id="auth-recovery" type="email" placeholder="Recovery email (optional)" autocomplete="email"
@@ -2932,16 +2938,17 @@ async function doAuth(isNew){
   const recoveryEl=document.getElementById('auth-recovery');
   const errEl=document.getElementById('auth-err');
   const raw=(userEl?.value||'').trim();
-  const isEmail=raw.includes('@');
-  // When signing up with an email, use only the local part (before @) as the display username
-  // e.g. helenlenlau@gmail.com → username "helenlenlau", not "helenlenlaugmailcom"
+  // Sign-up: always username (no @). Sign-in: accept username or email for existing users
+  const isEmail=!isNew&&raw.includes('@');
   const username=(isEmail?raw.split('@')[0]:raw).toLowerCase().replace(/[^a-z0-9_]/g,'');
   const pass=passEl?.value||'';
   const recovery=(recoveryEl?.value||'').trim()||null;
   if(errEl)errEl.textContent='';
-  if(!raw){if(errEl)errEl.textContent='Enter your email or username.';return;}
+  if(!raw){if(errEl)errEl.textContent=isNew?'Choose a username.':'Enter your username or email.';return;}
+  if(isNew&&raw.includes('@')){if(errEl)errEl.textContent='Use a username, not an email — e.g. "johndoe" instead of "john@gmail.com".';return;}
+  if(isNew&&username.length<3){if(errEl)errEl.textContent='Username must be at least 3 characters.';return;}
   if(!pass){if(errEl)errEl.textContent='Enter a password.';return;}
-  if(!username){if(errEl)errEl.textContent='Could not derive a username from that email — try a plain username instead.';return;}
+  if(!username){if(errEl)errEl.textContent='Username can only contain letters, numbers and _.';return;}
   if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your internet connection.';return;}
   const btn=document.querySelector('.btn-p');if(btn){btn.textContent='…';btn.disabled=true;}
   // Use real email directly if provided, otherwise derive internal email from username
