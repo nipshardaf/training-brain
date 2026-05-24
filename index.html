@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.10';
+const APP_VERSION='2.11';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.11',d:'Fix 4 signup bugs: mangled username, orphaned accounts, missing rules guidance, login hang',det:'(1) Username was derived from the full email including domain — helenlenlau@gmail.com became "helenlenlaugmailcom". Fixed to extract only the local part before @, giving "helenlenlau". (2) Firebase rules for /usernames/ were missing entirely — added to docs and the rules block is now in the setup guide. (3) If auth account creation succeeded but the DB transaction failed (network drop etc), the auth account became orphaned — user gets email-already-in-use on retry with no recovery path. Improved the error message to explain the situation and guide toward password reset. (4) loadFromCloud() after signup had no timeout — could leave the user stuck on the loading button forever. Added an 8s timeout so the app always proceeds.'},
   {v:'2.10',d:'Fix account creation error: permission_denied when signing up',det:'Creating an account was failing with "permission_denied at /usernames/..." for new users. Root cause: the code was reading /usernames/ to check if the username was taken BEFORE creating the Firebase Auth account — so the user was unauthenticated and Firebase blocked the read. Fixed by creating the auth account first, then using a Firebase transaction to atomically claim the username while authenticated. The transaction aborts if the username is already taken, rolls back the auth account, and shows the "already taken" message. This also makes the username claim atomic, preventing two users from racing to claim the same username.'},
   {v:'2.09',d:'Swipe-back: eliminate lag — pre-build behind layer at touchstart, cache DOM refs',det:'The lag in v2.07/2.08 had two causes: (1) rWeek() + innerHTML was called on the first touchmove frame, causing a visible jank spike right as the drag started. Moved to touchstart so the DOM work is done before any finger movement. (2) The parallax behind element had transition:0.1s which fought against direct style updates every frame, making it sluggish. Removed the transition entirely — parallax is now a direct assignment each frame. (3) document.querySelector was being called on every touchmove event — replaced with cached sEl/behindEl references stored in the _sb state object. Behind layer now starts fully transparent (opacity:0) and fades in as you drag, which also looks better.'},
   {v:'2.08',d:'Swipe-back: fix workout page losing background + vertical scroll during drag',det:'Two bugs from v2.07: (1) The .screen element had no background colour set, so as it slid right the week view injected behind it was visible through the page — the workout appeared to lose its background. Fixed by adding background:var(--bg) to .screen. (2) The touchmove listener was passive:true so the browser could still scroll the page vertically while a horizontal drag was in progress. Fixed by attaching a non-passive touchmove listener (with preventDefault) only for the duration of an active horizontal tracking session — it is added when tracking starts and removed immediately on touchend/touchcancel/cancel, so scroll performance everywhere else is unaffected.'},
@@ -2931,12 +2932,15 @@ async function doAuth(isNew){
   const errEl=document.getElementById('auth-err');
   const raw=(userEl?.value||'').trim();
   const isEmail=raw.includes('@');
-  const username=raw.toLowerCase().replace(/[^a-z0-9_]/g,'');
+  // When signing up with an email, use only the local part (before @) as the display username
+  // e.g. helenlenlau@gmail.com → username "helenlenlau", not "helenlenlaugmailcom"
+  const username=(isEmail?raw.split('@')[0]:raw).toLowerCase().replace(/[^a-z0-9_]/g,'');
   const pass=passEl?.value||'';
   const recovery=(recoveryEl?.value||'').trim()||null;
   if(errEl)errEl.textContent='';
   if(!raw){if(errEl)errEl.textContent='Enter your email or username.';return;}
   if(!pass){if(errEl)errEl.textContent='Enter a password.';return;}
+  if(!username){if(errEl)errEl.textContent='Could not derive a username from that email — try a plain username instead.';return;}
   if(!initFirebase()){if(errEl)errEl.textContent='Could not connect — check your internet connection.';return;}
   const btn=document.querySelector('.btn-p');if(btn){btn.textContent='…';btn.disabled=true;}
   // Use real email directly if provided, otherwise derive internal email from username
@@ -2975,7 +2979,8 @@ async function doAuth(isNew){
     DB.set('fb_user',S.fbUser);
     S._authNew=false;
     S.authed=true;S.lockMode='choose';
-    await loadFromCloud();
+    // loadFromCloud with 8s timeout — don't leave the user stuck on "..." forever
+    await Promise.race([loadFromCloud(),new Promise(r=>setTimeout(r,8000))]);
     syncUp(); // push any local-only data (e.g. profile pre-v1.45) up to Firebase
     startSyncListener(result.user.uid);
     ensureFriendCode().then(()=>loadFriendData());
@@ -2991,12 +2996,12 @@ async function doAuth(isNew){
       'auth/network-request-failed':'Connection failed — check your internet and try again.',
     };
     if(errEl){
-      // email-already-in-use during Create Account: account half-created (e.g. network dropped mid-flow)
-      // Give the user a clear path forward rather than a dead end
+      // email-already-in-use: either account exists, or a previous signup failed mid-way (orphaned auth account)
       if(e.code==='auth/email-already-in-use'){
-        errEl.innerHTML='An account with this email already exists. '
-          +'<button onclick="S._authNew=false;render()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Sign in instead</button>'
-          +' or <button onclick="doForgotPassword()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">reset your password</button>.';
+        errEl.innerHTML='An account already exists for this email. '
+          +'<button onclick="S._authNew=false;render()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">Sign in</button>'
+          +' or <button onclick="doForgotPassword()" style="background:none;border:none;color:var(--al);font-size:inherit;font-weight:700;cursor:pointer;padding:0;text-decoration:underline">reset password</button>'
+          +' — if you just tried to sign up and it failed, your email may be stuck. Use reset password to recover it.';
       } else {
         errEl.textContent=msgs[e.code]||('Error: '+e.message);
         // For wrong-password / invalid-credential on sign-in: nudge toward forgot password
