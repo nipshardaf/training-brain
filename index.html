@@ -899,10 +899,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.13';
+const APP_VERSION='2.14';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=false;
 const CHANGELOG=[
+  {v:'2.14',d:'Sign-in field label changed to "Username"'},
   {v:'2.13',d:'Sign-up now uses username instead of email — simpler and no more derivation issues',det:'The sign-up form showed "Email" which caused users to enter their full email address (e.g. helenlenlau@gmail.com). The code then had to strip the domain and special characters to derive a username, which was confusing and error-prone. Changed sign-up to ask for a plain username (letters, numbers, _ only — no @ allowed). Sign-in still accepts username or email for existing users. Added validation: min 3 chars, no @ allowed on sign-up, clear hint text under the field.'},
   {v:'2.12',d:'Sign in / sign up no longer hang forever on bad connections',det:'Firebase auth calls (signInWithEmailAndPassword and createUserWithEmailAndPassword) had no timeout — on a slow or flaky connection they would spin on "..." indefinitely with no feedback. Added a 12-second timeout to both: if Firebase doesn\'t respond within 12s the user sees "Connection timed out — check your internet and try again." and the button re-enables so they can retry.'},
   {v:'2.11',d:'Fix 4 signup bugs: mangled username, orphaned accounts, missing rules guidance, login hang',det:'(1) Username was derived from the full email including domain — helenlenlau@gmail.com became "helenlenlaugmailcom". Fixed to extract only the local part before @, giving "helenlenlau". (2) Firebase rules for /usernames/ were missing entirely — added to docs and the rules block is now in the setup guide. (3) If auth account creation succeeded but the DB transaction failed (network drop etc), the auth account became orphaned — user gets email-already-in-use on retry with no recovery path. Improved the error message to explain the situation and guide toward password reset. (4) loadFromCloud() after signup had no timeout — could leave the user stuck on the loading button forever. Added an 8s timeout so the app always proceeds.'},
@@ -2672,7 +2673,7 @@ function rLock(){
     ?`<input id="auth-user" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="text"
         style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">
       <div style="font-size:11px;color:var(--t2);text-align:center;margin-top:-4px">Letters, numbers and _ only — no spaces or @</div>`
-    :`<input id="auth-user" type="text" placeholder="Username or email" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="email"
+    :`<input id="auth-user" type="text" placeholder="Username" autocomplete="username" autocapitalize="none" spellcheck="false" inputmode="text"
         style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:13px 14px;outline:none;width:100%;-webkit-appearance:none;font-family:inherit">`
   }
   <input id="auth-pass" type="password" placeholder="Password" autocomplete="${isNew?'new-password':'current-password'}"
