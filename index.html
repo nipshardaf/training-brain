@@ -246,6 +246,8 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .wt-adj:active{background:var(--acc);color:#fff;transform:scale(.88)}
 /* pre-filled weight (from last session) shown dimmed until user edits */
 .set-inp.prefilled{color:var(--t2)}
+/* AI-suggested weight shown in accent color until user edits */
+.set-inp.ai-fill{color:var(--al);}
 
 /* swap modal */
 .swap-modal{position:fixed;inset:0;z-index:200}
@@ -323,7 +325,9 @@ const EX = {
   skull:       {n:'Skull Crushers',         g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Triceps',                 p:'EZ-Bar_Skullcrusher'},
   tri_oh:      {n:'Overhead Tricep Ext.',   g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Cable_Rope_Overhead_Triceps_Extension'},
   dips:        {n:'Tricep Dips',            g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:'Dips_-_Triceps_Version'},
+  assisted_dip:{n:'Assisted Dip',          g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'6',  m:'Triceps · Chest',         p:null},
   pullup:      {n:'Pull-Ups',              g:'vback',    t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Lats · Biceps',           p:'Pullups'},
+  assisted_pullup:{n:'Assisted Pull-Up',   g:'vback',    t:'C',sets:3,reps:'8–12', rpe:'6',  m:'Lats · Biceps',           p:null},
   lat_pull:    {n:'Lat Pulldown',          g:'vback',    t:'C',sets:4,reps:'8–10', rpe:'7',  m:'Lats · Biceps',           p:'Wide-Grip_Lat_Pulldown'},
   bb_row:      {n:'Barbell Row',           g:'hback_h',  t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Back · Biceps',           p:'Bent_Over_Barbell_Row'},
   tbar_row:    {n:'T-Bar Row',             g:'hback_h',  t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Back',                   p:'T-Bar_Row_with_Handle'},
@@ -395,7 +399,7 @@ const EX_ZH={
   bb_bench:'槓鈴臥推',db_bench:'啞鈴臥推',incline_bb:'上斜槓鈴臥推',incline_db:'上斜啞鈴臥推',
   cable_fly:'繩索飛鳥',pec_deck:'蝴蝶機夾胸',ohp:'過頭推舉',db_spress:'啞鈴肩推',arnold:'阿諾肩推',
   lat_raise:'側平舉',cable_lat:'繩索側平舉',tri_push:'三頭肌下壓',skull:'仰臥臂屈伸',
-  tri_oh:'過頭三頭肌伸展',dips:'三頭肌雙槓臂屈伸',pullup:'引體向上',lat_pull:'滑輪下拉',
+  tri_oh:'過頭三頭肌伸展',dips:'三頭肌雙槓臂屈伸',assisted_dip:'輔助雙槓臂屈伸',pullup:'引體向上',assisted_pullup:'輔助引體向上',lat_pull:'滑輪下拉',
   bb_row:'槓鈴划船',tbar_row:'T槓划船',db_row:'啞鈴划船',cable_row:'坐姿繩索划船',
   face_pull:'面拉',rear_fly:'後三角飛鳥',bb_curl:'槓鈴彎舉',db_curl:'啞鈴彎舉',hammer:'錘式彎舉',
   preacher:'牧師彎舉',incline_curl:'上斜啞鈴彎舉',cable_curl:'繩索彎舉',bb_squat:'槓鈴深蹲',
@@ -437,11 +441,11 @@ const SLOTS = {
     ['ohp','db_spress','arnold','pike_pu'],                              // 2. Shoulder compound — OHP before chest accessories
     ['incline_bb','incline_db','cable_fly','pec_deck','decline_pu'],     // 3. Upper chest / chest accessory
     ['lat_raise','cable_lat'],                                           // 4. Lateral delt isolation
-    ['tri_push','skull','tri_oh','dips','diamond_pu'],                   // 5. Tricep isolation — arm finisher
+    ['tri_push','skull','tri_oh','dips','assisted_dip','diamond_pu'],    // 5. Tricep isolation — arm finisher
   ],
   // PULL — Back / Biceps
   PULL:[
-    ['pullup','lat_pull','inverted_row'],                                 // 1. Vertical pull compound — lats and upper back
+    ['pullup','assisted_pullup','lat_pull','inverted_row'],               // 1. Vertical pull compound — lats and upper back
     ['bb_row','tbar_row'],                                                // 2. Heavy horizontal row — barbell strength
     ['db_row','cable_row','inverted_row'],                                // 3. Cable / DB row — mid-back detail
     ['face_pull','rear_fly','superman'],                                  // 4. Rear delt / upper back — shoulder health
@@ -471,8 +475,8 @@ const SLOTS = {
 const EX_EQUIP={
   bb_bench:['barbell','bench','rack'],db_bench:['dumbbell','bench'],incline_bb:['barbell','incline_bench','rack'],incline_db:['dumbbell','incline_bench'],
   cable_fly:['cable','bench'],pec_deck:['machine'],ohp:['barbell','rack'],db_spress:['dumbbell'],arnold:['dumbbell'],
-  lat_raise:['dumbbell'],cable_lat:['cable'],tri_push:['cable'],skull:['ez_bar','bench'],tri_oh:['cable'],dips:['dip_bar'],
-  pullup:['pullup_bar'],lat_pull:['machine'],bb_row:['barbell'],tbar_row:['barbell'],db_row:['dumbbell','bench'],
+  lat_raise:['dumbbell'],cable_lat:['cable'],tri_push:['cable'],skull:['ez_bar','bench'],tri_oh:['cable'],dips:['dip_bar'],assisted_dip:['machine'],
+  pullup:['pullup_bar'],assisted_pullup:['machine'],lat_pull:['machine'],bb_row:['barbell'],tbar_row:['barbell'],db_row:['dumbbell','bench'],
   cable_row:['cable'],face_pull:['cable'],rear_fly:['dumbbell'],bb_curl:['barbell'],db_curl:['dumbbell'],
   hammer:['dumbbell'],preacher:['ez_bar'],incline_curl:['dumbbell','incline_bench'],cable_curl:['cable'],
   bb_squat:['barbell','rack'],front_squat:['barbell','rack'],leg_press:['machine'],bss:['dumbbell'],
@@ -899,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.15';
+const APP_VERSION='2.16';
 // Feature flags — flip to true once the backend setup is finished
-const FEATURE_WEEKLY_REVIEW=false;
+const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.16',d:'3 new features: Assisted Pull-Up + Assisted Dip exercises, Weekly AI Review enabled (exercise type/sequence recs based on goal), End-of-week prompt to plan next week with AI weight/rep suggestions per exercise',det:'(1) Added Assisted Pull-Up and Assisted Dip to the exercise database as machine-based alternatives to Pull-Ups and Tricep Dips. Both are added to their respective SLOTS arrays so they surface as swap alternatives. (2) Enabled the Weekly AI Review feature (FEATURE_WEEKLY_REVIEW=true). The review prompt now includes user goal and fitness level, and adds a 5th SEQUENCE section with exercise type and sequencing advice. (3) After completing all exercises in your last gym session of the week, an end-of-week prompt appears asking if you want AI to plan next week. If confirmed, AI reviews your week\'s performance and generates next week\'s plan with per-exercise starting weight and rep suggestions. Suggestions are pre-filled in your workout logs for next week.'},
   {v:'2.15',d:'Fix login hanging in Safari — set Firebase auth persistence to LOCAL',det:'Safari\'s Intelligent Tracking Prevention (ITP) blocks the hidden cross-origin iframe that Firebase Auth uses to restore sessions and complete sign-in. This caused login to hang indefinitely in Safari while working fine in Chrome. Fixed by explicitly calling setPersistence(LOCAL) when Firebase initialises, which forces Firebase to use localStorage for auth state instead of the iframe/cookie mechanism. This is the standard fix for Firebase + Safari.'},
   {v:'2.14',d:'Sign-in field label changed to "Username"'},
   {v:'2.13',d:'Sign-up now uses username instead of email — simpler and no more derivation issues',det:'The sign-up form showed "Email" which caused users to enter their full email address (e.g. helenlenlau@gmail.com). The code then had to strip the domain and special characters to derive a username, which was confusing and error-prone. Changed sign-up to ask for a plain username (letters, numbers, _ only — no @ allowed). Sign-in still accepts username or email for existing users. Added validation: min 3 chars, no @ allowed on sign-up, clear hint text under the field.'},
@@ -1083,7 +1088,8 @@ const TRANS={
     wr_empty_sub:'Get an AI analysis of your last 8 weeks — performance, progressive overload targets, recovery flags, and a focus goal for next week.',
     wr_generate_btn:'Generate my review',wr_regenerate:'Regenerate',
     wr_s_summary:'Performance summary',wr_s_overload:'Progressive overload',
-    wr_s_recovery:'Recovery flags',wr_s_focus:"Next week's focus",
+    wr_s_recovery:'Recovery flags',wr_s_focus:"Next week's focus",wr_s_sequence:'Exercise type & sequence',
+    eow_title:'Week complete?',eow_sub:"Looks like you've finished your gym training for the week. Want AI to review your progress and set up next week with suggested weights?",eow_confirm:'✨ Plan next week with AI',eow_skip:'Not yet',eow_loading:'AI is planning your next week…',eow_done:'Next week ready! Tap any workout to see AI suggestions.',eow_done_plain:'Next week generated (no AI suggestions this time)',
     wr_email_btn:'Email me this summary',wr_emailed:'✅ Review emailed',
     wr_email_setup:'Add your email + EmailJS keys in Settings first',
     wr_email_fail:'Could not send email — check your EmailJS settings',
@@ -1159,7 +1165,8 @@ const TRANS={
     wr_empty_sub:'取得 AI 對你過去 8 週的分析 — 表現、漸進負荷目標、恢復警示，以及下週的重點目標。',
     wr_generate_btn:'生成我的回顧',wr_regenerate:'重新生成',
     wr_s_summary:'表現總結',wr_s_overload:'漸進負荷建議',
-    wr_s_recovery:'恢復警示',wr_s_focus:'下週重點',
+    wr_s_recovery:'恢復警示',wr_s_focus:'下週重點',wr_s_sequence:'動作類型與順序',
+    eow_title:'本週完成？',eow_sub:'看起來你已完成本週的健身訓練。要讓 AI 回顧你的進度並為下週制定計劃嗎？',eow_confirm:'✨ 用 AI 規劃下週',eow_skip:'還沒完成',eow_loading:'AI 正在規劃你的下週…',eow_done:'下週計劃已就緒！點擊任何訓練查看 AI 建議。',eow_done_plain:'下週計劃已生成（本次無 AI 建議）',
     wr_email_btn:'把總結電郵給我',wr_emailed:'✅ 回顧已寄出',
     wr_email_setup:'請先在設定中加入你的電郵和 EmailJS 金鑰',
     wr_email_fail:'無法寄送電郵 — 請檢查你的 EmailJS 設定',
@@ -3975,9 +3982,11 @@ function rReviewCard(){
   if(S.guest)return'';
   const curMon=getMon(new Date());
   if(fd(S.weekStart)!==fd(curMon))return''; // only on the current week
-  const isSunday=new Date().getDay()===0;
   const review=DB.get('weekreview_'+fd(curMon),null);
-  if(!isSunday&&!review)return'';
+  // Show card when: review already generated, OR user has done ≥2 gym sessions this week
+  const sessionsThisWeek=Array.from({length:7},(_,i)=>fd(addDays(curMon,i)))
+    .filter(ds=>{const l=DB.get('log_'+ds,null);return l?.exercises?.some(e=>e.sets?.some(s=>s.done));}).length;
+  if(!review&&sessionsThisWeek<2)return'';
   const title=review?_T('wr_ready_title'):_T('wr_card_title');
   const sub=review?_T('wr_view_sub'):_T('wr_card_sub');
   return`<div onclick="go('review')" style="background:linear-gradient(135deg,rgba(124,58,237,.16),rgba(244,114,182,.12));border:1px solid var(--acc);border-radius:16px;padding:14px 15px;margin-bottom:14px;cursor:pointer;display:flex;align-items:center;gap:12px">
@@ -4027,10 +4036,11 @@ ${_reviewNav()}</div>`;
 ${_reviewNav()}</div>`;
   }
   const secs=[
-    {v:review.summary, icon:'📊',title:_T('wr_s_summary'), col:'#a78bfa',bg:'rgba(167,139,250,.08)'},
-    {v:review.overload,icon:'📈',title:_T('wr_s_overload'),col:'#34d399',bg:'rgba(52,211,153,.08)'},
-    {v:review.recovery,icon:'🔋',title:_T('wr_s_recovery'),col:'#fb923c',bg:'rgba(251,146,60,.08)'},
-    {v:review.focus,   icon:'🎯',title:_T('wr_s_focus'),   col:'#60a5fa',bg:'rgba(96,165,250,.08)'},
+    {v:review.summary,  icon:'📊',title:_T('wr_s_summary'),  col:'#a78bfa',bg:'rgba(167,139,250,.08)'},
+    {v:review.overload, icon:'📈',title:_T('wr_s_overload'), col:'#34d399',bg:'rgba(52,211,153,.08)'},
+    {v:review.recovery, icon:'🔋',title:_T('wr_s_recovery'), col:'#fb923c',bg:'rgba(251,146,60,.08)'},
+    {v:review.focus,    icon:'🎯',title:_T('wr_s_focus'),    col:'#60a5fa',bg:'rgba(96,165,250,.08)'},
+    {v:review.sequence, icon:'🔄',title:_T('wr_s_sequence'), col:'#f472b6',bg:'rgba(244,114,182,.08)'},
   ];
   const gen=review.generated?new Date(review.generated):null;
   return`<div class="screen">${hdr}
@@ -4074,19 +4084,26 @@ function collectReviewData(){
 
 function buildReviewPrompt(d){
   const u=unit();
+  const profile=DB.get('user_profile',{});
+  const goalStr=(profile.goals||[]).filter(Boolean).length?(profile.goals||[]).join(', '):(profile.goal||'general fitness');
+  const levelStr=profile.level||'intermediate';
   const gymTxt=d.gymSessions.length?d.gymSessions.slice(0,45).map(s=>`${s.date} (energy:${s.energy}${s.completed?', completed':', partial'}) — ${s.exercises.join(' | ')}`).join('\n'):'No gym sessions logged in the last 8 weeks.';
   const rideTxt=d.rides.length?d.rides.slice(0,45).map(r=>`${r.date} [${r.src}] ${r.dur}min${r.dist!=null?', '+r.dist+'km':''}${r.hr!=null?', '+r.hr+'bpm':''}${r.watts!=null?', '+r.watts+'W':''}${r.rpe!=null?', RPE'+r.rpe:''}`).join('\n'):'No rides logged in the last 8 weeks.';
   const prTxt=Object.entries(d.prs||{}).map(([id,p])=>`${EX[id]?EX[id].n:id}: ${p.w}${u}×${p.r}`).join(', ')||'No PRs recorded.';
   const planTxt=d.plan?d.plan.map(x=>`${x.date}:${x.type}`).join(', '):'No plan set for the current week.';
   const zh=DB.get('lang','en')==='zh';
-  const langNote=zh?'\n\nIMPORTANT: Write your ENTIRE response in Traditional Chinese (繁體中文). Keep the four section labels SUMMARY:/OVERLOAD:/RECOVERY:/FOCUS: in English so the app can parse them, but all content must be Traditional Chinese.':'';
-  return`You are a personal training coach. Analyse the user's last 8 weeks of training data. Provide: 1) A honest weekly performance summary, 2) Progressive overload recommendations for next week (specific exercises, specific weight/rep targets), 3) Recovery flags if you detect fatigue patterns, 4) One focus goal for next week. Be concise, specific, and data-driven. No generic advice. Weights are in ${u}.${langNote}
+  const langNote=zh?'\n\nIMPORTANT: Write your ENTIRE response in Traditional Chinese (繁體中文). Keep the five section labels SUMMARY:/OVERLOAD:/RECOVERY:/FOCUS:/SEQUENCE: in English so the app can parse them, but all content must be Traditional Chinese.':'';
+  return`You are a personal training coach. Analyse the user's last 8 weeks of training data. User goal: ${goalStr}. Fitness level: ${levelStr}. Weights in ${u}. Be concise, specific, and data-driven.${langNote}
 
-Respond with EXACTLY these four labelled sections, each starting on its own line:
+Respond with EXACTLY these five labelled sections, each starting on its own line:
 SUMMARY: <honest performance summary>
 OVERLOAD: <specific progressive overload recommendations, naming exercises and weight/rep targets>
-RECOVERY: <recovery flags / fatigue patterns, or state there are none>
+RECOVERY: <recovery flags / fatigue patterns, or "None detected">
 FOCUS: <one specific focus goal for next week>
+SEQUENCE: <exercise type priorities and sequencing advice tailored to this user's goal — e.g. compound-first ordering, muscle group pairings, what to emphasise this training block>
+
+=== USER PROFILE ===
+Goal: ${goalStr} | Level: ${levelStr}
 
 === GYM SESSIONS (most recent first) ===
 ${gymTxt}
@@ -4102,7 +4119,7 @@ ${planTxt}`;
 }
 
 function parseReview(text){
-  const keys=['SUMMARY','OVERLOAD','RECOVERY','FOCUS'];
+  const keys=['SUMMARY','OVERLOAD','RECOVERY','FOCUS','SEQUENCE'];
   const out={};
   keys.forEach((k,i)=>{
     const next=keys[i+1];
@@ -4121,7 +4138,7 @@ async function generateWeeklyReview(){
   try{
     const prompt=buildReviewPrompt(collectReviewData());
     const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:1100,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:1400,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
     trackAICall('weekly_review',r.ok);
     if(!r.ok)throw new Error('API '+r.status);
     const json=await r.json();
@@ -4162,6 +4179,7 @@ ${sec(_T('wr_s_summary'),review.summary)}
 ${sec(_T('wr_s_overload'),review.overload)}
 ${sec(_T('wr_s_recovery'),review.recovery)}
 ${sec(_T('wr_s_focus'),review.focus)}
+${sec(_T('wr_s_sequence'),review.sequence)}
 <p style="margin-top:22px;font-size:12px;color:#888">${_T('wr_generated_on')} ${review.generated?new Date(review.generated).toLocaleString():''}</p>
 </div>`;
   showToast('📧 …','var(--acc)');
@@ -4173,6 +4191,136 @@ ${sec(_T('wr_s_focus'),review.focus)}
         .catch(err=>{console.warn('EmailJS send failed:',err);showToast(_T('wr_email_fail'),'var(--red)');});
     }catch(e){showToast(_T('wr_email_fail'),'var(--red)');}
   });
+}
+
+/* ── END-OF-WEEK + NEXT WEEK AI PLAN ── */
+function checkWeekCompletion(){
+  if(!S.activeLog||S.guest)return;
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const today=S.activeLog.date;
+  const plan=DB.get(DB.pk(S.weekStart),null);
+  if(!plan)return;
+  // Check for any future gym days this week without all sets done
+  const hasMoreGym=plan.some(d=>{
+    if(d.date<=today)return false;
+    if(!gymTypes.includes(d.type))return false;
+    const log=DB.get('log_'+d.date,null);
+    if(!log)return true;
+    return!log.exercises?.every(e=>e.sets?.every(s=>s.done));
+  });
+  if(!hasMoreGym)showEndOfWeekPrompt();
+}
+
+function showEndOfWeekPrompt(){
+  if(document.getElementById('eow-prompt'))return;
+  const el=document.createElement('div');
+  el.className='swap-modal';el.id='eow-prompt';
+  el.innerHTML=`<div class="swap-ov" onclick="closeEOW()"></div>
+<div class="swap-sheet">
+  <div style="text-align:center;padding:8px 0 16px">
+    <div style="font-size:40px;margin-bottom:10px">🎉</div>
+    <div style="font-size:18px;font-weight:800;color:var(--txt);margin-bottom:8px">${_T('eow_title')}</div>
+    <div style="font-size:13px;color:var(--t2);line-height:1.55;margin-bottom:20px">${_T('eow_sub')}</div>
+    <button class="btn btn-p" onclick="closeEOW();generateNextWeekWithAI()" style="margin-bottom:10px">${_T('eow_confirm')}</button>
+    <button class="btn btn-s" onclick="closeEOW()">${_T('eow_skip')}</button>
+  </div>
+</div>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>el.classList.add('on'));
+}
+function closeEOW(){document.getElementById('eow-prompt')?.remove();}
+
+async function generateNextWeekWithAI(){
+  const nextMon=addDays(S.weekStart,7);
+  const nextMonStr=fd(nextMon);
+  // Build next week's plan if it doesn't exist yet
+  let nextPlan=DB.get(DB.pk(nextMon),null);
+  if(!nextPlan){
+    const wdays=Array.from({length:7},(_,i)=>({date:fd(addDays(nextMon,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0}));
+    const savedWS=S.weekStart;S.weekStart=nextMon;
+    nextPlan=buildWeek(wdays);
+    DB.set(DB.pk(nextMon),nextPlan);
+    S.weekStart=savedWS;
+  }
+  // Collect this week's gym sessions
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const thisPlan=DB.get(DB.pk(S.weekStart),null)||[];
+  const weekSessions=[];
+  for(const day of thisPlan){
+    if(!gymTypes.includes(day.type))continue;
+    const log=DB.get('log_'+day.date,null);
+    if(!log||!log.exercises?.length)continue;
+    weekSessions.push({date:day.date,type:day.type,exercises:log.exercises});
+  }
+  const nextGymDays=nextPlan.filter(d=>gymTypes.includes(d.type));
+  const prompt=buildNextWeekPrompt(weekSessions,nextGymDays);
+  showToast(_T('eow_loading'),'var(--acc)',5000);
+  try{
+    const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:900,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
+    trackAICall('next_week_plan',r.ok);
+    if(!r.ok)throw new Error('API '+r.status);
+    const json=await r.json();
+    const text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(!text)throw new Error('empty');
+    const sugg=parseNextWeekSuggestions(text);
+    if(Object.keys(sugg).length>0)DB.set('ai_week_sugg_'+nextMonStr,{generated:new Date().toISOString(),suggestions:sugg});
+    S.weekStart=nextMon;syncUp();render();
+    showToast(_T('eow_done'),'var(--grn)',5000);
+  }catch(e){
+    console.warn('Next week AI failed:',e);
+    S.weekStart=nextMon;render();
+    showToast(_T('eow_done_plain'),'var(--t2)');
+  }
+}
+
+function buildNextWeekPrompt(weekSessions,nextGymDays){
+  const u=unit();
+  const profile=DB.get('user_profile',{});
+  const goalStr=(profile.goals||[]).filter(Boolean).length?(profile.goals||[]).join(', '):(profile.goal||'general fitness');
+  const levelStr=profile.level||'intermediate';
+  const sessionTxt=weekSessions.length?weekSessions.map(s=>{
+    const exStr=s.exercises.map(e=>{
+      const done=(e.sets||[]).filter(x=>x.done&&x.w);
+      if(!done.length)return null;
+      return`${EX[e.id]?.n||e.id}: ${done.map(x=>`${x.w}${u}x${x.r}`).join('/')}`;
+    }).filter(Boolean).join(' | ');
+    return`${s.date} (${s.type}): ${exStr||'no data'}`;
+  }).join('\n'):'No gym sessions logged this week.';
+  const nextTxt=nextGymDays.map(d=>`${d.date} (${d.type}): ${(d.exercises||[]).map(id=>EX[id]?.n||id).join(', ')}`).join('\n')||'No gym days planned.';
+  return`You are a personal training coach. Review this week's performance and provide starting weight/rep suggestions for each exercise in next week's plan.
+
+User goal: ${goalStr} | Level: ${levelStr} | Weight unit: ${u}
+
+THIS WEEK'S PERFORMANCE:
+${sessionTxt}
+
+NEXT WEEK'S EXERCISES:
+${nextTxt}
+
+For each exercise listed in "NEXT WEEK'S EXERCISES", provide a starting weight and rep target using progressive overload principles. If the exercise was done this week, add 2.5–5${u} if all reps were completed, keep the same if it was hard, or reduce slightly if sets were missed. If not done this week, base on similar exercises or overall level.
+
+Respond in EXACTLY this format (one line per exercise, nothing else before SUGGESTIONS:):
+SUGGESTIONS:
+<Exact Exercise Name>: <weight>${u}x<reps>
+<Exact Exercise Name>: <weight>${u}x<reps>`;
+}
+
+function parseNextWeekSuggestions(text){
+  const sugg={};
+  const u=unit();
+  const block=text.match(/SUGGESTIONS:\s*([\s\S]*)/i);
+  if(!block)return sugg;
+  const lines=block[1].split('\n');
+  for(const line of lines){
+    const m=line.match(/^(.+?):\s*([\d.]+)\s*(?:kg|lbs?)?\s*[x×]\s*(\d+)/i);
+    if(!m)continue;
+    const name=m[1].trim();
+    const weight=parseFloat(m[2]);const reps=parseInt(m[3]);
+    const exId=Object.entries(EX).find(([id,e])=>e.n.toLowerCase()===name.toLowerCase())?.[0];
+    if(exId&&weight>0&&reps>0)sugg[exId]={w:String(weight),r:String(reps)};
+  }
+  return sugg;
 }
 
 /* ── LOG SCREEN ── */
@@ -4196,16 +4344,19 @@ function startLog(ds){
 function makeSets(exId,energy,last){
   const ex=EX[exId];if(!ex)return[];
   const n=energyTargets(exId,energy).sets;
+  // Use AI suggestions for this week if no last log data available
+  const hasLastData=last&&last.some(s=>s.w);
+  const aiSugg=hasLastData?null:(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[exId]||null;
   if(ex.uni){
     return Array.from({length:n*2},(_,i)=>{
       const side=i%2===0?'L':'R';
-      const pw=last?.[i]?.w||'';
-      return{w:pw,r:last?.[i]?.r||'',done:false,side,_edited:!!pw};
+      const pw=last?.[i]?.w||(aiSugg?.w||'');
+      return{w:pw,r:last?.[i]?.r||(aiSugg?.r||''),done:false,side,_edited:!!pw,_ai:!!(aiSugg&&!last?.[i]?.w)};
     });
   }
   return Array.from({length:n},(_,si)=>{
-    const pw=last?.[si]?.w||'';
-    return{w:pw,r:last?.[si]?.r||'',done:false,_edited:!!pw};
+    const pw=last?.[si]?.w||(aiSugg?.w||'');
+    return{w:pw,r:last?.[si]?.r||(aiSugg?.r||''),done:false,_edited:!!pw,_ai:!!(aiSugg&&!last?.[si]?.w)};
   });
 }
 
@@ -4296,6 +4447,8 @@ function rLogEx(le,ei){
   const _advData=DB.get('weekly_advisor_'+fd(getMon(S.viewDate)),null);
   const _wTgt=findWeekTarget(ex.n,_advData?.targets||[]);
   const _wSwap=findWeekSwap(ex.n,_advData?.swaps||[]);
+  // AI next-week weight suggestion
+  const _aiSugg=(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[le.id]||null;
   // compact summary for when collapsed and done
   const bestSet=allDone?le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0]:null;
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
@@ -4308,6 +4461,7 @@ function rLogEx(le,ei){
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar()}
+  ${_aiSugg&&!allDone?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-bottom:8px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:5px 9px">✨ AI suggestion: ${_aiSugg.w}${unit()} × ${_aiSugg.r} reps</div>`:''}
   ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
   ${_wSwap?`<div style="font-size:11px;font-weight:600;margin-bottom:8px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:8px"><span style="color:var(--amb);flex:1">💡 Try <strong>${EX[_wSwap.toId]?.n||_wSwap.suggested}</strong> — ${_wSwap.reason}</span><button onclick="event.stopPropagation();doExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}','${_wSwap.toId}')" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);border-radius:6px;color:var(--amb);font-size:10px;font-weight:700;padding:4px 9px;cursor:pointer;white-space:nowrap;-webkit-appearance:none">Swap →</button></div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
@@ -4316,7 +4470,7 @@ function rLogEx(le,ei){
     <span class="set-n">${setLabel(si,set)}</span>
     <div class="wt-wrap">
       <button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button>
-      <input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="${wPh}" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
+      <input class="set-inp w-inp${set.w&&!set._edited?(set._ai?' ai-fill':' prefilled'):''}" type="text" inputmode="decimal" placeholder="${wPh}" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
       <button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button>
     </div>
     <input class="set-inp" type="text" inputmode="numeric" placeholder="${rPh}" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
@@ -4389,6 +4543,10 @@ function togSet(ei,si){
       const nextEi=ei+1;
       if(nextEi<S.activeLog.exercises.length&&!S.activeLog.exercises[nextEi].sets.every(s=>s.done))togLogEx(nextEi);
     },350);
+    // End-of-week detection: fire when the entire workout is now complete
+    if(S.activeLog.exercises.every(e=>e.sets.every(s=>s.done))){
+      setTimeout(()=>checkWeekCompletion(),900);
+    }
   }
 }
 
@@ -4511,7 +4669,7 @@ function adjW(ei,si,dir){
   set._edited=true;
   DB.set(DB.lk(S.viewDate),S.activeLog);
   const inp=document.querySelector(`#sr${ei}_${si} .w-inp`);
-  if(inp){inp.value=set.w;inp.classList.remove('prefilled');}
+  if(inp){inp.value=set.w;inp.classList.remove('prefilled','ai-fill');}
   debouncedSync();
 }
 
@@ -4519,7 +4677,7 @@ function markEdited(ei,si,inp){
   if(!S.activeLog)return;
   const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
   set._edited=true;
-  inp.classList.remove('prefilled');
+  inp.classList.remove('prefilled','ai-fill');
 }
 
 function completeWk(){
