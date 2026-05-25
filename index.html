@@ -876,10 +876,10 @@ const WI = {
   PULL:         {l:()=>_T('wt_pull'),      i:_icon('pull-workout.png','🏋️'),   c:'#2563eb',d:()=>_T('wi_pull_d')},
   LEGS:         {l:()=>_T('wt_legs'),      i:_icon('legs-workout.png','🏋️'),   c:'#059669',d:()=>_T('wi_legs_d')},
   UPPER_PUMP:   {l:()=>_T('wt_upper'),     i:_icon('gym-weights.png','🏋️'),    c:'#d97706',d:()=>_T('wi_upper_d')},
-  LONG_OUTDOOR: {l:()=>_T('wt_ride_l'),   i:_icon('ride-day.png','🚴'),        c:'#0891b2',d:'60–90 min · Zone 2 · Outdoor'},
-  SHORT_OUTDOOR:{l:()=>_T('wt_ride_s'),   i:_icon('ride-day.png','🚴'),        c:'#0891b2',d:'25–35 min · Zone 2 · Outdoor'},
-  LONG_INDOOR:  {l:()=>_T('wt_ride_l'),   i:_icon('ride-day.png','🚲'),        c:'#6366f1',d:'60–90 min · Zone 2 · Indoor'},
-  SHORT_INDOOR: {l:()=>_T('wt_ride_s'),   i:_icon('ride-day.png','🚲'),        c:'#6366f1',d:'25–35 min · Zone 2 · Indoor'},
+  LONG_OUTDOOR: {l:()=>_T('wt_ride_l'),   i:_icon('ride-day.png','🚴'),        c:'#0891b2',d:()=>{const s=getRideSession('LONG_OUTDOOR'); return `${s.name} · ${s.total} min · Outdoor`;}},
+  SHORT_OUTDOOR:{l:()=>_T('wt_ride_s'),   i:_icon('ride-day.png','🚴'),        c:'#0891b2',d:()=>{const s=getRideSession('SHORT_OUTDOOR');return `${s.name} · ${s.total} min · Outdoor`;}},
+  LONG_INDOOR:  {l:()=>_T('wt_ride_l'),   i:_icon('ride-day.png','🚲'),        c:'#6366f1',d:()=>{const s=getRideSession('LONG_INDOOR');  return `${s.name} · ${s.total} min · Indoor`;}},
+  SHORT_INDOOR: {l:()=>_T('wt_ride_s'),   i:_icon('ride-day.png','🚲'),        c:'#6366f1',d:()=>{const s=getRideSession('SHORT_INDOOR'); return `${s.name} · ${s.total} min · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
 };
 
@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.16';
+const APP_VERSION='2.17';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.17',d:'Fix ride plan showing wrong info — week view now shows actual session name and duration from the structured plan, not hardcoded "25–35 min · Zone 2"',det:'The WI (workout info) object had hardcoded descriptions for ride types ("25–35 min · Zone 2 · Outdoor", "60–90 min · Zone 2 · Outdoor") that bore no relation to the actual planned sessions. The real planner (getRideSession) builds structured workouts — Tempo Intervals (55 min), Sweet Spot (60 min), Hill Repeats (55 min), Recovery Spin (35 min), Endurance Ride (duration adapts based on setup + Strava adapt factor) — but this info never made it to the week view row or day screen hero. Fixed by making the WI descriptions dynamic functions that call getRideSession() so the week row now shows e.g. "Tempo Intervals · 55 min · Outdoor" instead of "25–35 min · Zone 2". Also added a Strava adaptation badge (Pacing up / Easing back) on the ride card when bike_adapt_factor is meaningfully away from 1.0, so users can see the plan is reacting to their Strava history.'},
   {v:'2.16',d:'3 new features: Assisted Pull-Up + Assisted Dip exercises, Weekly AI Review enabled (exercise type/sequence recs based on goal), End-of-week prompt to plan next week with AI weight/rep suggestions per exercise',det:'(1) Added Assisted Pull-Up and Assisted Dip to the exercise database as machine-based alternatives to Pull-Ups and Tricep Dips. Both are added to their respective SLOTS arrays so they surface as swap alternatives. (2) Enabled the Weekly AI Review feature (FEATURE_WEEKLY_REVIEW=true). The review prompt now includes user goal and fitness level, and adds a 5th SEQUENCE section with exercise type and sequencing advice. (3) After completing all exercises in your last gym session of the week, an end-of-week prompt appears asking if you want AI to plan next week. If confirmed, AI reviews your week\'s performance and generates next week\'s plan with per-exercise starting weight and rep suggestions. Suggestions are pre-filled in your workout logs for next week.'},
   {v:'2.15',d:'Fix login hanging in Safari — set Firebase auth persistence to LOCAL',det:'Safari\'s Intelligent Tracking Prevention (ITP) blocks the hidden cross-origin iframe that Firebase Auth uses to restore sessions and complete sign-in. This caused login to hang indefinitely in Safari while working fine in Chrome. Fixed by explicitly calling setPersistence(LOCAL) when Firebase initialises, which forces Firebase to use localStorage for auth state instead of the iframe/cookie mechanism. This is the standard fix for Firebase + Safari.'},
   {v:'2.14',d:'Sign-in field label changed to "Username"'},
@@ -3731,6 +3732,7 @@ function rRideCard(dp){
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">⏱ ${s.total} min</span>
     <span class="bdg" style="background:${isRec?'rgba(16,185,129,.14)':'rgba(245,158,11,.14)'};color:${isRec?'var(--grn)':'var(--amb)'}">${s.phase}</span>
+    ${(()=>{const af=DB.get('bike_adapt_factor',1.0);return af>1.05?`<span class="bdg" style="background:rgba(16,185,129,.12);color:var(--grn)">📈 Pacing up · Strava</span>`:af<0.95?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">📉 Easing back · Strava</span>`:''})()}
   </div>
 </div>
 ${actualHtml}
