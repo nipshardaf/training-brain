@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.18';
+const APP_VERSION='2.19';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.19',d:'Fix consecutive ride days — short ride now avoids the day immediately before or after the long ride',det:'buildWeek picked the long ride day first (best weather) then picked the short ride day from the remaining candidates penalising only the day after LEGS. There was no penalty for placing the short ride adjacent to the long ride, so Mon long + Tue short (or similar back-to-back pairs) was common. Fixed by computing postLongIdx and preLongIdx after r1 is known, then applying -60 and -40 score penalties respectively when sorting short ride candidates. Day after long ride gets the strongest penalty (-60) since riding hard two days in a row is the worst case; day before gets a moderate penalty (-40). The penalties are soft (not hard exclusions) so in tight weeks with few available days the app can still place them adjacent rather than failing.'},
   {v:'2.18',d:'Fix ride title still showing "Short Ride"/"Long Ride" — title now shows actual session name (Sweet Spot, Tempo Intervals, etc)',det:'The WI label (wi.l) for ride types was still returning the generic "Short Ride"/"Long Ride" i18n string even after v2.17 made the description dynamic. Updated wi.l to also call getRideSession() so the week row title now shows the actual session name. Description updated to show duration + ride category (Zone 2 for long rides, Quality/Recovery for short rides) without redundantly repeating the name.'},
   {v:'2.17',d:'Fix ride plan showing wrong info — week view now shows actual session name and duration from the structured plan, not hardcoded "25–35 min · Zone 2"',det:'The WI (workout info) object had hardcoded descriptions for ride types ("25–35 min · Zone 2 · Outdoor", "60–90 min · Zone 2 · Outdoor") that bore no relation to the actual planned sessions. The real planner (getRideSession) builds structured workouts — Tempo Intervals (55 min), Sweet Spot (60 min), Hill Repeats (55 min), Recovery Spin (35 min), Endurance Ride (duration adapts based on setup + Strava adapt factor) — but this info never made it to the week view row or day screen hero. Fixed by making the WI descriptions dynamic functions that call getRideSession() so the week row now shows e.g. "Tempo Intervals · 55 min · Outdoor" instead of "25–35 min · Zone 2". Also added a Strava adaptation badge (Pacing up / Easing back) on the ride card when bike_adapt_factor is meaningfully away from 1.0, so users can see the plan is reacting to their Strava history.'},
   {v:'2.16',d:'3 new features: Assisted Pull-Up + Assisted Dip exercises, Weekly AI Review enabled (exercise type/sequence recs based on goal), End-of-week prompt to plan next week with AI weight/rep suggestions per exercise',det:'(1) Added Assisted Pull-Up and Assisted Dip to the exercise database as machine-based alternatives to Pull-Ups and Tricep Dips. Both are added to their respective SLOTS arrays so they surface as swap alternatives. (2) Enabled the Weekly AI Review feature (FEATURE_WEEKLY_REVIEW=true). The review prompt now includes user goal and fitness level, and adds a 5th SEQUENCE section with exercise type and sequencing advice. (3) After completing all exercises in your last gym session of the week, an end-of-week prompt appears asking if you want AI to plan next week. If confirmed, AI reviews your week\'s performance and generates next week\'s plan with per-exercise starting weight and rep suggestions. Suggestions are pre-filled in your workout logs for next week.'},
@@ -2466,10 +2467,17 @@ function buildWeek(wdays){
   }
   const postLegsIdx=legsIdx>=0?(legsIdx+1)%7:-1;
 
-  // Pick actual ride days: long on best weather, short on next best (penalised post-LEGS)
+  // Pick actual ride days: long on best weather first, then short avoiding adjacency
   const longCandidates=[..._rideAvail];
-  const shortCandidates=[..._rideAvail].map(r=>({...r,s:r.i===postLegsIdx?r.s-40:r.s})).sort((a,b)=>b.s-a.s);
   const r1=numRides>=1?longCandidates[0]:null;
+  // Penalise day immediately before/after the long ride AND day after LEGS
+  const postLongIdx=r1!=null?(r1.i+1)%7:-1;
+  const preLongIdx=r1!=null?(r1.i+6)%7:-1;
+  const shortCandidates=[..._rideAvail].map(r=>({...r,s:
+    r.i===postLegsIdx?r.s-40:
+    r.i===postLongIdx?r.s-60:  // day after long ride — strongest penalty
+    r.i===preLongIdx?r.s-40:   // day before long ride — moderate penalty
+    r.s})).sort((a,b)=>b.s-a.s);
   const r2=numRides>=2?(shortCandidates.find(r=>r.i!==r1?.i)||null):null;
   const rideSet=new Set([...(r1?[r1.i]:[]),...(r2?[r2.i]:[])]);
 
