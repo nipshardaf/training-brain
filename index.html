@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.27';
+const APP_VERSION='2.28';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.28',d:'Cycling Progress chart — see fitness trends over 90 days with metric switcher (EF, NP, Power, HR, TSS, Distance, Suffer)',det:'A new SVG chart panel on the Training tab plots your last 90 days of rides. Tap chips at the top to switch between 7 metrics: Aerobic Efficiency (W/bpm — the gold-standard endurance fitness indicator, rising = aerobically fitter at the same effort), Normalised Power, Avg Power, Avg HR, TSS per ride, Distance, and Suffer Score. Each ride is a dot, the purple line is a 7-day rolling average for smoothing. The chart auto-picks a sensible default metric based on what data is available (EF if your rides have both power and HR, NP if power-only, HR if neither). A trend badge in the header (↑ IMPROVING / → STABLE / ↓ REGRESSING) uses linear regression across the window — and inverts for HR (lower = improving). Below the chart, first-half vs recent-half averages with a percentage change tell you the magnitude of improvement at a glance.'},
   {v:'2.27',d:'FTP + body weight + IF/TSS per ride + CTL/ATL/TSB fitness curve — proper training-load tracking and richer AI feedback',det:'Imports FTP and body weight from Strava\'s athlete endpoint on connect and every sync (preserves manual overrides — tap ✏️ on the Cycling Profile card to set values manually). With FTP known, every ride now gets an IF (Intensity Factor = NP/FTP) and TSS (Training Stress Score) computed and displayed as a badge on the ride card and history detail. A new Fitness · Fatigue · Form panel on the Training tab shows current CTL (42-day exponential-weighted average TSS — your fitness), ATL (7-day EMA — your fatigue), TSB (CTL−ATL — your form), with a 28-day fitness trend mini-chart and a plain-English interpretation ("Productive training zone" / "Carrying fatigue" etc). 7-day delta indicators show whether fitness is rising or falling. A new Cycling Profile card displays FTP/weight/W·kg⁻¹ with badges showing whether each value came from Strava or was manually set. The AI weekly review prompt now receives the full cycling profile (FTP, weight, W/kg), current CTL/ATL/TSB snapshot with 7-day and 28-day deltas, and per-ride TSS/IF — so feedback can reference your actual training load trajectory ("CTL +6 in 4 weeks is a healthy build, today\'s ride at IF 0.92 was suprathreshold"). On app load, existing users with an FTP set get IF/TSS backfilled and the curve computed without needing a fresh sync. Disconnecting Strava clears Strava-sourced FTP/weight but preserves manual values.'},
   {v:'2.26',d:'Comprehensive ride metrics in history + 4-week performance trends panel on Training tab',det:'History Strava rows now show all captured performance fields in a structured expandable view: power (NP vs avg watts with real/estimated flag, max watts, kJ total), cardio (avg and max HR, suffer score), movement (speed, cadence, elevation), and context (elapsed time, RPE, PR count, workout type badge). The history push is also extended to carry speed, max watts, device_watts flag, RPE, PR count and workout type. A new 4-week Performance Trends panel appears at the top of the Training tab — it shows trend arrows (↑→↓) comparing this week vs 4 weeks ago for distance, training load (kJ), avg NP and gym sessions, plus a compact week-by-week grid showing rides, km, kJ and gym count at a glance. Only shown when Strava ride data is present.'},
   {v:'2.25',d:'Smarter ride adaptation — analyzeStravaAdapt now uses kJ, suffer score and NP instead of duration alone',det:'The adaptation engine was only checking two things: did you show up, did you ride long enough. It ignored all quality signals. Rewritten to score each ride on three dimensions: (1) duration — ≥80% of planned time, (2) load quality — kilojoules output vs expected Zone 2 baseline (~9kJ/min), benefit-of-doubt if no power meter, (3) fatigue signal — suffer_score >200 on long rides flags overreaching, NP >25% above avg watts on long rides flags variable-intensity effort (not Zone 2). The factor now has 5 outcomes: overreaching consistently → ease back 0.05, crushing it (comp+quality both high) → pace up 0.08, completing but quality mixed → pace up 0.04, on track → hold, low completion → ease back 0.1. Adaptation detail (completion %, quality %, reason) stored in bike_adapt_detail and shown on the ride day adaptation badge so you can see what drove the change.'},
@@ -5102,6 +5103,180 @@ function rFitnessForm(){
 </div>`;
 }
 
+/* ── CYCLING PROGRESS CHART ── */
+// Single SVG chart with a metric switcher. 90-day window, one dot per ride,
+// smoothed 7-day rolling average line, smart default metric based on what data is
+// present (EF if power+HR available, NP if power-only, HR otherwise). Trend badge
+// in the header computed via linear regression slope across the window.
+const CYCLE_METRICS={
+  ef:{label:'Aerobic Efficiency',unit:'W/bpm',short:'EF',
+      get:a=>(a.average_watts&&a.average_heartrate)?+(a.average_watts/a.average_heartrate).toFixed(3):null,
+      hint:'Watts per heartbeat. Rising = aerobically fitter at the same effort.',better:'up'},
+  power:{label:'Avg Power',unit:'W',short:'Power',
+      get:a=>a.average_watts?Math.round(a.average_watts):null,better:'up'},
+  np:{label:'Normalised Power',unit:'W',short:'NP',
+      get:a=>a.weighted_average_watts?Math.round(a.weighted_average_watts):null,better:'up'},
+  hr:{label:'Avg Heart Rate',unit:'bpm',short:'HR',
+      get:a=>a.average_heartrate?Math.round(a.average_heartrate):null,
+      hint:'Falling at the same effort = improving fitness.',better:'down'},
+  tss:{label:'TSS per Ride',unit:'',short:'TSS',
+      get:a=>a._tss||null,better:'flat'},
+  dist:{label:'Distance',unit:'km',short:'Dist',
+      get:a=>a.distance?+(a.distance/1000).toFixed(1):null,better:'up'},
+  suffer:{label:'Suffer Score',unit:'',short:'Suffer',
+      get:a=>a.suffer_score||null,better:'flat'}
+};
+
+function _pickChartDefault(rides){
+  // Of last 30 days of rides, see which metrics have data and pick the most insightful
+  const recent=rides.slice(-30);
+  const hasEf=recent.filter(a=>a.average_watts&&a.average_heartrate).length;
+  const hasPower=recent.filter(a=>a.average_watts).length;
+  const hasHr=recent.filter(a=>a.average_heartrate).length;
+  if(hasEf>=Math.max(3,recent.length*0.4))return'ef';
+  if(hasPower>=Math.max(3,recent.length*0.4))return'np';
+  if(hasHr>=3)return'hr';
+  return'dist';
+}
+
+// Linear-regression slope over [{x, y}] points. Returns slope per day.
+function _regSlope(pts){
+  if(pts.length<2)return 0;
+  const n=pts.length;
+  const sx=pts.reduce((s,p)=>s+p.x,0);
+  const sy=pts.reduce((s,p)=>s+p.y,0);
+  const sxy=pts.reduce((s,p)=>s+p.x*p.y,0);
+  const sxx=pts.reduce((s,p)=>s+p.x*p.x,0);
+  const denom=n*sxx-sx*sx;
+  return denom===0?0:(n*sxy-sx*sy)/denom;
+}
+
+function rCyclingChart(){
+  const rides=DB.get('strava_activities',[])||[];
+  if(!rides.length)return'';
+  const cutoff=fd(addDays(new Date(),-90));
+  const recent=rides
+    .filter(a=>(a.start_date_local||'').slice(0,10)>=cutoff)
+    .sort((a,b)=>(a.start_date_local||'').localeCompare(b.start_date_local||''));
+  if(recent.length<2)return'';
+
+  const sel=DB.get('_chart_metric',null)||_pickChartDefault(recent);
+  const m=CYCLE_METRICS[sel]||CYCLE_METRICS.ef;
+  const today=new Date();
+  const startMs=addDays(today,-90).getTime();
+
+  // Build data points: x = days-from-start (0..90), y = metric value
+  const pts=recent.map(a=>{
+    const ds=(a.start_date_local||'').slice(0,10);
+    const v=m.get(a);
+    if(v==null)return null;
+    const dayMs=new Date(ds+'T12:00:00').getTime();
+    return{x:(dayMs-startMs)/86400000,y:v,date:ds,name:a.name||''};
+  }).filter(Boolean);
+
+  // Switcher chips render regardless of whether selected metric has data
+  const switcher=`<div style="display:flex;gap:5px;overflow-x:auto;margin-bottom:10px;padding-bottom:2px;-webkit-overflow-scrolling:touch">
+    ${Object.entries(CYCLE_METRICS).map(([k,v])=>{
+      const on=k===sel;
+      return`<button onclick="DB.set('_chart_metric','${k}');render()" style="flex:0 0 auto;padding:6px 12px;border-radius:100px;border:1px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.14)':'var(--s2)'};color:${on?'var(--acc)':'var(--t2)'};font-size:11px;font-weight:${on?'800':'600'};cursor:pointer;white-space:nowrap">${v.short}</button>`;
+    }).join('')}
+  </div>`;
+
+  if(pts.length<2){
+    return`<div style="margin-bottom:10px">
+<div class="sec-hdr">📊 Cycling Progress</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px">
+  ${switcher}
+  <div style="font-size:12px;color:var(--t2);text-align:center;padding:24px 8px">Not enough rides with ${m.label} data in the last 90 days.</div>
+</div></div>`;
+  }
+
+  // Chart dimensions (viewBox space; SVG scales width:100%)
+  const W=320,H=160,padL=36,padR=10,padT=10,padB=22;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const yVals=pts.map(p=>p.y);
+  let yMin=Math.min(...yVals), yMax=Math.max(...yVals);
+  if(yMin===yMax){yMin-=1;yMax+=1;}
+  const yPad=(yMax-yMin)*0.12;
+  yMin-=yPad;yMax+=yPad;
+  if(['power','np','hr','tss','suffer','dist'].includes(sel)&&yMin<0)yMin=0;
+  const sx=x=>padL+(x/90)*plotW;
+  const sy=y=>padT+plotH-((y-yMin)/(yMax-yMin))*plotH;
+
+  // 7-day rolling average — for each data point, average all points within ±3.5 days
+  const trendPts=pts.map(p=>{
+    const win=pts.filter(q=>Math.abs(q.x-p.x)<=3.5);
+    const avg=win.reduce((s,q)=>s+q.y,0)/win.length;
+    return{x:p.x,y:avg};
+  });
+  const trendPath=trendPts.map((p,i)=>`${i===0?'M':'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
+
+  // Gridlines (4 horizontal)
+  const gridLines=[0,0.33,0.66,1].map(t=>{
+    const y=padT+plotH*(1-t);
+    const label=(yMin+(yMax-yMin)*t);
+    const fmt=sel==='ef'?label.toFixed(2):(sel==='dist'?label.toFixed(1):Math.round(label));
+    return`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--bord)" stroke-width="0.5" stroke-dasharray="2 3"/>
+<text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--t2)">${fmt}</text>`;
+  }).join('');
+
+  // X-axis: day markers at 90/60/30/today
+  const xMarks=[{d:90,l:'90d'},{d:60,l:'60d'},{d:30,l:'30d'},{d:0,l:'today'}].map(t=>{
+    const x=sx(90-t.d);
+    return`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--t2)">${t.l}</text>`;
+  }).join('');
+
+  // Trend slope → direction badge
+  const slope=_regSlope(pts);
+  const range=yMax-yMin;
+  const slopeRel=range>0?slope*30/range:0; // change over 30 days as fraction of range
+  let trendBadge='';
+  const isUp=slopeRel>0.05, isDown=slopeRel<-0.05;
+  if(m.better==='up'){
+    if(isUp)trendBadge=`<span style="background:rgba(16,185,129,.15);color:var(--grn);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↑ IMPROVING</span>`;
+    else if(isDown)trendBadge=`<span style="background:rgba(239,68,68,.12);color:var(--red);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↓ REGRESSING</span>`;
+    else trendBadge=`<span style="background:var(--s2);color:var(--t2);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">→ STABLE</span>`;
+  }else if(m.better==='down'){
+    if(isDown)trendBadge=`<span style="background:rgba(16,185,129,.15);color:var(--grn);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↓ IMPROVING</span>`;
+    else if(isUp)trendBadge=`<span style="background:rgba(239,68,68,.12);color:var(--red);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↑ REGRESSING</span>`;
+    else trendBadge=`<span style="background:var(--s2);color:var(--t2);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">→ STABLE</span>`;
+  }else{
+    trendBadge=`<span style="background:var(--s2);color:var(--t2);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">${isUp?'↑':isDown?'↓':'→'} ${(slopeRel*100).toFixed(0)}%/mo</span>`;
+  }
+
+  // Compute first-half vs second-half averages for the value summary
+  const sorted=[...pts].sort((a,b)=>a.x-b.x);
+  const half=Math.floor(sorted.length/2);
+  const firstAvg=sorted.slice(0,half).reduce((s,p)=>s+p.y,0)/Math.max(half,1);
+  const lastAvg=sorted.slice(-half).reduce((s,p)=>s+p.y,0)/Math.max(half,1);
+  const pctChange=firstAvg>0?((lastAvg-firstAvg)/firstAvg*100):0;
+  const fmtVal=v=>sel==='ef'?v.toFixed(2):(sel==='dist'?v.toFixed(1):Math.round(v));
+  const summary=`<div style="display:flex;justify-content:space-between;align-items:baseline;margin-top:8px;font-size:11px">
+    <div style="color:var(--t2)">First half avg: <span style="color:var(--t1);font-weight:700">${fmtVal(firstAvg)}${m.unit?' '+m.unit:''}</span></div>
+    <div style="color:var(--t2)">Recent avg: <span style="color:var(--al);font-weight:800">${fmtVal(lastAvg)}${m.unit?' '+m.unit:''}</span> <span style="color:${pctChange>0?'var(--grn)':pctChange<0?'var(--red)':'var(--t2)'}">(${pctChange>0?'+':''}${pctChange.toFixed(1)}%)</span></div>
+  </div>`;
+
+  return`<div style="margin-bottom:10px">
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+  <span>📊 Cycling Progress</span>
+  ${trendBadge}
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px">
+  ${switcher}
+  <div style="font-size:12px;font-weight:700;color:var(--al);margin-bottom:2px">${m.label}${m.unit?` <span style="font-size:10px;font-weight:500;color:var(--t2)">(${m.unit})</span>`:''}</div>
+  ${m.hint?`<div style="font-size:10px;color:var(--t2);margin-bottom:6px">${m.hint}</div>`:''}
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:170px;display:block">
+    ${gridLines}
+    <path d="${trendPath}" stroke="var(--acc)" stroke-width="2" fill="none" opacity="0.55"/>
+    ${pts.map(p=>`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="var(--acc)" opacity="0.85"><title>${p.date} — ${fmtVal(p.y)}${m.unit?' '+m.unit:''}${p.name?' · '+p.name.replace(/[<>"]/g,''):''}</title></circle>`).join('')}
+    ${xMarks}
+  </svg>
+  ${summary}
+  <div style="font-size:10px;color:var(--t2);margin-top:5px;text-align:center">${pts.length} ride${pts.length!==1?'s':''} · purple line = 7-day rolling average</div>
+</div>
+</div>`;
+}
+
 /* ── PERFORMANCE TRENDS ── */
 function rPerfTrends(){
   const rides=DB.get('strava_activities',[])||[];
@@ -5250,6 +5425,8 @@ ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bott
 ${rCyclingProfile()}
 
 ${rFitnessForm()}
+
+${rCyclingChart()}
 
 ${rPerfTrends()}
 
