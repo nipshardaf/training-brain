@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.30';
+const APP_VERSION='2.31';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.31',d:'Auto-estimate FTP from ride data + group cycling sections + hide them when cycling is not selected',det:'Three Training tab improvements. (1) FTP is now auto-estimated from your Strava ride NP data using Coggan\'s intensity model — duration-adjusted top-10% of per-ride NP values: 30-45min × 0.88, 45-75min × 0.95, 75-120min × 1.00, 120+ min × 1.05. Runs automatically on every Strava sync (if you haven\'t set FTP manually) and on app load. A new ESTIMATED badge replaces the STRAVA/MANUAL tag when the value came from auto-estimation. A new "📊 Estimate FTP from your rides" button appears on the Cycling Profile card whenever you have 3+ qualifying rides — tap to recompute and apply with a confirmation dialog. (2) All cycling sections (Cycling Profile, Fitness · Fatigue · Form, Cycling Progress, Performance Trends) are now grouped together at the top, followed by Body Weight, Gym Progress, then PRs. (3) The cycling block is hidden entirely when "Cycling" is not one of your selected activities — keeps the Training tab clean for gym-only users. Also added a hint explaining why weight can\'t be auto-derived from ride data (no weight signal in activity objects — needs to be set on Strava profile or entered manually).'},
   {v:'2.30',d:'Gym Progress charts — weekly tonnage with muscle-group split + per-exercise 1RM progression with plateau detection',det:'New 💪 Gym Progress section on the Training tab with two charts. (1) Weekly Tonnage: stacked bar chart of total weight × reps across all completed sets, broken down by muscle group (Push / Pull / Legs / Core), last 12 weeks. Trend badge in the header compares recent 4-week average to prior 4-week average. Each bar is tooltipped with the per-group breakdown. (2) Estimated 1RM Progression: pick any exercise from a dropdown (sorted by recent frequency) and see your estimated one-rep max trajectory over 180 days. Uses Epley formula (weight × (1 + reps/30)) on the peak set per session. Shows current, best, and trend rate (kg/lb per month). Dashed regression line indicates direction. Auto-flags plateaus when no new peak 1RM in 21+ days, suggesting a deload or rep-range switch. AI weekly review prompt now receives tonnage trend (recent vs prior 4-week average) and per-exercise 1RM trajectories for your top 6 most-trained lifts, including plateau flags — so coaching advice can reference specific lifts ("your bench has plateaued at 92.5kg for 3 weeks → time for a deload at 85kg × 8").'},
   {v:'2.29',d:'Body weight tracking with chart, goal target, ETA estimate, and AI integration',det:'New ⚖️ Body Weight panel on the Training tab logs weigh-ins over time. Tap + Log weight to drop a weigh-in (default: previous value, just nudge the digit). Chart shows raw dots + 7-day rolling average over 90 days, with auto-detected trend rate (kg/week) in the header. Set an optional 🎯 goal weight and a dashed amber line appears on the chart with an estimated "weeks to reach goal" projection based on your current trajectory. 90-day total change shown as a stat above the chart. The existing Cycling Profile ✏️ Edit weight button now also writes to the history log, so manual edits become weigh-ins. Strava\'s athlete weight is auto-seeded as today\'s value on first import (unless you\'ve already logged manually). The AI weekly review prompt now receives the full weight context: current value, goal proximity, 7-day and 28-day deltas, rate of change, and healthy cut/bulk reference ranges — so feedback can correlate weight trends with training load (e.g. "you\'re losing 0.7 kg/week while CTL keeps climbing — sustainable cut" vs "weight dropping but CTL also falling — under-fueling, eat more carbs on ride days").'},
   {v:'2.28',d:'Cycling Progress chart — see fitness trends over 90 days with metric switcher (EF, NP, Power, HR, TSS, Distance, Suffer)',det:'A new SVG chart panel on the Training tab plots your last 90 days of rides. Tap chips at the top to switch between 7 metrics: Aerobic Efficiency (W/bpm — the gold-standard endurance fitness indicator, rising = aerobically fitter at the same effort), Normalised Power, Avg Power, Avg HR, TSS per ride, Distance, and Suffer Score. Each ride is a dot, the purple line is a 7-day rolling average for smoothing. The chart auto-picks a sensible default metric based on what data is available (EF if your rides have both power and HR, NP if power-only, HR if neither). A trend badge in the header (↑ IMPROVING / → STABLE / ↓ REGRESSING) uses linear regression across the window — and inverts for HR (lower = improving). Below the chart, first-half vs recent-half averages with a percentage change tell you the magnitude of improvement at a glance.'},
@@ -1868,6 +1869,43 @@ async function stravaFetchAthlete(){
   }catch(e){console.warn('Strava athlete fetch failed:',e);}
 }
 
+// Estimates FTP from ride NP/duration data using Coggan's intensity model:
+//   30-45 min rides: NP × 0.88   (NP for short hard efforts > FTP)
+//   45-75 min: NP × 0.95         (~ Coggan's "best 20-min × 0.95" but extended)
+//   75-120 min: NP × 1.00        (~ 1hr sustained ≈ FTP by definition)
+//   120+ min: NP × 1.05          (long ride NP runs slightly below FTP)
+// Takes the top-10% of per-ride estimates and averages them — robust against
+// outliers, captures genuine hard efforts. Returns null if not enough data.
+function _estimateFtpFromRides(rides){
+  if(!rides||rides.length<3)return null;
+  const ests=rides
+    .filter(a=>a.weighted_average_watts&&a.moving_time>=30*60)
+    .map(a=>{
+      const min=a.moving_time/60;
+      const f=min<45?0.88:min<75?0.95:min<120?1.0:1.05;
+      return a.weighted_average_watts*f;
+    });
+  if(ests.length<3)return null;
+  ests.sort((a,b)=>b-a);
+  const topN=Math.max(1,Math.ceil(ests.length*0.1));
+  const top=ests.slice(0,topN);
+  const avg=top.reduce((s,v)=>s+v,0)/top.length;
+  return Math.round(avg/5)*5; // Round to nearest 5W
+}
+
+// Auto-apply FTP estimate if user hasn't set one. Returns true if applied.
+// Idempotent: skips if profile.ftp already set OR ftp_source is 'manual'/'strava'.
+function _maybeAutoEstimateFtp(rides){
+  const profile=DB.get('user_profile',{})||{};
+  if(profile.ftp&&profile.ftp_source!=='estimated')return false; // Respect existing manual/strava value
+  const est=_estimateFtpFromRides(rides);
+  if(!est||est<60||est>500)return false;
+  if(profile.ftp===est)return false;
+  profile.ftp=est;profile.ftp_source='estimated';
+  DB.set('user_profile',profile);
+  return true;
+}
+
 // Adds derived training-load metrics (IF, TSS) to each ride object. Both require FTP.
 // IF = NP/FTP   TSS = (moving_time × NP²) / (FTP² × 3600) × 100
 function _annotateRideLoad(rides,ftp){
@@ -1944,6 +1982,9 @@ async function stravaFetchActivities(){
           kilojoules,suffer_score,
           perceived_exertion,pr_count,workout_type,
           name,type,sport_type}));
+    // Auto-estimate FTP if not set yet (uses NP from rides) — must happen before annotation
+    DB.set('strava_activities',rides); // Set first so _maybeAutoEstimateFtp can read rides
+    const autoFtpApplied=_maybeAutoEstimateFtp(rides);
     // Compute IF/TSS per ride and build CTL/ATL/TSB curve (requires FTP)
     const ftp=DB.get('user_profile',{})?.ftp||null;
     _annotateRideLoad(rides,ftp);
@@ -1951,6 +1992,7 @@ async function stravaFetchActivities(){
     DB.set('strava_activities',rides);
     DB.set('strava_last_sync',new Date().toISOString());
     if(curve)DB.set('bike_fitness_curve',curve);
+    if(autoFtpApplied)showToast(`📊 FTP estimated from rides: ${ftp}W (tap ✏️ to override)`,'var(--acc)');
     analyzeStravaAdapt(rides); // auto-adapt plan based on completion
     await syncUp(); // persist to Firebase so data survives across sessions
     const kb=Math.round(JSON.stringify(rides).length/1024);
@@ -5071,8 +5113,16 @@ function rCyclingProfile(){
   const ftpSrc=profile.ftp_source||(ftp?'manual':null);
   const wt=profile.weight;
   const wtSrc=profile.weight_source||(wt?'manual':null);
-  const srcBadge=(src)=>src==='strava'?`<span style="font-size:9px;background:rgba(252,76,2,.15);color:#fc4c02;padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">STRAVA</span>`:src==='manual'?`<span style="font-size:9px;background:var(--s2);color:var(--t2);padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">MANUAL</span>`:'';
+  const srcBadge=(src)=>{
+    if(src==='strava')return`<span style="font-size:9px;background:rgba(252,76,2,.15);color:#fc4c02;padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">STRAVA</span>`;
+    if(src==='manual')return`<span style="font-size:9px;background:var(--s2);color:var(--t2);padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">MANUAL</span>`;
+    if(src==='estimated')return`<span style="font-size:9px;background:rgba(124,58,237,.18);color:var(--acc);padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">ESTIMATED</span>`;
+    return'';
+  };
   const wpkg=(ftp&&wt)?+(ftp/wt).toFixed(2):null;
+  const rides=DB.get('strava_activities',[])||[];
+  const hasRides=rides.length>=3;
+  const canEstimate=hasRides&&_estimateFtpFromRides(rides)!=null;
   return`<div class="sec-hdr">Cycling Profile</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
   <div style="display:flex;gap:10px">
@@ -5092,8 +5142,31 @@ function rCyclingProfile(){
       <div style="font-size:10px;color:var(--t2);margin-top:6px">${wpkg?(wpkg<2.5?'Recreational':wpkg<3.5?'Trained':wpkg<4.5?'Strong':wpkg<5.5?'Elite':'World-class'):'—'}</div>
     </div>
   </div>
-  ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${DB.get('strava_token',null)?'Update FTP on Strava and re-sync, or set it manually here.':'Connect Strava to auto-import, or enter manually.'}</div>`:''}
+  ${canEstimate?`<button onclick="estimateFtp()" style="width:100%;margin-top:9px;background:rgba(124,58,237,.1);color:var(--acc);border:1px dashed rgba(124,58,237,.4);border-radius:10px;font-size:12px;font-weight:700;padding:9px;cursor:pointer">📊 ${ftpSrc==='estimated'?'Re-estimate':'Estimate'} FTP from your rides</button>`:''}
+  ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${hasRides?'Tap the button above to auto-estimate from ride power data, or set it manually.':DB.get('strava_token',null)?'Update FTP on Strava and re-sync, or set it manually here.':'Connect Strava to auto-import, or enter manually.'}</div>`:''}
+  ${!wt?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">⚖️ Weight cannot be auto-derived from ride data — set it on Strava (Settings → My Profile) and re-sync, or tap ✏️ Set above.</div>`:''}
 </div>`;
+}
+
+// Manual trigger for FTP estimation — confirms with user before applying
+function estimateFtp(){
+  const rides=DB.get('strava_activities',[])||[];
+  const est=_estimateFtpFromRides(rides);
+  if(!est){showToast('Not enough ride data (need 3+ rides ≥30 min with power)','var(--red)');return;}
+  const profile=DB.get('user_profile',{})||{};
+  const cur=profile.ftp;
+  const msg=cur
+    ?`Estimated FTP from your rides: ${est} W\n\nCurrent value: ${cur} W (${profile.ftp_source||'manual'})\n\nReplace with estimate?`
+    :`Estimated FTP from your rides: ${est} W\n\nThis is based on the top 10% of your ride NP values, adjusted for duration.\n\nApply this value?`;
+  if(!confirm(msg))return;
+  profile.ftp=est;profile.ftp_source='estimated';
+  DB.set('user_profile',profile);
+  _annotateRideLoad(rides,est);
+  DB.set('strava_activities',rides);
+  const curve=computeFitnessCurve(rides);
+  if(curve)DB.set('bike_fitness_curve',curve);
+  syncUp();render();
+  showToast(`📊 FTP set to ${est}W (estimated)`,'var(--grn)');
 }
 
 function editFtp(){
@@ -6023,15 +6096,12 @@ ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bott
 <button onclick="S.weekStart=getMon(new Date());go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
 </div>`;})()}
 
-${rCyclingProfile()}
+${(()=>{const p=DB.get('user_profile',null);const hasCy=(p?.activities||[]).includes('cycling');return hasCy?`${rCyclingProfile()}
+${rFitnessForm()}
+${rCyclingChart()}
+${rPerfTrends()}`:'';})()}
 
 ${rWeightChart()}
-
-${rFitnessForm()}
-
-${rCyclingChart()}
-
-${rPerfTrends()}
 
 ${rGymTonnage()}
 
@@ -7202,16 +7272,19 @@ function init(){
   }
   render();
   loadGifDb();
-  // Backfill IF/TSS + fitness curve for existing rides if FTP is known but curve/load missing
-  // (handles users upgrading to v2.27 who don't trigger a fresh sync immediately)
-  const _ftp=DB.get('user_profile',{})?.ftp;
-  if(_ftp){
+  // Backfill IF/TSS + fitness curve for existing rides. Also auto-estimate FTP if not
+  // set yet — handles users upgrading from older versions who don't trigger a fresh sync.
+  {
     const _existingRides=DB.get('strava_activities',[])||[];
-    if(_existingRides.length&&!DB.get('bike_fitness_curve',null)){
-      _annotateRideLoad(_existingRides,_ftp);
-      DB.set('strava_activities',_existingRides);
-      const _c=computeFitnessCurve(_existingRides);
-      if(_c)DB.set('bike_fitness_curve',_c);
+    if(_existingRides.length){
+      _maybeAutoEstimateFtp(_existingRides);
+      const _ftp=DB.get('user_profile',{})?.ftp;
+      if(_ftp&&!DB.get('bike_fitness_curve',null)){
+        _annotateRideLoad(_existingRides,_ftp);
+        DB.set('strava_activities',_existingRides);
+        const _c=computeFitnessCurve(_existingRides);
+        if(_c)DB.set('bike_fitness_curve',_c);
+      }
     }
   }
   // Auto-sync Strava if connected and last sync was >1 hour ago
