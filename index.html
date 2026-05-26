@@ -903,10 +903,18 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.19';
+const APP_VERSION='2.27';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.27',d:'FTP + body weight + IF/TSS per ride + CTL/ATL/TSB fitness curve — proper training-load tracking and richer AI feedback',det:'Imports FTP and body weight from Strava\'s athlete endpoint on connect and every sync (preserves manual overrides — tap ✏️ on the Cycling Profile card to set values manually). With FTP known, every ride now gets an IF (Intensity Factor = NP/FTP) and TSS (Training Stress Score) computed and displayed as a badge on the ride card and history detail. A new Fitness · Fatigue · Form panel on the Training tab shows current CTL (42-day exponential-weighted average TSS — your fitness), ATL (7-day EMA — your fatigue), TSB (CTL−ATL — your form), with a 28-day fitness trend mini-chart and a plain-English interpretation ("Productive training zone" / "Carrying fatigue" etc). 7-day delta indicators show whether fitness is rising or falling. A new Cycling Profile card displays FTP/weight/W·kg⁻¹ with badges showing whether each value came from Strava or was manually set. The AI weekly review prompt now receives the full cycling profile (FTP, weight, W/kg), current CTL/ATL/TSB snapshot with 7-day and 28-day deltas, and per-ride TSS/IF — so feedback can reference your actual training load trajectory ("CTL +6 in 4 weeks is a healthy build, today\'s ride at IF 0.92 was suprathreshold"). On app load, existing users with an FTP set get IF/TSS backfilled and the curve computed without needing a fresh sync. Disconnecting Strava clears Strava-sourced FTP/weight but preserves manual values.'},
+  {v:'2.26',d:'Comprehensive ride metrics in history + 4-week performance trends panel on Training tab',det:'History Strava rows now show all captured performance fields in a structured expandable view: power (NP vs avg watts with real/estimated flag, max watts, kJ total), cardio (avg and max HR, suffer score), movement (speed, cadence, elevation), and context (elapsed time, RPE, PR count, workout type badge). The history push is also extended to carry speed, max watts, device_watts flag, RPE, PR count and workout type. A new 4-week Performance Trends panel appears at the top of the Training tab — it shows trend arrows (↑→↓) comparing this week vs 4 weeks ago for distance, training load (kJ), avg NP and gym sessions, plus a compact week-by-week grid showing rides, km, kJ and gym count at a glance. Only shown when Strava ride data is present.'},
+  {v:'2.25',d:'Smarter ride adaptation — analyzeStravaAdapt now uses kJ, suffer score and NP instead of duration alone',det:'The adaptation engine was only checking two things: did you show up, did you ride long enough. It ignored all quality signals. Rewritten to score each ride on three dimensions: (1) duration — ≥80% of planned time, (2) load quality — kilojoules output vs expected Zone 2 baseline (~9kJ/min), benefit-of-doubt if no power meter, (3) fatigue signal — suffer_score >200 on long rides flags overreaching, NP >25% above avg watts on long rides flags variable-intensity effort (not Zone 2). The factor now has 5 outcomes: overreaching consistently → ease back 0.05, crushing it (comp+quality both high) → pace up 0.08, completing but quality mixed → pace up 0.04, on track → hold, low completion → ease back 0.1. Adaptation detail (completion %, quality %, reason) stored in bike_adapt_detail and shown on the ride day adaptation badge so you can see what drove the change.'},
+  {v:'2.24',d:'Richer Strava data — save and display NP, max HR, cadence, kJ, suffer score for better training analysis and AI review',det:'Extended the Strava activity field strip to capture 5 training-relevant fields that were previously discarded: weighted_average_watts (Normalized Power — more meaningful than average watts for variable rides), max_heartrate (effort ceiling for zone analysis), average_cadence (pedalling form), kilojoules (total energy output — the real training load number), suffer_score (Strava HR-zone stress score). These are now shown on the ride card (NP with avg watts as sub-label, avg/max HR combined, cadence block, kJ and suffer score as badges) and passed to the AI weekly review prompt so the coach has actual training load data to work with. History tab also carries the new fields. The field strip remains tight — elapsed_time is the only addition without a direct display use but is cheap and meaningful as stopped-time context (elapsed_time − moving_time = rest stops).'},
+  {v:'2.23',d:'Fix Strava sync not persisting — strip activities to minimal fields before storing to prevent localStorage quota overflow',det:'Raw Strava activity objects include GPS polylines, segment efforts, achievement counts, kudos, best efforts and dozens of other fields. At ~10KB per ride × 200 rides the strava_activities payload can exceed 2MB. DB.set() wraps localStorage.setItem in a silent try/catch, so when the quota is exceeded the data is never actually written, syncUp() then pushes whatever was previously stored (null or stale data), and the next loadFromCloud() overwrites with the stale Firebase snapshot. Fixed by mapping each activity to only the 9 fields the app actually reads: start_date_local, moving_time, distance, average_heartrate, average_watts, total_elevation_gain, name, type, sport_type. 200 rides now takes ~25-35KB instead of 1-3MB. syncUp() is also awaited so Firebase write completes before the success toast appears. Error cases now show a red toast instead of failing silently.'},
+  {v:'2.22',d:'Fix Strava rides not persisting across sessions — syncUp() now called after every Strava fetch',det:'stravaFetchActivities() was saving rides to localStorage and re-rendering but never calling syncUp(), so the data never reached Firebase. On next app open, loadFromCloud() ran first and overwrote localStorage with the stale Firebase snapshot (no activities), silently wiping the fresh sync. Fixed by adding syncUp() immediately after DB.set(strava_activities). Also added strava_last_sync to the _syncKeys list so the sync timestamp persists too, and fixed stravaDisconnect() which had the same missing syncUp() bug.'},
+  {v:'2.21',d:'Smart "Add workout" sheet on ride days — suggests pulling in the next scheduled gym session with a cascade preview; picking a different type auto-resolves week duplicates instead of always cascading',det:'The "Add workout" sheet now detects the next scheduled gym day and presents it as the primary suggestion with a coloured card showing the full cascade preview (e.g. Tue → Pull · Wed → Legs · Thu → REST). Confirming the suggestion does the cascade as before. If the user picks any of the other 3 types instead, the week schedule stays untouched but duplicate-resolution runs: any gym day that shares the chosen type with the new extra session gets replaced with whichever of the 4 standard gym types is absent from that week. If no type is missing (5-session edge case), the duplicate is left as-is. If there are no upcoming gym days left in the week, the sheet falls back to showing all 4 types without a suggestion.'},
+  {v:'2.20',d:'Add gym session to ride days — tap "+ Add workout" on any ride day to stack a gym session; remaining gym days shift forward automatically',det:'Ride days now show a "+ Add workout" button. Tapping it opens a sheet to pick a gym type (Push/Pull/Legs/Upper Pump). The chosen session is stored as extraGym on the plan entry and rendered below the ride card with its exercise list and a separate "Log workout" button. The extra gym log is stored under a separate key (extralog_YYYY-MM-DD) so it never overwrites the ride log. After adding the gym session, all subsequent unlocked gym days in the week cascade forward one slot — the first upcoming gym day gets the second\'s type, the second gets the third\'s, and the last becomes REST — so the weekly training volume stays correct. Ride days are never moved. Log saving is now routed through _saveLog() which respects S.activeLogKey so extra gym sets are always persisted to the right key.'},
   {v:'2.19',d:'Fix consecutive ride days — short ride now avoids the day immediately before or after the long ride',det:'buildWeek picked the long ride day first (best weather) then picked the short ride day from the remaining candidates penalising only the day after LEGS. There was no penalty for placing the short ride adjacent to the long ride, so Mon long + Tue short (or similar back-to-back pairs) was common. Fixed by computing postLongIdx and preLongIdx after r1 is known, then applying -60 and -40 score penalties respectively when sorting short ride candidates. Day after long ride gets the strongest penalty (-60) since riding hard two days in a row is the worst case; day before gets a moderate penalty (-40). The penalties are soft (not hard exclusions) so in tight weeks with few available days the app can still place them adjacent rather than failing.'},
   {v:'2.18',d:'Fix ride title still showing "Short Ride"/"Long Ride" — title now shows actual session name (Sweet Spot, Tempo Intervals, etc)',det:'The WI label (wi.l) for ride types was still returning the generic "Short Ride"/"Long Ride" i18n string even after v2.17 made the description dynamic. Updated wi.l to also call getRideSession() so the week row title now shows the actual session name. Description updated to show duration + ride category (Zone 2 for long rides, Quality/Recovery for short rides) without redundantly repeating the name.'},
   {v:'2.17',d:'Fix ride plan showing wrong info — week view now shows actual session name and duration from the structured plan, not hardcoded "25–35 min · Zone 2"',det:'The WI (workout info) object had hardcoded descriptions for ride types ("25–35 min · Zone 2 · Outdoor", "60–90 min · Zone 2 · Outdoor") that bore no relation to the actual planned sessions. The real planner (getRideSession) builds structured workouts — Tempo Intervals (55 min), Sweet Spot (60 min), Hill Repeats (55 min), Recovery Spin (35 min), Endurance Ride (duration adapts based on setup + Strava adapt factor) — but this info never made it to the week view row or day screen hero. Fixed by making the WI descriptions dynamic functions that call getRideSession() so the week row now shows e.g. "Tempo Intervals · 55 min · Outdoor" instead of "25–35 min · Zone 2". Also added a Strava adaptation badge (Pacing up / Easing back) on the ride card when bike_adapt_factor is meaningfully away from 1.0, so users can see the plan is reacting to their Strava history.'},
@@ -1093,6 +1101,7 @@ const TRANS={
     wr_s_summary:'Performance summary',wr_s_overload:'Progressive overload',
     wr_s_recovery:'Recovery flags',wr_s_focus:"Next week's focus",wr_s_sequence:'Exercise type & sequence',
     eow_title:'Week complete?',eow_sub:"Looks like you've finished your gym training for the week. Want AI to review your progress and set up next week with suggested weights?",eow_confirm:'✨ Plan next week with AI',eow_skip:'Not yet',eow_loading:'AI is planning your next week…',eow_done:'Next week ready! Tap any workout to see AI suggestions.',eow_done_plain:'Next week generated (no AI suggestions this time)',
+    add_gym_btn:'Add a workout',add_gym_title:'Add gym session',add_gym_sub:"Pick a workout to do on top of your ride. Your remaining gym days this week will shift forward automatically.",add_gym_extra_lbl:'Extra workout',add_gym_toast:'Gym session added — week updated',
     wr_email_btn:'Email me this summary',wr_emailed:'✅ Review emailed',
     wr_email_setup:'Add your email + EmailJS keys in Settings first',
     wr_email_fail:'Could not send email — check your EmailJS settings',
@@ -1170,6 +1179,7 @@ const TRANS={
     wr_s_summary:'表現總結',wr_s_overload:'漸進負荷建議',
     wr_s_recovery:'恢復警示',wr_s_focus:'下週重點',wr_s_sequence:'動作類型與順序',
     eow_title:'本週完成？',eow_sub:'看起來你已完成本週的健身訓練。要讓 AI 回顧你的進度並為下週制定計劃嗎？',eow_confirm:'✨ 用 AI 規劃下週',eow_skip:'還沒完成',eow_loading:'AI 正在規劃你的下週…',eow_done:'下週計劃已就緒！點擊任何訓練查看 AI 建議。',eow_done_plain:'下週計劃已生成（本次無 AI 建議）',
+    add_gym_btn:'新增訓練',add_gym_title:'新增健身課',add_gym_sub:'選擇要在騎行日加做的訓練類型。本週剩餘健身日將自動順延。',add_gym_extra_lbl:'額外訓練',add_gym_toast:'健身課已加入 — 本週計劃已更新',
     wr_email_btn:'把總結電郵給我',wr_emailed:'✅ 回顧已寄出',
     wr_email_setup:'請先在設定中加入你的電郵和 EmailJS 金鑰',
     wr_email_fail:'無法寄送電郵 — 請檢查你的 EmailJS 設定',
@@ -1826,10 +1836,79 @@ async function _stravaAccessToken(){
   }catch(e){console.warn('Strava refresh failed:',e);return tok.access;}
 }
 
+// Pulls athlete-level data (FTP, weight) from Strava. Strava is source of truth UNLESS
+// the user has manually overridden either value (ftp_source/weight_source === 'manual'),
+// in which case the manual value is preserved.
+async function stravaFetchAthlete(){
+  const token=await _stravaAccessToken();
+  if(!token)return;
+  try{
+    const r=await fetch('https://www.strava.com/api/v3/athlete',{headers:{Authorization:'Bearer '+token}});
+    if(!r.ok)return;
+    const a=await r.json();
+    const profile=DB.get('user_profile',{})||{};
+    let changed=false;
+    if(a.ftp&&a.ftp>0&&profile.ftp_source!=='manual'){
+      if(profile.ftp!==a.ftp){profile.ftp=a.ftp;profile.ftp_source='strava';changed=true;}
+    }
+    if(a.weight&&a.weight>0&&profile.weight_source!=='manual'){
+      const w=+a.weight.toFixed(1);
+      if(profile.weight!==w){profile.weight=w;profile.weight_source='strava';changed=true;}
+    }
+    if(changed)DB.set('user_profile',profile);
+  }catch(e){console.warn('Strava athlete fetch failed:',e);}
+}
+
+// Adds derived training-load metrics (IF, TSS) to each ride object. Both require FTP.
+// IF = NP/FTP   TSS = (moving_time × NP²) / (FTP² × 3600) × 100
+function _annotateRideLoad(rides,ftp){
+  if(!ftp||ftp<=0)return rides;
+  for(const a of rides){
+    const np=a.weighted_average_watts||a.average_watts;
+    if(np&&a.moving_time){
+      a._if=+(np/ftp).toFixed(2);
+      a._tss=Math.round((a.moving_time*np*np)/(ftp*ftp*3600)*100);
+    }
+  }
+  return rides;
+}
+
+// Builds 120-day fitness curve from ride TSS values. Uses exponentially-weighted moving
+// averages — CTL = 42-day (fitness), ATL = 7-day (fatigue), TSB = CTL−ATL (form).
+// Returns an object keyed by date string with {tss, ctl, atl, tsb}.
+function computeFitnessCurve(rides){
+  if(!rides||!rides.length)return null;
+  // Daily TSS totals
+  const dailyTss={};
+  for(const a of rides){
+    if(!a._tss)continue;
+    const ds=(a.start_date_local||'').slice(0,10);
+    if(!ds)continue;
+    dailyTss[ds]=(dailyTss[ds]||0)+a._tss;
+  }
+  if(!Object.keys(dailyTss).length)return null;
+  // Walk forward from 120 days ago to today, applying EMA
+  const today=new Date();
+  const start=addDays(today,-120);
+  const curve={};
+  let ctl=0,atl=0;
+  const kCtl=1-Math.exp(-1/42), kAtl=1-Math.exp(-1/7);
+  for(let d=new Date(start);d<=today;d=addDays(d,1)){
+    const ds=fd(d);
+    const tss=dailyTss[ds]||0;
+    ctl=ctl+(tss-ctl)*kCtl;
+    atl=atl+(tss-atl)*kAtl;
+    curve[ds]={tss,ctl:+ctl.toFixed(1),atl:+atl.toFixed(1),tsb:+(ctl-atl).toFixed(1)};
+  }
+  return curve;
+}
+
 async function stravaFetchActivities(){
   const token=await _stravaAccessToken();
   if(!token)return;
   try{
+    // Pull athlete data (FTP/weight) in parallel — fail-soft, doesn't block activity sync
+    stravaFetchAthlete().catch(()=>{});
     const after=Math.floor(Date.now()/1000)-180*86400; // 6 months of history
     const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=200`,{
       headers:{Authorization:'Bearer '+token}
@@ -1837,44 +1916,112 @@ async function stravaFetchActivities(){
     if(!r.ok)throw new Error('activities '+r.status);
     const acts=await r.json();
     const _rideTypes=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
-    const rides=acts.filter(a=>_rideTypes.has(a.type)||_rideTypes.has(a.sport_type));
+    // Strip each activity to only the fields the app uses — raw Strava objects include GPS
+    // polylines, segment efforts, achievement data etc. which can push 200 rides to 2MB+,
+    // silently blowing localStorage quota and causing syncUp to write stale/null data.
+    const rides=acts
+      .filter(a=>_rideTypes.has(a.type)||_rideTypes.has(a.sport_type))
+      .map(({start_date_local,moving_time,elapsed_time,distance,
+             average_heartrate,max_heartrate,
+             average_watts,weighted_average_watts,max_watts,device_watts,
+             total_elevation_gain,average_cadence,average_speed,
+             kilojoules,suffer_score,
+             perceived_exertion,pr_count,workout_type,
+             name,type,sport_type})=>
+        ({start_date_local,moving_time,elapsed_time,distance,
+          average_heartrate,max_heartrate,
+          average_watts,weighted_average_watts,max_watts,device_watts,
+          total_elevation_gain,average_cadence,average_speed,
+          kilojoules,suffer_score,
+          perceived_exertion,pr_count,workout_type,
+          name,type,sport_type}));
+    // Compute IF/TSS per ride and build CTL/ATL/TSB curve (requires FTP)
+    const ftp=DB.get('user_profile',{})?.ftp||null;
+    _annotateRideLoad(rides,ftp);
+    const curve=computeFitnessCurve(rides);
     DB.set('strava_activities',rides);
     DB.set('strava_last_sync',new Date().toISOString());
-    analyzeStravaAdapt(rides); // C: auto-adapt plan based on completion
+    if(curve)DB.set('bike_fitness_curve',curve);
+    analyzeStravaAdapt(rides); // auto-adapt plan based on completion
+    await syncUp(); // persist to Firebase so data survives across sessions
+    const kb=Math.round(JSON.stringify(rides).length/1024);
+    const ftpNote=ftp?` · FTP ${ftp}W`:' · set FTP for TSS';
+    showToast(`🟠 Strava synced · ${rides.length} rides · ${kb}KB${ftpNote}`,'var(--grn)');
     render();
-  }catch(e){console.warn('Strava activities failed:',e);}
+  }catch(e){
+    console.warn('Strava activities failed:',e);
+    showToast(`⚠️ Strava sync failed: ${e?.message||e}`,'var(--red)');
+  }
 }
 
 /* ── C: STRAVA AUTO-ADAPT ── */
+// Scores each completed ride against its plan on 3 dimensions:
+//   duration  — did they ride ≥80% of planned time?
+//   load      — did kJ output justify the session? (9 kJ/min Zone 2 baseline; benefit-of-doubt if no power meter)
+//   fatigue   — is suffer_score consistently too high for the session type? (overreaching signal)
+// The factor drives getRideSession() duration so plans scale up or back automatically.
 function analyzeStravaAdapt(rides){
-  // Look at last 2 completed weeks and measure ride completion vs plan
-  let totalPlanned=0,totalCompleted=0,durationMatch=0;
+  const rideTypes=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'];
+  let totalPlanned=0,totalCompleted=0,qualityCount=0,overreachCount=0;
   for(let w=1;w<=2;w++){
     const mon=getMon(addDays(new Date(),-w*7));
     const plan=DB.get(DB.pk(mon),null);
     if(!plan)continue;
-    const rideDays=plan.filter(d=>['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(d.type));
+    const rideDays=plan.filter(d=>rideTypes.includes(d.type));
     totalPlanned+=rideDays.length;
     rideDays.forEach(dp=>{
       const actual=rides.find(a=>(a.start_date_local||'').slice(0,10)===dp.date);
-      if(actual){
-        totalCompleted++;
-        // Check if they hit ≥80% of planned duration
-        const setup=DB.get('bike_setup',{dur:45});
-        const plannedMin=dp.type.includes('LONG')?getRideDuration('LONG'):getRideDuration('SHORT');
-        if(actual.moving_time/60>=plannedMin*0.8)durationMatch++;
-      }
+      if(!actual)return;
+      totalCompleted++;
+      const plannedMin=dp.type.includes('LONG')?getRideDuration('LONG'):getRideDuration('SHORT');
+      const actualMin=actual.moving_time/60;
+      // 1. Duration: did they ride ≥80% of planned time?
+      const durationOk=actualMin>=plannedMin*0.8;
+      // 2. Load quality: ~9 kJ/min is a Zone 2 baseline; no power meter → give benefit of doubt
+      const expectedKj=plannedMin*9;
+      const kjOk=!actual.kilojoules||actual.kilojoules>=expectedKj*0.75;
+      // 3. NP sanity: if NP is much higher than avg watts on a long ride, they were spiking effort
+      const npSpike=actual.weighted_average_watts&&actual.average_watts&&
+        dp.type.includes('LONG')&&
+        actual.weighted_average_watts>actual.average_watts*1.25; // >25% higher NP = variable-intensity
+      // 4. Overreaching: suffer score too high for intended session type
+      //    Long rides are Zone 2 (suffer ~80–150 is fine); >200 = pushing too hard
+      //    Short/interval rides can go higher naturally
+      const overreaching=actual.suffer_score!=null&&
+        actual.suffer_score>200&&dp.type.includes('LONG');
+      if(durationOk&&kjOk&&!npSpike)qualityCount++;
+      if(overreaching)overreachCount++;
     });
   }
   if(totalPlanned===0)return;
-  const compRate=totalCompleted/totalPlanned; // 0–1
-  const durRate=totalCompleted>0?durationMatch/totalCompleted:0;
+  const compRate=totalCompleted/totalPlanned;
+  const qualityRate=totalCompleted>0?qualityCount/totalCompleted:0;
+  const overreachRate=totalCompleted>0?overreachCount/totalCompleted:0;
   let cur=DB.get('bike_adapt_factor',1.0);
-  if(compRate>=0.9&&durRate>=0.8){cur=Math.min(1.3,cur+0.08);} // crushed it
-  else if(compRate>=0.6){/* on track — hold */}
-  else{cur=Math.max(0.7,cur-0.1);} // struggling — back off
+  let reason='';
+  if(overreachRate>=0.5){
+    // Consistently spiking effort on long rides → scale back regardless of completion
+    cur=Math.max(0.7,cur-0.05);reason='overreaching';
+  } else if(compRate>=0.9&&qualityRate>=0.8){
+    cur=Math.min(1.3,cur+0.08);reason='crushing it';
+  } else if(compRate>=0.9&&qualityRate>=0.5){
+    cur=Math.min(1.3,cur+0.04);reason='completing, quality mixed';
+  } else if(compRate>=0.6){
+    reason='on track';// hold
+  } else {
+    cur=Math.max(0.7,cur-0.1);reason='low completion';
+  }
   DB.set('bike_adapt_factor',Math.round(cur*100)/100);
   DB.set('bike_adapt_check',fd(new Date()));
+  // Store breakdown for diagnostics (shown in bike setup / settings)
+  DB.set('bike_adapt_detail',{
+    compRate:Math.round(compRate*100),
+    qualityRate:Math.round(qualityRate*100),
+    overreachRate:Math.round(overreachRate*100),
+    reason,planned:totalPlanned,completed:totalCompleted,
+    factor:Math.round(cur*100)/100,
+    updated:fd(new Date())
+  });
 }
 
 function getRideDuration(which){
@@ -1907,7 +2054,13 @@ function stravaRideOnDate(dateStr){
 
 function stravaDisconnect(){
   DB.set('strava_token',null);DB.set('strava_activities',null);DB.set('strava_last_sync',null);
-  render();
+  DB.set('bike_fitness_curve',null);
+  // Clear Strava-sourced FTP/weight (preserve manual overrides)
+  const profile=DB.get('user_profile',{})||{};
+  if(profile.ftp_source==='strava'){delete profile.ftp;delete profile.ftp_source;}
+  if(profile.weight_source==='strava'){delete profile.weight;delete profile.weight_source;}
+  DB.set('user_profile',profile);
+  syncUp();render();
 }
 
 function openBikeSetup(){
@@ -2248,7 +2401,7 @@ function energyTargets(exId,energy){
 }
 
 /* ── STATE ── */
-const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false,_friendCode:null,_friendRequests:{},_friendSummaries:{},_friendsLoaded:false,_weekTargets:{}};
+const S = {screen:'week',weekStart:null,viewDate:null,energy:null,activeLog:null,activeLogKey:null,gifCache:{},openLogEx:0,authed:false,guest:false,lockMode:'choose',pinConfirm:'',baseExercises:null,exCollapsed:new Set(),exExpanded:new Set(),_authNew:false,_friendCode:null,_friendRequests:{},_friendSummaries:{},_friendsLoaded:false,_weekTargets:{}};
 let _pinBuf='';
 
 /* ── STORAGE ── */
@@ -3052,7 +3205,7 @@ async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','strava_token','strava_activities','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage'];
+    'user_profile','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
@@ -3623,6 +3776,8 @@ ${isGym&&dp.exercises?rExList(dp,log):''}
 ${isRide?rRideCard(dp):''}
 ${dp.type==='REST'?rRestCard():''}
 ${isGym?`<button class="btn btn-p mt12" onclick="startLog('${ds}')">${log&&log.completed?'✓ '+_T('view_log'):log?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button>`:''}
+${isRide&&dp.extraGym?(()=>{const xlog=DB.get('extralog_'+ds,null);const xwi=WI[dp.extraGym.type]||WI.REST;return`<div style="border-top:1px solid var(--bord);margin-top:20px;padding-top:18px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:14px">💪</span><div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.8px">${_T('add_gym_extra_lbl')}: ${typeof xwi.l==='function'?xwi.l():xwi.l}</div></div>${rExList({exercises:dp.extraGym.exercises},xlog)}<button class="btn btn-p mt12" onclick="startLog('${ds}',true)">${xlog&&xlog.completed?'✓ '+_T('view_log'):xlog?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button></div>`;})():''}
+${isRide&&!dp.extraGym&&!S.guest?`<button class="btn" style="width:100%;margin-top:12px;background:var(--s2);color:var(--al);border:1.5px dashed var(--acc);border-radius:14px;padding:12px;font-size:14px;font-weight:700" onclick="openAddGymSheet('${ds}')">+ ${_T('add_gym_btn')}</button>`:''}
 </div>`;
 }
 
@@ -3690,13 +3845,19 @@ function rRideCard(dp){
   const actual=stravaRideOnDate(dp.date);
   const actualHtml=actual?`
 <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
-  <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
+  <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
+    ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 TSS ${actual._tss}${actual._if?` · IF ${actual._if}`:''}</span>`:''}
+    ${actual.suffer_score?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">⚡ Load ${actual.suffer_score}</span>`:''}
+    ${actual.kilojoules?`<span class="bdg" style="background:rgba(59,130,246,.1);color:#60a5fa">🔋 ${Math.round(actual.kilojoules)}kJ</span>`:''}
+  </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
-    <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${(actual.distance/1000).toFixed(1)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">km</div></div>
-    <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.moving_time/60)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">min</div></div>
-    ${actual.average_heartrate?`<div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_heartrate)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg bpm</div></div>`:''}
-    ${actual.average_watts?`<div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg W</div></div>`:''}
-    <div style="flex:1;min-width:70px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>
+    <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${(actual.distance/1000).toFixed(1)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">km</div></div>
+    <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.moving_time/60)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">min</div></div>
+    ${actual.average_heartrate?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_heartrate)}${actual.max_heartrate?`<span style="font-size:13px;font-weight:600;color:var(--t2)"> /${Math.round(actual.max_heartrate)}</span>`:''}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">${actual.max_heartrate?'avg/max ':'avg '}bpm</div></div>`:''}
+    ${(actual.weighted_average_watts||actual.average_watts)?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.weighted_average_watts||actual.average_watts)}</div>${actual.weighted_average_watts&&actual.average_watts?`<div style="font-size:10px;color:var(--t2);margin-top:0">${Math.round(actual.average_watts)}W avg</div>`:''}  <div style="font-size:10px;color:var(--t2);margin-top:2px">${actual.weighted_average_watts?'NP (W)':'avg W'}</div></div>`:''}
+    <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>
+    ${actual.average_cadence?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_cadence)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">rpm</div></div>`:''}
   </div>
   ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
 </div>`:'';
@@ -3741,7 +3902,22 @@ function rRideCard(dp){
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">⏱ ${s.total} min</span>
     <span class="bdg" style="background:${isRec?'rgba(16,185,129,.14)':'rgba(245,158,11,.14)'};color:${isRec?'var(--grn)':'var(--amb)'}">${s.phase}</span>
-    ${(()=>{const af=DB.get('bike_adapt_factor',1.0);return af>1.05?`<span class="bdg" style="background:rgba(16,185,129,.12);color:var(--grn)">📈 Pacing up · Strava</span>`:af<0.95?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">📉 Easing back · Strava</span>`:''})()}
+    ${(()=>{
+      const af=DB.get('bike_adapt_factor',1.0);
+      const det=DB.get('bike_adapt_detail',null);
+      if(af>1.05){
+        const tip=det?` · ${det.compRate}% done · ${det.qualityRate}% quality`:'';
+        return`<span class="bdg" style="background:rgba(16,185,129,.12);color:var(--grn)" title="${det?.reason||''}">📈 Pacing up${tip}</span>`;
+      }
+      if(af<0.95){
+        const tip=det?` · ${det.reason||'low completion'}`:'';
+        return`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)" title="${det?.reason||''}">📉 Easing back${tip}</span>`;
+      }
+      if(det){
+        return`<span class="bdg" style="background:var(--s2);color:var(--t2)">📊 ${det.compRate}% done · ${det.qualityRate}% quality</span>`;
+      }
+      return'';
+    })()}
   </div>
 </div>
 ${actualHtml}
@@ -4088,9 +4264,36 @@ function collectReviewData(){
   }
   (DB.get('strava_activities',[])||[]).forEach(a=>{
     const ds=(a.start_date_local||'').slice(0,10);
-    if(ds>=cutoff)rides.push({date:ds,src:'strava',dur:Math.round((a.moving_time||0)/60),dist:+((a.distance||0)/1000).toFixed(1),hr:a.average_heartrate?Math.round(a.average_heartrate):null,watts:a.average_watts?Math.round(a.average_watts):null});
+    if(ds>=cutoff)rides.push({date:ds,src:'strava',
+      dur:Math.round((a.moving_time||0)/60),
+      dist:+((a.distance||0)/1000).toFixed(1),
+      hr:a.average_heartrate?Math.round(a.average_heartrate):null,
+      maxhr:a.max_heartrate?Math.round(a.max_heartrate):null,
+      watts:a.average_watts?Math.round(a.average_watts):null,
+      np:a.weighted_average_watts?Math.round(a.weighted_average_watts):null,
+      elev:a.total_elevation_gain?Math.round(a.total_elevation_gain):null,
+      cad:a.average_cadence?Math.round(a.average_cadence):null,
+      kj:a.kilojoules?Math.round(a.kilojoules):null,
+      suffer:a.suffer_score||null,
+      tss:a._tss||null,
+      intf:a._if||null});
   });
-  return{gymSessions,rides,prs:DB.get('prs',{}),plan:DB.get(DB.pk(getMon(today)),null)};
+  // Fitness/Fatigue/Form snapshot + 4-week curve trend
+  const curve=DB.get('bike_fitness_curve',null);
+  let fitness=null;
+  if(curve){
+    const tk=fd(today);
+    const yk=fd(addDays(today,-1));
+    const cur=curve[tk]||curve[yk]||null;
+    const wk1=curve[fd(addDays(today,-7))]||null;
+    const wk4=curve[fd(addDays(today,-28))]||null;
+    if(cur)fitness={
+      ctl:Math.round(cur.ctl),atl:Math.round(cur.atl),tsb:Math.round(cur.tsb),
+      ctl_7d_delta:wk1?+(cur.ctl-wk1.ctl).toFixed(1):null,
+      ctl_28d_delta:wk4?+(cur.ctl-wk4.ctl).toFixed(1):null
+    };
+  }
+  return{gymSessions,rides,prs:DB.get('prs',{}),plan:DB.get(DB.pk(getMon(today)),null),fitness,profile:DB.get('user_profile',{})};
 }
 
 function buildReviewPrompt(d){
@@ -4099,7 +4302,35 @@ function buildReviewPrompt(d){
   const goalStr=(profile.goals||[]).filter(Boolean).length?(profile.goals||[]).join(', '):(profile.goal||'general fitness');
   const levelStr=profile.level||'intermediate';
   const gymTxt=d.gymSessions.length?d.gymSessions.slice(0,45).map(s=>`${s.date} (energy:${s.energy}${s.completed?', completed':', partial'}) — ${s.exercises.join(' | ')}`).join('\n'):'No gym sessions logged in the last 8 weeks.';
-  const rideTxt=d.rides.length?d.rides.slice(0,45).map(r=>`${r.date} [${r.src}] ${r.dur}min${r.dist!=null?', '+r.dist+'km':''}${r.hr!=null?', '+r.hr+'bpm':''}${r.watts!=null?', '+r.watts+'W':''}${r.rpe!=null?', RPE'+r.rpe:''}`).join('\n'):'No rides logged in the last 8 weeks.';
+  const rideTxt=d.rides.length?d.rides.slice(0,45).map(r=>{
+    let s=`${r.date} [${r.src}] ${r.dur}min`;
+    if(r.dist!=null)s+=`, ${r.dist}km`;
+    if(r.elev!=null)s+=`, ${r.elev}m elev`;
+    if(r.tss!=null)s+=`, TSS:${r.tss}`;
+    if(r.intf!=null)s+=`, IF:${r.intf}`;
+    if(r.kj!=null)s+=`, ${r.kj}kJ`;
+    if(r.np!=null)s+=`, NP:${r.np}W`;
+    else if(r.watts!=null)s+=`, avgW:${r.watts}`;
+    if(r.watts!=null&&r.np!=null)s+=` (avg:${r.watts}W)`;
+    if(r.hr!=null)s+=`, avgHR:${r.hr}`;
+    if(r.maxhr!=null)s+=`/${r.maxhr}max`;
+    if(r.cad!=null)s+=`, ${r.cad}rpm`;
+    if(r.suffer!=null)s+=`, load:${r.suffer}`;
+    if(r.rpe!=null)s+=`, RPE:${r.rpe}`;
+    return s;
+  }).join('\n'):'No rides logged in the last 8 weeks.';
+  // Cycling profile + fitness snapshot
+  const cycTxt=(()=>{
+    const p=d.profile||{};
+    const parts=[];
+    if(p.ftp)parts.push(`FTP: ${p.ftp}W`);
+    if(p.weight)parts.push(`Weight: ${p.weight}kg`);
+    if(p.ftp&&p.weight)parts.push(`W/kg: ${(p.ftp/p.weight).toFixed(2)}`);
+    return parts.length?parts.join(' · '):'FTP/weight not set — TSS and load metrics unavailable.';
+  })();
+  const fitTxt=d.fitness?`Fitness (CTL, 42-day): ${d.fitness.ctl} · Fatigue (ATL, 7-day): ${d.fitness.atl} · Form (TSB): ${d.fitness.tsb>0?'+':''}${d.fitness.tsb}
+7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'} · 28-day CTL change: ${d.fitness.ctl_28d_delta!=null?(d.fitness.ctl_28d_delta>0?'+':'')+d.fitness.ctl_28d_delta:'n/a'}
+Interpretation: TSB > +15 = peaked/fresh; +5 to -10 = productive training; -10 to -25 = carrying fatigue; < -25 = deep fatigue, prioritise recovery. Healthy CTL build rate is 3-5 points/week.`:'No fitness curve yet — set FTP and sync Strava to enable.';
   const prTxt=Object.entries(d.prs||{}).map(([id,p])=>`${EX[id]?EX[id].n:id}: ${p.w}${u}×${p.r}`).join(', ')||'No PRs recorded.';
   const planTxt=d.plan?d.plan.map(x=>`${x.date}:${x.type}`).join(', '):'No plan set for the current week.';
   const zh=DB.get('lang','en')==='zh';
@@ -4115,6 +4346,12 @@ SEQUENCE: <exercise type priorities and sequencing advice tailored to this user'
 
 === USER PROFILE ===
 Goal: ${goalStr} | Level: ${levelStr}
+
+=== CYCLING PROFILE ===
+${cycTxt}
+
+=== CURRENT FITNESS / FATIGUE / FORM ===
+${fitTxt}
 
 === GYM SESSIONS (most recent first) ===
 ${gymTxt}
@@ -4335,21 +4572,31 @@ function parseNextWeekSuggestions(text){
 }
 
 /* ── LOG SCREEN ── */
-function startLog(ds){
+function startLog(ds,extra){
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   const dp=plan?.find(d=>d.date===ds);
   if(!dp)return;
-  let log=DB.get(DB.lk(S.viewDate),null);
+  const logType=extra?dp.extraGym?.type:dp.type;
+  const logExIds=extra?dp.extraGym?.exercises:dp.exercises;
+  if(!logType||!logExIds)return;
+  const lk=extra?('extralog_'+ds):DB.lk(S.viewDate);
+  let log=DB.get(lk,null);
   if(!log){
-    log={date:ds,type:dp.type,exercises:(dp.exercises||[]).map(id=>{
+    log={date:ds,type:logType,exercises:logExIds.map(id=>{
       const ex=EX[id];
       const last=getLastLog(id);
       return{id,sets:makeSets(id,S.energy||'okay',last)};
     }),completed:false};
-    DB.set(DB.lk(S.viewDate),log);
+    DB.set(lk,log);
   }
-  S.activeLog=log;S.openLogEx=0;go('log');
+  S.activeLog=log;S.activeLogKey=lk;S.openLogEx=0;go('log');
+}
+
+/* Save active log to the correct key (handles extra gym logs on ride days) */
+function _saveLog(){
+  if(!S.activeLog)return;
+  DB.set(S.activeLogKey||DB.lk(S.viewDate),S.activeLog);
 }
 
 function makeSets(exId,energy,last){
@@ -4509,7 +4756,7 @@ function updSet(ei,si,field,val){
   const set=S.activeLog.exercises[ei]?.sets[si];
   if(!set)return;
   set[field]=val;
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   debouncedSync();
 }
 
@@ -4519,7 +4766,7 @@ function togSet(ei,si){
   const le=S.activeLog.exercises[ei];
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r));
   debouncedSync();
   // patch DOM
@@ -4568,7 +4815,7 @@ function addSet(ei){
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
   le.sets.push({w:last.w||'',r:last.r||'',done:false});
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   const body=document.getElementById('lbody'+ei);
   if(!body)return;
   const addBtn=body.querySelector('.add-set');
@@ -4678,7 +4925,7 @@ function adjW(ei,si,dir){
   const nw=Math.max(0,Math.round((cur+dir*step)*10)/10);
   set.w=nw%1===0?String(nw):nw.toFixed(1);
   set._edited=true;
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   const inp=document.querySelector(`#sr${ei}_${si} .w-inp`);
   if(inp){inp.value=set.w;inp.classList.remove('prefilled','ai-fill');}
   debouncedSync();
@@ -4694,12 +4941,242 @@ function markEdited(ei,si,inp){
 function completeWk(){
   if(!S.activeLog)return;
   S.activeLog.completed=true;
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   const ids=S.activeLog.exercises.map(e=>e.id);
   const recent=DB.get('recent_ex',[]);
   DB.set('recent_ex',[...new Set([...ids,...recent])].slice(0,40));
   syncUp();
   go('day',{viewDate:S.viewDate});
+}
+
+/* ── CYCLING PROFILE (FTP + weight) ── */
+// FTP and body weight power the training-load math (IF, TSS, CTL, W/kg). Auto-imported
+// from Strava on connect/sync; user can override by tapping ✏️ — manual values are
+// preserved across syncs (ftp_source/weight_source flag tracks origin).
+function rCyclingProfile(){
+  const profile=DB.get('user_profile',{})||{};
+  const hasCy=(profile.activities||[]).includes('cycling');
+  if(!hasCy)return'';
+  const ftp=profile.ftp;
+  const ftpSrc=profile.ftp_source||(ftp?'manual':null);
+  const wt=profile.weight;
+  const wtSrc=profile.weight_source||(wt?'manual':null);
+  const srcBadge=(src)=>src==='strava'?`<span style="font-size:9px;background:rgba(252,76,2,.15);color:#fc4c02;padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">STRAVA</span>`:src==='manual'?`<span style="font-size:9px;background:var(--s2);color:var(--t2);padding:1px 5px;border-radius:6px;font-weight:700;margin-left:5px">MANUAL</span>`:'';
+  const wpkg=(ftp&&wt)?+(ftp/wt).toFixed(2):null;
+  return`<div class="sec-hdr">Cycling Profile</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
+  <div style="display:flex;gap:10px">
+    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">FTP${srcBadge(ftpSrc)}</div>
+      <div style="font-size:20px;font-weight:800;margin-top:4px">${ftp?ftp+'<span style="font-size:11px;color:var(--t2);font-weight:600"> W</span>':'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
+      <button onclick="editFtp()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0">✏️ ${ftp?'Edit':'Set'}</button>
+    </div>
+    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">WEIGHT${srcBadge(wtSrc)}</div>
+      <div style="font-size:20px;font-weight:800;margin-top:4px">${wt?wt+'<span style="font-size:11px;color:var(--t2);font-weight:600"> kg</span>':'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
+      <button onclick="editWeight()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0">✏️ ${wt?'Edit':'Set'}</button>
+    </div>
+    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
+      <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">W/KG</div>
+      <div style="font-size:20px;font-weight:800;margin-top:4px">${wpkg||'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:6px">${wpkg?(wpkg<2.5?'Recreational':wpkg<3.5?'Trained':wpkg<4.5?'Strong':wpkg<5.5?'Elite':'World-class'):'—'}</div>
+    </div>
+  </div>
+  ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${DB.get('strava_token',null)?'Update FTP on Strava and re-sync, or set it manually here.':'Connect Strava to auto-import, or enter manually.'}</div>`:''}
+</div>`;
+}
+
+function editFtp(){
+  const cur=DB.get('user_profile',{})?.ftp||'';
+  const v=prompt(`Your FTP (Functional Threshold Power) in watts.\n\nThe ~1hr max power you can sustain. Used to compute IF, TSS and the fitness curve.\n\nTypical: recreational 150-200W, trained 200-280W, strong 280-340W.`,cur);
+  if(v===null)return;
+  const n=parseInt(v,10);
+  const profile=DB.get('user_profile',{})||{};
+  if(!v.trim()){delete profile.ftp;delete profile.ftp_source;}
+  else if(isNaN(n)||n<50||n>600){showToast('FTP must be 50-600W','var(--red)');return;}
+  else{profile.ftp=n;profile.ftp_source='manual';}
+  DB.set('user_profile',profile);
+  // Recompute ride load + fitness curve with new FTP
+  const rides=DB.get('strava_activities',[])||[];
+  _annotateRideLoad(rides,profile.ftp);
+  DB.set('strava_activities',rides);
+  const curve=computeFitnessCurve(rides);
+  if(curve)DB.set('bike_fitness_curve',curve);
+  syncUp();render();
+  showToast(profile.ftp?`FTP set to ${profile.ftp}W — load metrics recomputed`:'FTP cleared','var(--grn)');
+}
+
+function editWeight(){
+  const cur=DB.get('user_profile',{})?.weight||'';
+  const v=prompt('Your body weight in kg.\n\nUsed to compute W/kg ratios.',cur);
+  if(v===null)return;
+  const n=parseFloat(v);
+  const profile=DB.get('user_profile',{})||{};
+  if(!v.trim()){delete profile.weight;delete profile.weight_source;}
+  else if(isNaN(n)||n<30||n>200){showToast('Weight must be 30-200 kg','var(--red)');return;}
+  else{profile.weight=+n.toFixed(1);profile.weight_source='manual';}
+  DB.set('user_profile',profile);
+  syncUp();render();
+  showToast(profile.weight?`Weight set to ${profile.weight} kg`:'Weight cleared','var(--grn)');
+}
+
+/* ── FITNESS / FATIGUE / FORM ── */
+// Reads bike_fitness_curve (computed on each Strava sync) and shows current CTL/ATL/TSB
+// with 7-day deltas. Plain-English label below ("Building fitness", "Carrying fatigue", etc.)
+// so the user doesn't need to memorise the numbers.
+function rFitnessForm(){
+  const curve=DB.get('bike_fitness_curve',null);
+  const ftp=DB.get('user_profile',{})?.ftp;
+  if(!curve){
+    // Show a hint card if Strava is connected but no FTP set
+    if(DB.get('strava_token',null)&&!ftp){
+      return`<div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.25);border-radius:14px;padding:12px 15px;margin-bottom:10px">
+        <div style="font-size:12px;font-weight:700;color:var(--acc);margin-bottom:4px">📊 Unlock training-load tracking</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.5">Set your FTP below to compute TSS, fitness (CTL), fatigue (ATL) and form (TSB) across all your rides.</div>
+      </div>`;
+    }
+    return'';
+  }
+  const todayKey=fd(new Date());
+  const wkAgoKey=fd(addDays(new Date(),-7));
+  const cur=curve[todayKey]||curve[fd(addDays(new Date(),-1))]||null;
+  const wkAgo=curve[wkAgoKey]||null;
+  if(!cur)return'';
+  const dCtl=wkAgo?+(cur.ctl-wkAgo.ctl).toFixed(1):0;
+  const _delta=(v)=>v>0?`<span style="color:var(--grn);font-size:10px">▲${v.toFixed(1)}</span>`:v<0?`<span style="color:var(--red);font-size:10px">▼${Math.abs(v).toFixed(1)}</span>`:`<span style="color:var(--t2);font-size:10px">—</span>`;
+  // Plain-English form interpretation
+  let formLabel='',formColor='var(--t2)';
+  if(cur.tsb>15){formLabel='Fresh — peak performance window';formColor='var(--grn)';}
+  else if(cur.tsb>5){formLabel='Recovered & ready';formColor='var(--grn)';}
+  else if(cur.tsb>-10){formLabel='Productive training zone';formColor='var(--acc)';}
+  else if(cur.tsb>-25){formLabel='Carrying fatigue — monitor recovery';formColor='var(--amb)';}
+  else{formLabel='Deep fatigue — prioritise recovery';formColor='var(--red)';}
+  // Build trend mini-chart: last 28 days of CTL
+  const chart=(()=>{
+    const pts=[];
+    for(let i=27;i>=0;i--){
+      const d=fd(addDays(new Date(),-i));
+      if(curve[d])pts.push(curve[d].ctl);
+    }
+    if(pts.length<2)return'';
+    const min=Math.min(...pts),max=Math.max(...pts);
+    const range=Math.max(max-min,1);
+    const w=200,h=24;
+    const path=pts.map((p,i)=>{
+      const x=(i/(pts.length-1))*w;
+      const y=h-((p-min)/range)*h;
+      return`${i===0?'M':'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }).join(' ');
+    return`<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="width:100%;height:24px;margin-top:6px">
+      <path d="${path}" stroke="var(--acc)" stroke-width="1.5" fill="none"/>
+    </svg>`;
+  })();
+  const colStyle=`flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px 8px;text-align:center`;
+  return`<div style="margin-bottom:10px">
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+  <span>💪 Fitness · Fatigue · Form</span>
+  <span style="font-size:10px;color:var(--t2);font-weight:500">vs 7 days ago</span>
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 14px">
+  <div style="display:flex;gap:8px">
+    <div style="${colStyle}">
+      <div style="font-size:20px;font-weight:800;line-height:1">${Math.round(cur.ctl)}</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px;font-weight:600">FITNESS</div>
+      <div style="margin-top:3px">${_delta(dCtl)}</div>
+    </div>
+    <div style="${colStyle}">
+      <div style="font-size:20px;font-weight:800;line-height:1">${Math.round(cur.atl)}</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px;font-weight:600">FATIGUE</div>
+      <div style="margin-top:3px;font-size:10px;color:var(--t2)">7d</div>
+    </div>
+    <div style="${colStyle}">
+      <div style="font-size:20px;font-weight:800;line-height:1;color:${formColor}">${cur.tsb>0?'+':''}${Math.round(cur.tsb)}</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px;font-weight:600">FORM</div>
+      <div style="margin-top:3px;font-size:10px;color:var(--t2)">CTL−ATL</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:${formColor};margin-top:9px;text-align:center;font-weight:600">${formLabel}</div>
+  ${chart}
+  <div style="font-size:10px;color:var(--t2);margin-top:4px;text-align:center">28-day fitness trend</div>
+</div>
+</div>`;
+}
+
+/* ── PERFORMANCE TRENDS ── */
+function rPerfTrends(){
+  const rides=DB.get('strava_activities',[])||[];
+  if(!rides.length)return'';
+  // Build 4-week buckets (Mon–Sun), most recent first
+  const today=new Date();
+  const weeks=[];
+  for(let w=0;w<4;w++){
+    const wMon=getMon(addDays(today,-w*7));
+    const wSun=addDays(wMon,6);
+    const wLabel=`${wMon.toLocaleDateString('en',{month:'short',day:'numeric'})}`;
+    const wStart=fd(wMon);const wEnd=fd(wSun);
+    // Strava rides in this week
+    const wRides=rides.filter(a=>{
+      const ds=(a.start_date_local||'').slice(0,10);
+      return ds>=wStart&&ds<=wEnd;
+    });
+    let totalKm=0,totalKj=0,npSum=0,npCount=0,sufferSum=0;
+    for(const a of wRides){
+      totalKm+=(a.distance||0)/1000;
+      totalKj+=a.kilojoules||0;
+      if(a.weighted_average_watts){npSum+=a.weighted_average_watts;npCount++;}
+      sufferSum+=a.suffer_score||0;
+    }
+    // Gym logs in this week
+    let gymDone=0;
+    for(let d=0;d<7;d++){
+      const dd=addDays(wMon,d);
+      const log=DB.get(DB.lk(dd),null);
+      if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))gymDone++;
+    }
+    weeks.push({label:wLabel,km:+totalKm.toFixed(1),kj:Math.round(totalKj),np:npCount?Math.round(npSum/npCount):null,sufferSum,rides:wRides.length,gym:gymDone});
+  }
+  // Trend arrows: compare week[0] (newest) vs week[3] (oldest)
+  const _arr=(a,b,hi=true)=>{
+    if(a==null||b==null||b===0)return'<span style="color:var(--t2)">—</span>';
+    const pct=(a-b)/b*100;
+    if(Math.abs(pct)<5)return'<span style="color:var(--t2);font-size:13px">→</span>';
+    return pct>0
+      ?`<span style="color:var(--grn);font-size:13px">↑</span>`
+      :`<span style="color:${hi?'var(--red)':'var(--grn)'};font-size:13px">↓</span>`;
+  };
+  const newest=weeks[0],oldest=weeks[3]||weeks[weeks.length-1];
+  // Overall trend chips
+  const trendChips=[
+    {l:'Distance',v:_arr(newest.km,oldest.km,false)},
+    {l:'Load (kJ)',v:_arr(newest.kj,oldest.kj,false)},
+    {l:'Avg NP',v:newest.np&&oldest.np?_arr(newest.np,oldest.np,false):'<span style="color:var(--t2)">—</span>'},
+    {l:'Gym',v:_arr(newest.gym,oldest.gym,false)},
+  ];
+  const colStyle=`flex:1;min-width:0;background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px 8px;text-align:center`;
+  return`<div style="margin-bottom:10px">
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+  <span>📈 Performance Trends</span>
+  <span style="font-size:10px;color:var(--t2);font-weight:500">vs 4 weeks ago</span>
+</div>
+<div style="display:flex;gap:6px;margin-bottom:10px">
+  ${trendChips.map(c=>`<div style="${colStyle}">
+    <div style="font-size:18px;line-height:1">${c.v}</div>
+    <div style="font-size:10px;color:var(--t2);margin-top:3px;font-weight:600;white-space:nowrap">${c.l}</div>
+  </div>`).join('')}
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden">
+  <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:0;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:1px solid var(--bord);background:var(--s2)">
+    <div>Week</div><div style="text-align:right">Rides</div><div style="text-align:right">km</div><div style="text-align:right">kJ</div><div style="text-align:right">Gym</div>
+  </div>
+  ${weeks.map((w,wi)=>`<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:0;padding:9px 10px;border-bottom:${wi<weeks.length-1?'1px solid var(--bord)':'none'};${wi===0?'font-weight:700;color:var(--al)':''}">
+    <div style="font-size:11px">${w.label}</div>
+    <div style="text-align:right;font-size:12px">${w.rides||'—'}</div>
+    <div style="text-align:right;font-size:12px">${w.km||'—'}</div>
+    <div style="text-align:right;font-size:12px">${w.kj?w.kj.toLocaleString():'—'}</div>
+    <div style="text-align:right;font-size:12px">${w.gym||'—'}</div>
+  </div>`).join('')}
+</div>
+</div>`;
 }
 
 /* ── PRs SCREEN ── */
@@ -4721,7 +5198,26 @@ function rPRs(){
     return ds>=_hCutoff&&(_hRideSet.has(a.type)||_hRideSet.has(a.sport_type));
   }).forEach(a=>{
     const ds=(a.start_date_local||'').slice(0,10);
-    history.push({_strava:true,date:ds,name:a.name,dist:+((a.distance||0)/1000).toFixed(1),dur:Math.round((a.moving_time||0)/60),hr:a.average_heartrate?Math.round(a.average_heartrate):null,watts:a.average_watts?Math.round(a.average_watts):null,elev:a.total_elevation_gain?Math.round(a.total_elevation_gain):null,type:a.sport_type||a.type});
+    history.push({_strava:true,date:ds,name:a.name,
+      dist:+((a.distance||0)/1000).toFixed(1),dur:Math.round((a.moving_time||0)/60),
+      elapsed:a.elapsed_time?Math.round(a.elapsed_time/60):null,
+      hr:a.average_heartrate?Math.round(a.average_heartrate):null,
+      maxhr:a.max_heartrate?Math.round(a.max_heartrate):null,
+      watts:a.average_watts?Math.round(a.average_watts):null,
+      np:a.weighted_average_watts?Math.round(a.weighted_average_watts):null,
+      maxw:a.max_watts?Math.round(a.max_watts):null,
+      device_watts:a.device_watts||false,
+      elev:a.total_elevation_gain?Math.round(a.total_elevation_gain):null,
+      cad:a.average_cadence?Math.round(a.average_cadence):null,
+      speed:a.average_speed?+(a.average_speed*3.6).toFixed(1):null,
+      kj:a.kilojoules?Math.round(a.kilojoules):null,
+      suffer:a.suffer_score||null,
+      rpe:a.perceived_exertion||null,
+      pr_count:a.pr_count||null,
+      wtype:a.workout_type||null,
+      tss:a._tss||null,
+      intf:a._if||null,
+      type:a.sport_type||a.type});
   });
   history.sort((a,b)=>b.date.localeCompare(a.date));
   const profile=DB.get('user_profile',null);
@@ -4750,6 +5246,12 @@ ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bott
 <div style="display:flex;gap:6px;margin-bottom:14px">${_cyOpts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${_bp===o.v?'var(--acc)':'var(--bord)'};background:${_bp===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${_bp===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${_bp===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:''}
 <button onclick="S.weekStart=getMon(new Date());go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
 </div>`;})()}
+
+${rCyclingProfile()}
+
+${rFitnessForm()}
+
+${rPerfTrends()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
   <span>${_T('prs')}</span>
@@ -4816,17 +5318,63 @@ ${!history.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">${_T('h_no_workouts')}</div>`
   :history.map((log,hi)=>{
     if(log._strava){
-      const distStr=log.dist?`${log.dist} km`:'';
-      const durStr=log.dur?`${log.dur} min`:'';
-      const hrStr=log.hr?` · ❤️ ${log.hr} bpm`:'';
-      const wattsStr=log.watts?` · ⚡ ${log.watts}W`:'';
-      const elevStr=log.elev?` · ↗ ${log.elev}m`:'';
-      const summaryStr=[distStr,durStr].filter(Boolean).join(' · ')+hrStr+wattsStr+elevStr;
+      // Workout type badge
+      const _wtMap={0:'',1:'Race',2:'Long',3:'Workout',11:'Virtual Race',12:'E-Bike Ride'};
+      const wtLabel=_wtMap[log.wtype]||'';
+      // Summary line: always-visible key metrics
+      const _sumParts=[];
+      if(log.dist)_sumParts.push(`${log.dist} km`);
+      if(log.dur)_sumParts.push(`${log.dur} min`);
+      if(log.elev)_sumParts.push(`↗ ${log.elev}m`);
+      const summaryLine=_sumParts.join(' · ');
+      // Secondary summary: TSS + power + HR condensed
+      const _tssStr=log.tss?`📊 TSS ${log.tss}${log.intf?` · IF ${log.intf}`:''}`:'';
+      const _pow=log.np?`NP ${log.np}W`:(log.watts?`${log.watts}W avg`:'');
+      const _hrt=log.hr?`❤️ ${log.hr}${log.maxhr?'/'+log.maxhr:''}`:'' ;
+      const _kjStr=log.kj?`🔥 ${log.kj.toLocaleString()}kJ`:'';
+      const _sec=[_tssStr,_pow,_hrt,_kjStr].filter(Boolean).join(' · ');
+      // Expanded detail HTML
+      const _detail=(()=>{
+        const rows=[];
+        // Power row
+        if(log.watts||log.np||log.maxw||log.kj){
+          const pParts=[];
+          if(log.np&&log.watts)pParts.push(`⚡ NP <b>${log.np}W</b> · avg ${log.watts}W${!log.device_watts?' <span style="font-size:10px;color:var(--t2)">(est)</span>':''}` );
+          else if(log.watts)pParts.push(`⚡ avg <b>${log.watts}W</b>${!log.device_watts?' <span style="font-size:10px;color:var(--t2)">(est)</span>':''}` );
+          if(log.maxw)pParts.push(`max ${log.maxw}W`);
+          if(log.kj)pParts.push(`🔥 ${log.kj.toLocaleString()} kJ`);
+          if(pParts.length)rows.push(pParts.join(' · '));
+        }
+        // HR row
+        if(log.hr||log.suffer){
+          const hParts=[];
+          if(log.hr)hParts.push(`❤️ avg <b>${log.hr} bpm</b>${log.maxhr?' · max '+log.maxhr+' bpm':''}`);
+          if(log.suffer)hParts.push(`😰 suffer ${log.suffer}`);
+          if(hParts.length)rows.push(hParts.join(' · '));
+        }
+        // Movement row
+        if(log.speed||log.cad||log.elev){
+          const mParts=[];
+          if(log.speed)mParts.push(`🏎 ${log.speed} km/h`);
+          if(log.cad)mParts.push(`🦵 ${log.cad} rpm`);
+          if(log.elev)mParts.push(`↗ ${log.elev} m`);
+          if(mParts.length)rows.push(mParts.join(' · '));
+        }
+        // Context row
+        if(log.rpe||log.pr_count||log.elapsed){
+          const cParts=[];
+          if(log.elapsed&&log.dur&&log.elapsed>log.dur)cParts.push(`⏱ ${log.elapsed} min elapsed`);
+          if(log.rpe)cParts.push(`RPE ${log.rpe}/10`);
+          if(log.pr_count)cParts.push(`🏆 ${log.pr_count} PR${log.pr_count>1?'s':''}`);
+          if(cParts.length)rows.push(cParts.join(' · '));
+        }
+        return rows.map(r=>`<div style="font-size:12px;color:var(--t2);margin-bottom:5px;line-height:1.5">${r}</div>`).join('');
+      })();
       return`<div class="hist-row" onclick="togHist(${hi})">
-  <div class="hist-date">${log.date} · 🟠 Strava</div>
+  <div class="hist-date">${log.date} · 🟠 Strava${wtLabel?` · <span style="background:rgba(8,145,178,.15);color:#0891b2;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px">${wtLabel}</span>`:''}</div>
   <div class="hist-type" style="color:#0891b2">${_icon('ride-day.png','🚴',16)} ${log.name||'Ride'}</div>
-  <div class="hist-exs">${summaryStr||'No data'}</div>
-  <div class="hist-detail" id="hd${hi}"></div>
+  <div class="hist-exs">${summaryLine||'No data'}${_sec?`<br><span style="font-size:11px;color:var(--t2)">${_sec}</span>`:''}</div>
+  <div class="hist-detail" id="hd${hi}">${_detail}</div>
 </div>`;
     }
     const wi=WI[log.type]||WI.REST;
@@ -5290,6 +5838,100 @@ function doSwap(ds,newType){
   DB.set(pk,plan);
   closeSwap();syncUp();render();
 }
+/* ── ADD GYM SESSION TO RIDE DAY ── */
+function openAddGymSheet(ds){
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(!plan)return;
+  const di=plan.findIndex(d=>d.date===ds);
+  if(di<0)return;
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const TL={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',REST:'Rest'};
+  const dN=dt=>{const dn=new Date(dt+'T12:00:00').getDay();return['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dn];};
+  // Next scheduled gym day and the full chain after the ride day
+  const gymChain=plan.filter((d,i)=>i>di&&gymTypes.includes(d.type)&&!d.locked);
+  const nextGym=gymChain[0]||null;
+  // Build cascade preview chips: show what each gym day becomes after the shift
+  const cascadeChips=nextGym?gymChain.slice(0,4).map((d,j)=>{
+    const newType=j<gymChain.length-1?gymChain[j+1].type:'REST';
+    return`<span style="background:var(--s1);border:1px solid var(--bord);border-radius:100px;padding:3px 9px;font-size:11px;font-weight:600;color:var(--t2)">${dN(d.date)} → ${TL[newType]}</span>`;
+  }).join(''):'';
+  // Types to show as "other" options (all 4 minus the suggested next type)
+  const otherTypes=gymTypes.filter(t=>t!==nextGym?.type);
+  const modal=document.createElement('div');
+  modal.className='swap-modal';modal.id='add-gym-modal';
+  modal.innerHTML=`<div class="swap-ov" onclick="closeAddGymSheet()"></div>
+<div class="swap-sheet">
+  <div class="swap-title">${_T('add_gym_title')}</div>
+  ${nextGym?`
+  <div style="background:rgba(124,58,237,.06);border:1.5px solid rgba(124,58,237,.25);border-radius:16px;padding:14px;margin-bottom:16px">
+    <div style="font-size:10px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.8px;margin-bottom:10px">⚡ Suggested · pull ${dN(nextGym.date)}'s session in</div>
+    <button class="swap-opt" style="background:var(--acc);border-color:var(--acc);color:#fff;margin-bottom:10px" onclick="addGymToRideDay('${ds}','${nextGym.type}',1)">${WI[nextGym.type].i} ${TL[nextGym.type]}<span style="color:rgba(255,255,255,.75)">Shift week forward</span></button>
+    ${cascadeChips?`<div style="display:flex;flex-wrap:wrap;gap:5px">${cascadeChips}</div>`:''}
+  </div>
+  <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">Or pick a different type</div>
+  ${otherTypes.map(t=>`<button class="swap-opt" onclick="addGymToRideDay('${ds}','${t}',0)">${WI[t].i} ${typeof WI[t].l==='function'?WI[t].l():WI[t].l}<span>${typeof WI[t].d==='function'?WI[t].d():WI[t].d}</span></button>`).join('')}
+  <div style="font-size:11px;color:var(--t2);text-align:center;padding:8px 0 2px">Week stays as-is · duplicate types auto-resolved</div>
+  `:gymTypes.map(t=>`<button class="swap-opt" onclick="addGymToRideDay('${ds}','${t}',0)">${WI[t].i} ${typeof WI[t].l==='function'?WI[t].l():WI[t].l}<span>${typeof WI[t].d==='function'?WI[t].d():WI[t].d}</span></button>`).join('')}
+  <button class="swap-cancel" onclick="closeAddGymSheet()">Cancel</button>
+</div>`;
+  document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('on'));
+}
+function closeAddGymSheet(){const m=document.getElementById('add-gym-modal');if(m)m.remove();}
+function addGymToRideDay(dateStr,gymType,shift){
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(!plan)return;
+  const di=plan.findIndex(d=>d.date===dateStr);
+  if(di<0)return;
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  // Attach the extra gym session to this ride day
+  plan[di].extraGym={type:gymType,exercises:genSession(gymType)};
+  if(shift){
+    // Cascade: upcoming gym days shift one slot earlier
+    // [Tue:PUSH, Wed:PULL, Thu:LEGS] → [Tue:PULL, Wed:LEGS, Thu:REST]
+    const upcoming=plan
+      .map((d,i)=>({d,i}))
+      .filter(({d,i})=>i>di&&gymTypes.includes(d.type)&&!d.locked);
+    for(let j=0;j<upcoming.length;j++){
+      const idx=upcoming[j].i;
+      if(j<upcoming.length-1){
+        const nextType=upcoming[j+1].d.type;
+        plan[idx].type=nextType;
+        plan[idx].exercises=genSession(nextType);
+      }else{
+        plan[idx].type='REST';
+        delete plan[idx].exercises;
+      }
+    }
+  }else{
+    // No cascade — fix any week-level duplicate types against the newly added extra
+    // Find gym days that now share the same type as the extra (duplicates)
+    const dups=plan
+      .map((d,i)=>({d,i}))
+      .filter(({d,i})=>i!==di&&gymTypes.includes(d.type)&&!d.locked&&d.type===gymType);
+    for(const {i:dupIdx} of dups){
+      // Types currently present in the week, excluding this duplicate slot
+      const taken=[gymType,...plan
+        .filter((d,pi)=>pi!==di&&pi!==dupIdx&&gymTypes.includes(d.type))
+        .map(d=>d.type)];
+      // Find a type that isn't covered yet
+      const missing=gymTypes.find(t=>!taken.includes(t));
+      if(missing){
+        plan[dupIdx].type=missing;
+        plan[dupIdx].exercises=genSession(missing);
+      }
+      // If all 4 types already present (5-session week edge case), leave it — can't avoid a duplicate
+    }
+  }
+  DB.set(pk,plan);
+  closeAddGymSheet();
+  syncUp();
+  render();
+  showToast(_T('add_gym_toast'),'var(--grn)');
+}
+
 function quickAddActivity(key){
   const profile=DB.get('user_profile',{});
   const acts=new Set(profile.activities||[]);
@@ -5412,7 +6054,7 @@ function openExLog(exId,exIdx,ds){
     }),completed:false};
     DB.set(DB.lk(date),log);
   }
-  S.activeLog=log;
+  S.activeLog=log;S.activeLogKey=DB.lk(date);
   const le=log.exercises[exIdx];if(!le)return;
   showExLogModal(le,exIdx,ds);
 }
@@ -5452,7 +6094,7 @@ function exLogTog(ei,si){
   const le=S.activeLog.exercises[ei];
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r));
   debouncedSync();
   const row=document.getElementById(`elr${ei}_${si}`);
@@ -5467,7 +6109,7 @@ function exLogAdd(ei){
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
   le.sets.push({w:last.w||'',r:last.r||'',done:false});
-  DB.set(DB.lk(S.viewDate),S.activeLog);
+  _saveLog();
   const rows=document.getElementById('exlog-rows');if(!rows)return;
   const div=document.createElement('div');
   div.innerHTML=exLogRow(ei,si,{w:last.w||'',r:last.r||'',done:false});
@@ -5493,7 +6135,7 @@ function doExSwap(oldId,exIdx,ds,type,newId){
     const ex=EX[newId];
     const last=getLastLog(newId);
     S.activeLog.exercises[exIdx]={id:newId,sets:makeSets(newId,S.energy||'okay',last)};
-    DB.set(DB.lk(S.viewDate),S.activeLog);
+    _saveLog();
   }
   closeExSwap();debouncedSync();render();
 }
@@ -5776,6 +6418,18 @@ function init(){
   }
   render();
   loadGifDb();
+  // Backfill IF/TSS + fitness curve for existing rides if FTP is known but curve/load missing
+  // (handles users upgrading to v2.27 who don't trigger a fresh sync immediately)
+  const _ftp=DB.get('user_profile',{})?.ftp;
+  if(_ftp){
+    const _existingRides=DB.get('strava_activities',[])||[];
+    if(_existingRides.length&&!DB.get('bike_fitness_curve',null)){
+      _annotateRideLoad(_existingRides,_ftp);
+      DB.set('strava_activities',_existingRides);
+      const _c=computeFitnessCurve(_existingRides);
+      if(_c)DB.set('bike_fitness_curve',_c);
+    }
+  }
   // Auto-sync Strava if connected and last sync was >1 hour ago
   const _stravaTok=DB.get('strava_token',null);
   if(_stravaTok&&!_stravaCode){
