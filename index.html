@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.36';
+const APP_VERSION='2.37';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.37',d:'Remove redundant Weight card from Cycling Profile — single source of truth is now Body Weight section',det:'The Cycling Profile card showed Weight in the middle column AND the Body Weight section below repeated the same number. Both were already linked to the same profile.weight value, so the Cycling Profile copy was pure duplication. Removed the Weight column. Cycling Profile is now a cleaner 2-column layout (FTP + W/kg), with both cards visually larger (24px numeric values instead of 20px). The W/kg card now shows the calculation breakdown ("125W ÷ 244.1 lb") as a small subtitle so you can verify where the ratio comes from. When weight is unset but FTP is set, the W/kg card displays "Log weight ↓" pointing the user to the Body Weight section. When FTP is unset but weight is set, it says "Set FTP →".'},
   {v:'2.36',d:'W/kg categories now align with Coggan/Allen standard + gender-aware bands + info sheet',det:'The W/kg label below the W/KG stat was using overly generous bands ("Recreational" started at 0 W/kg). Corrected to match Coggan & Allen\'s "Training and Racing with a Power Meter" — the gold-standard reference used by TrainingPeaks, Zwift, and every credible cycling platform. 6 tiers: Beginner / Recreational / Trained / Strong / Cat 1 / Elite or Pro. Bands are now gender-aware — male thresholds at 2.0/3.0/4.0/5.0/5.5 W/kg, female at 1.5/2.5/3.5/4.5/5.0 W/kg (using profile.gender). New ⓘ info button next to "W/KG" opens a sheet showing all 6 bands with ranges, your current tier highlighted, and a note that W/kg matters most on climbs (absolute power matters more on flats due to CdA + drafting).'},
   {v:'2.35',d:'Proper weight entry sheet — number input + lb/kg toggle + live conversion (no more browser prompt)',det:'Replaced the browser prompt() dialogs for weight entry with a proper bottom sheet modal matching the app\'s design language. The sheet has a single large numeric input, two pill toggle buttons (lb / kg) right below, a live conversion line ("≈ 110.7 kg") that updates as you type, and your last weigh-in shown for reference. Switching units mid-entry intelligently converts the current input value so you don\'t lose your typing. The same sheet is used for logging weigh-ins (from Cycling Profile ✏️ Edit, Body Weight + Log weight, or other entry points) and for setting your goal weight — same unit toggle, same live conversion. Logging a weight from the Cycling Profile card writes to both the current weight (powering W/kg) AND the weight history (powering the Body Weight chart) — so a single entry point updates everything. Clear-current-weight and clear-goal options are available as red secondary buttons on the sheet when there\'s an existing value to clear.'},
   {v:'2.34',d:'Body weight in lb/kg — flexible input parser, displays follow your unit preference (same setting as gym weights)',det:'All body weight inputs and displays now respect the app\'s unit preference (same setting controls gym weights and body weight — default lb). Weight prompts accept flexible input: bare numbers ("180" or "82") are interpreted in your preferred unit, or you can include an explicit suffix like "180 lb", "82kg", "180 pounds" to override. Editing the Cycling Profile weight stat, logging a daily weigh-in, and setting a goal weight all use the same flexible parser. Storage is always in kg internally so W/kg math stays consistent across the app regardless of display preference. The Body Weight chart Y-axis labels, current value, 90-day change, goal line annotation, slope/week rate, and dot tooltips all render in your preferred unit. Toasts confirm both units after each save (e.g. "Logged 82.5 kg (181.9 lb)") so you can sanity-check the conversion landed where you expected. When viewing in lb, the secondary "kg · logged date" line still shows the kg value for reference.'},
@@ -5149,28 +5150,26 @@ function rCyclingProfile(){
   const rides=DB.get('strava_activities',[])||[];
   const hasRides=rides.length>=3;
   const canEstimate=hasRides&&_estimateFtpFromRides(rides)!=null;
+  // Weight is single-sourced from the Body Weight section. W/kg uses it
+  // implicitly — no separate weight card here (removed in v2.37 as redundant).
+  const wDisp=wt?(bodyUnit()==='lb'?_kgToLb(wt).toFixed(1):wt.toFixed(1))+' '+bodyUnit():null;
   return`<div class="sec-hdr">Cycling Profile</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
   <div style="display:flex;gap:10px">
-    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
+    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:12px;text-align:center">
       <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">FTP${srcBadge(ftpSrc)}</div>
-      <div style="font-size:20px;font-weight:800;margin-top:4px">${ftp?ftp+'<span style="font-size:11px;color:var(--t2);font-weight:600"> W</span>':'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
-      <button onclick="editFtp()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0">✏️ ${ftp?'Edit':'Set'}</button>
+      <div style="font-size:24px;font-weight:800;margin-top:5px">${ftp?ftp+'<span style="font-size:12px;color:var(--t2);font-weight:600"> W</span>':'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
+      <button onclick="editFtp()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:5px;padding:0">✏️ ${ftp?'Edit':'Set'}</button>
     </div>
-    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
-      <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">WEIGHT${srcBadge(wtSrc)}</div>
-      <div style="font-size:20px;font-weight:800;margin-top:4px">${wt?(bodyUnit()==='lb'?_kgToLb(wt).toFixed(1):wt.toFixed(1))+`<span style="font-size:11px;color:var(--t2);font-weight:600"> ${bodyUnit()}</span>`:'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
-      <button onclick="editWeight()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0">✏️ ${wt?'Edit':'Set'}</button>
-    </div>
-    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
+    <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:12px;text-align:center">
       <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">W/KG <button onclick="showWkgInfo()" style="background:none;border:none;color:var(--t2);font-size:10px;cursor:pointer;padding:0 0 0 2px;line-height:1">ⓘ</button></div>
-      <div style="font-size:20px;font-weight:800;margin-top:4px">${wpkg||'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
-      <div style="font-size:10px;color:var(--t2);margin-top:6px">${wpkg?_wkgLabel(wpkg,profile.gender):'—'}</div>
+      <div style="font-size:24px;font-weight:800;margin-top:5px">${wpkg||'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:5px;line-height:1.3">${wpkg?_wkgLabel(wpkg,profile.gender)+`<br><span style="font-size:9px;opacity:.7">${ftp}W ÷ ${wDisp}</span>`:wt?`<span style="opacity:.7">Set FTP →</span>`:ftp?`<span style="opacity:.7">Log weight ↓</span>`:'—'}</div>
     </div>
   </div>
   ${canEstimate?`<button onclick="estimateFtp()" style="width:100%;margin-top:9px;background:rgba(124,58,237,.1);color:var(--acc);border:1px dashed rgba(124,58,237,.4);border-radius:10px;font-size:12px;font-weight:700;padding:9px;cursor:pointer">📊 ${ftpSrc==='estimated'?'Re-estimate':'Estimate'} FTP from your rides</button>`:''}
   ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${hasRides?'Tap the button above to auto-estimate from ride power data, or set it manually.':DB.get('strava_token',null)?'Update FTP on Strava and re-sync, or set it manually here.':'Connect Strava to auto-import, or enter manually.'}</div>`:''}
-  ${!wt?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">⚖️ Weight cannot be auto-derived from ride data — set it on Strava (Settings → My Profile) and re-sync, or tap ✏️ Set above.</div>`:''}
+  ${ftp&&!wt?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">⚖️ Log your weight in the <strong style="color:var(--al)">Body Weight</strong> section below to compute W/kg.</div>`:''}
 </div>`;
 }
 
