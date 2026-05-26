@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.35';
+const APP_VERSION='2.36';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.36',d:'W/kg categories now align with Coggan/Allen standard + gender-aware bands + info sheet',det:'The W/kg label below the W/KG stat was using overly generous bands ("Recreational" started at 0 W/kg). Corrected to match Coggan & Allen\'s "Training and Racing with a Power Meter" — the gold-standard reference used by TrainingPeaks, Zwift, and every credible cycling platform. 6 tiers: Beginner / Recreational / Trained / Strong / Cat 1 / Elite or Pro. Bands are now gender-aware — male thresholds at 2.0/3.0/4.0/5.0/5.5 W/kg, female at 1.5/2.5/3.5/4.5/5.0 W/kg (using profile.gender). New ⓘ info button next to "W/KG" opens a sheet showing all 6 bands with ranges, your current tier highlighted, and a note that W/kg matters most on climbs (absolute power matters more on flats due to CdA + drafting).'},
   {v:'2.35',d:'Proper weight entry sheet — number input + lb/kg toggle + live conversion (no more browser prompt)',det:'Replaced the browser prompt() dialogs for weight entry with a proper bottom sheet modal matching the app\'s design language. The sheet has a single large numeric input, two pill toggle buttons (lb / kg) right below, a live conversion line ("≈ 110.7 kg") that updates as you type, and your last weigh-in shown for reference. Switching units mid-entry intelligently converts the current input value so you don\'t lose your typing. The same sheet is used for logging weigh-ins (from Cycling Profile ✏️ Edit, Body Weight + Log weight, or other entry points) and for setting your goal weight — same unit toggle, same live conversion. Logging a weight from the Cycling Profile card writes to both the current weight (powering W/kg) AND the weight history (powering the Body Weight chart) — so a single entry point updates everything. Clear-current-weight and clear-goal options are available as red secondary buttons on the sheet when there\'s an existing value to clear.'},
   {v:'2.34',d:'Body weight in lb/kg — flexible input parser, displays follow your unit preference (same setting as gym weights)',det:'All body weight inputs and displays now respect the app\'s unit preference (same setting controls gym weights and body weight — default lb). Weight prompts accept flexible input: bare numbers ("180" or "82") are interpreted in your preferred unit, or you can include an explicit suffix like "180 lb", "82kg", "180 pounds" to override. Editing the Cycling Profile weight stat, logging a daily weigh-in, and setting a goal weight all use the same flexible parser. Storage is always in kg internally so W/kg math stays consistent across the app regardless of display preference. The Body Weight chart Y-axis labels, current value, 90-day change, goal line annotation, slope/week rate, and dot tooltips all render in your preferred unit. Toasts confirm both units after each save (e.g. "Logged 82.5 kg (181.9 lb)") so you can sanity-check the conversion landed where you expected. When viewing in lb, the secondary "kg · logged date" line still shows the kg value for reference.'},
   {v:'2.33',d:'Performance Trends → "Cycling — Weekly Summary": removed gym column (redundant with dedicated Gym Progress section), added TSS column when FTP is set',det:'The 4-week trends panel now lives cleanly inside the cycling block as a pure cycling weekly summary. The Gym session-count column was redundant once the dedicated 💪 Gym Progress section with weekly tonnage chart shipped in v2.30. The Gym trend chip was replaced with a Rides chip, and a new TSS column appears in the table whenever FTP is set — surfacing the actual training-stress load per week alongside distance and kJ. Section heading renamed to "Cycling — Weekly Summary" for clarity.'},
@@ -1871,6 +1872,27 @@ async function stravaFetchAthlete(){
     }
     if(changed)DB.set('user_profile',profile);
   }catch(e){console.warn('Strava athlete fetch failed:',e);}
+}
+
+// W/kg category label using Coggan/Allen FTP categories from "Training and
+// Racing with a Power Meter". Male standard; female bands run ~0.5 W/kg lower
+// per tier. The Coggan chart has 8 tiers — consolidated to 5 for display.
+function _wkgLabel(wpkg,gender){
+  const female=gender==='female';
+  if(female){
+    if(wpkg<1.5)return'Beginner';
+    if(wpkg<2.5)return'Recreational';
+    if(wpkg<3.5)return'Trained';
+    if(wpkg<4.5)return'Strong';
+    if(wpkg<5.0)return'Cat 1';
+    return'Elite / Pro';
+  }
+  if(wpkg<2.0)return'Beginner';
+  if(wpkg<3.0)return'Recreational';
+  if(wpkg<4.0)return'Trained';
+  if(wpkg<5.0)return'Strong';
+  if(wpkg<5.5)return'Cat 1';
+  return'Elite / Pro';
 }
 
 // Estimates FTP from ride NP/duration data using Coggan's intensity model:
@@ -5141,15 +5163,49 @@ function rCyclingProfile(){
       <button onclick="editWeight()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0">✏️ ${wt?'Edit':'Set'}</button>
     </div>
     <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
-      <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">W/KG</div>
+      <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">W/KG <button onclick="showWkgInfo()" style="background:none;border:none;color:var(--t2);font-size:10px;cursor:pointer;padding:0 0 0 2px;line-height:1">ⓘ</button></div>
       <div style="font-size:20px;font-weight:800;margin-top:4px">${wpkg||'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
-      <div style="font-size:10px;color:var(--t2);margin-top:6px">${wpkg?(wpkg<2.5?'Recreational':wpkg<3.5?'Trained':wpkg<4.5?'Strong':wpkg<5.5?'Elite':'World-class'):'—'}</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:6px">${wpkg?_wkgLabel(wpkg,profile.gender):'—'}</div>
     </div>
   </div>
   ${canEstimate?`<button onclick="estimateFtp()" style="width:100%;margin-top:9px;background:rgba(124,58,237,.1);color:var(--acc);border:1px dashed rgba(124,58,237,.4);border-radius:10px;font-size:12px;font-weight:700;padding:9px;cursor:pointer">📊 ${ftpSrc==='estimated'?'Re-estimate':'Estimate'} FTP from your rides</button>`:''}
   ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${hasRides?'Tap the button above to auto-estimate from ride power data, or set it manually.':DB.get('strava_token',null)?'Update FTP on Strava and re-sync, or set it manually here.':'Connect Strava to auto-import, or enter manually.'}</div>`:''}
   ${!wt?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">⚖️ Weight cannot be auto-derived from ride data — set it on Strava (Settings → My Profile) and re-sync, or tap ✏️ Set above.</div>`:''}
 </div>`;
+}
+
+// Info sheet explaining the W/kg categories with the user's current tier highlighted
+function showWkgInfo(){
+  document.getElementById('wkg-info-sheet')?.remove();
+  const profile=DB.get('user_profile',{})||{};
+  const female=profile.gender==='female';
+  const wpkg=(profile.ftp&&profile.weight)?+(profile.ftp/profile.weight).toFixed(2):null;
+  const bands=female
+    ?[{l:'Beginner',min:0,max:1.5},{l:'Recreational',min:1.5,max:2.5},{l:'Trained',min:2.5,max:3.5},{l:'Strong',min:3.5,max:4.5},{l:'Cat 1',min:4.5,max:5.0},{l:'Elite / Pro',min:5.0,max:Infinity}]
+    :[{l:'Beginner',min:0,max:2.0},{l:'Recreational',min:2.0,max:3.0},{l:'Trained',min:3.0,max:4.0},{l:'Strong',min:4.0,max:5.0},{l:'Cat 1',min:5.0,max:5.5},{l:'Elite / Pro',min:5.5,max:Infinity}];
+  const sheet=document.createElement('div');
+  sheet.id='wkg-info-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+28px);max-width:430px;margin:0 auto;width:100%;max-height:80vh;overflow-y:auto">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">W/kg categories</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px;line-height:1.5">Power-to-weight ratio at FTP (1-hour sustainable). The standard endurance fitness benchmark, from Coggan &amp; Allen's <em>Training and Racing with a Power Meter</em>. ${female?'Female':'Male'} bands shown.${wpkg?` Your current: <strong style="color:var(--al)">${wpkg} W/kg</strong>.`:''}</div>
+  ${bands.map(b=>{
+    const isMe=wpkg!=null&&wpkg>=b.min&&wpkg<b.max;
+    const rangeStr=b.max===Infinity?`${b.min.toFixed(1)}+`:`${b.min.toFixed(1)}–${b.max.toFixed(1)}`;
+    return`<div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;margin-bottom:6px;border-radius:11px;background:${isMe?'rgba(124,58,237,.14)':'var(--s2)'};border:1px solid ${isMe?'var(--acc)':'var(--bord)'}">
+      <div style="display:flex;align-items:center;gap:10px">
+        ${isMe?'<span style="font-size:14px">▶</span>':'<span style="width:14px"></span>'}
+        <div style="font-size:14px;font-weight:${isMe?'800':'700'};color:${isMe?'var(--acc)':'var(--al)'}">${b.l}</div>
+      </div>
+      <div style="font-size:12px;color:var(--t2);font-weight:600">${rangeStr} W/kg</div>
+    </div>`;
+  }).join('')}
+  <div style="font-size:11px;color:var(--t2);margin-top:14px;line-height:1.5;padding:10px 12px;background:var(--s2);border-radius:10px">💡 W/kg matters most on climbs. Flat-road performance also depends on absolute power (CdA, drafting, etc.) — a heavier rider with high absolute watts can still drop a lighter rider on the flats.</div>
+  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-top:14px">Close</button>
+</div>`;
+  document.body.appendChild(sheet);
 }
 
 // Manual trigger for FTP estimation — confirms with user before applying
