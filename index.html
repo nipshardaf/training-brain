@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.33';
+const APP_VERSION='2.34';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.34',d:'Body weight in lb/kg — flexible input parser, displays follow your unit preference (same setting as gym weights)',det:'All body weight inputs and displays now respect the app\'s unit preference (same setting controls gym weights and body weight — default lb). Weight prompts accept flexible input: bare numbers ("180" or "82") are interpreted in your preferred unit, or you can include an explicit suffix like "180 lb", "82kg", "180 pounds" to override. Editing the Cycling Profile weight stat, logging a daily weigh-in, and setting a goal weight all use the same flexible parser. Storage is always in kg internally so W/kg math stays consistent across the app regardless of display preference. The Body Weight chart Y-axis labels, current value, 90-day change, goal line annotation, slope/week rate, and dot tooltips all render in your preferred unit. Toasts confirm both units after each save (e.g. "Logged 82.5 kg (181.9 lb)") so you can sanity-check the conversion landed where you expected. When viewing in lb, the secondary "kg · logged date" line still shows the kg value for reference.'},
   {v:'2.33',d:'Performance Trends → "Cycling — Weekly Summary": removed gym column (redundant with dedicated Gym Progress section), added TSS column when FTP is set',det:'The 4-week trends panel now lives cleanly inside the cycling block as a pure cycling weekly summary. The Gym session-count column was redundant once the dedicated 💪 Gym Progress section with weekly tonnage chart shipped in v2.30. The Gym trend chip was replaced with a Rides chip, and a new TSS column appears in the table whenever FTP is set — surfacing the actual training-stress load per week alongside distance and kJ. Section heading renamed to "Cycling — Weekly Summary" for clarity.'},
   {v:'2.32',d:'Tighten cycling section grouping — remove redundant Fitness/Form hint card when no FTP set',det:'The "📊 Unlock training-load tracking" hint card was rendering between the Cycling Profile and the Cycling Progress chart whenever Strava was connected but no FTP was set yet — visually splitting the cycling block. The Cycling Profile card already shows the same "set FTP to unlock" guidance at its bottom, so the duplicate hint card was just clutter. Now when there\'s no fitness curve yet, the Fitness · Fatigue · Form section renders nothing, and the Cycling Profile sits directly adjacent to the Cycling Progress chart as intended.'},
   {v:'2.31',d:'Auto-estimate FTP from ride data + group cycling sections + hide them when cycling is not selected',det:'Three Training tab improvements. (1) FTP is now auto-estimated from your Strava ride NP data using Coggan\'s intensity model — duration-adjusted top-10% of per-ride NP values: 30-45min × 0.88, 45-75min × 0.95, 75-120min × 1.00, 120+ min × 1.05. Runs automatically on every Strava sync (if you haven\'t set FTP manually) and on app load. A new ESTIMATED badge replaces the STRAVA/MANUAL tag when the value came from auto-estimation. A new "📊 Estimate FTP from your rides" button appears on the Cycling Profile card whenever you have 3+ qualifying rides — tap to recompute and apply with a confirmation dialog. (2) All cycling sections (Cycling Profile, Fitness · Fatigue · Form, Cycling Progress, Performance Trends) are now grouped together at the top, followed by Body Weight, Gym Progress, then PRs. (3) The cycling block is hidden entirely when "Cycling" is not one of your selected activities — keeps the Training tab clean for gym-only users. Also added a hint explaining why weight can\'t be auto-derived from ride data (no weight signal in activity objects — needs to be set on Strava profile or entered manually).'},
@@ -5135,7 +5136,7 @@ function rCyclingProfile(){
     </div>
     <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
       <div style="font-size:10px;font-weight:700;color:var(--t2);letter-spacing:.3px">WEIGHT${srcBadge(wtSrc)}</div>
-      <div style="font-size:20px;font-weight:800;margin-top:4px">${wt?wt+'<span style="font-size:11px;color:var(--t2);font-weight:600"> kg</span>':'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
+      <div style="font-size:20px;font-weight:800;margin-top:4px">${wt?(bodyUnit()==='lb'?_kgToLb(wt).toFixed(1):wt.toFixed(1))+`<span style="font-size:11px;color:var(--t2);font-weight:600"> ${bodyUnit()}</span>`:'<span style="color:var(--t2);font-size:14px">—</span>'}</div>
       <button onclick="editWeight()" style="background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;margin-top:4px;padding:0">✏️ ${wt?'Edit':'Set'}</button>
     </div>
     <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:10px;text-align:center">
@@ -5191,25 +5192,57 @@ function editFtp(){
   showToast(profile.ftp?`FTP set to ${profile.ftp}W — load metrics recomputed`:'FTP cleared','var(--grn)');
 }
 
+// Weight conversion helpers. Storage is always in kg internally so W/kg math works.
+// Display unit follows the same `unit` preference as gym weights ('lbs' or 'kg').
+const _LB_PER_KG=2.20462262;
+function _kgToLb(kg){return kg*_LB_PER_KG;}
+function _lbToKg(lb){return lb/_LB_PER_KG;}
+function bodyUnit(){return DB.get('unit','lbs')==='lbs'?'lb':'kg';}
+// Parse a flexible weight input. Accepts:
+//   "82.5" — interpreted as user's preferred unit
+//   "82.5 kg", "82.5kg" — explicit kg
+//   "180 lb", "180lbs", "180 pounds" — explicit lb
+// Returns kg (number), or null on failure.
+function _parseBodyWeight(input){
+  if(!input||!input.trim())return null;
+  const s=input.trim().toLowerCase();
+  const n=parseFloat(s);
+  if(isNaN(n))return null;
+  if(/lb|pound/.test(s))return _lbToKg(n);
+  if(/kg|kilo/.test(s))return n;
+  // Bare number — use user's preference
+  return bodyUnit()==='lb'?_lbToKg(n):n;
+}
+// Format a kg value for display in the user's preferred unit
+function fmtBodyWt(kg,opts={}){
+  const u=bodyUnit();
+  const v=u==='lb'?_kgToLb(kg):kg;
+  const dp=opts.dp==null?1:opts.dp;
+  return v.toFixed(dp)+(opts.noUnit?'':' '+u);
+}
+// Format kg as "82.5 kg (182 lb)" — used in toasts to confirm conversions
+function fmtBodyWtBoth(kg){
+  return `${kg.toFixed(1)} kg (${_kgToLb(kg).toFixed(1)} lb)`;
+}
+
 function editWeight(){
-  const cur=DB.get('user_profile',{})?.weight||'';
-  const v=prompt('Your body weight in kg.\n\nUsed to compute W/kg ratios and tracked over time as a weigh-in.',cur);
+  const cur=DB.get('user_profile',{})?.weight;
+  const u=bodyUnit();
+  const curDisplay=cur?(u==='lb'?_kgToLb(cur).toFixed(1):cur.toFixed(1)):'';
+  const v=prompt(`Your body weight in ${u}.\n\nEnter just a number (e.g. "${u==='lb'?'180':'82'}") or include a unit ("180 lb" or "82 kg").\nUsed to compute W/kg ratios and tracked over time as a weigh-in.`,curDisplay);
   if(v===null)return;
-  const n=parseFloat(v);
   const profile=DB.get('user_profile',{})||{};
-  if(!v.trim()){delete profile.weight;delete profile.weight_source;}
-  else if(isNaN(n)||n<30||n>200){showToast('Weight must be 30-200 kg','var(--red)');return;}
-  else{
-    profile.weight=+n.toFixed(1);
-    profile.weight_source='manual';
-    // Log to weight history (keyed by today's date — latest write wins for same day)
-    const log=DB.get('weight_log',{})||{};
-    log[fd(new Date())]=profile.weight;
-    DB.set('weight_log',log);
-  }
+  if(!v.trim()){delete profile.weight;delete profile.weight_source;DB.set('user_profile',profile);syncUp();render();showToast('Weight cleared','var(--grn)');return;}
+  const kg=_parseBodyWeight(v);
+  if(kg==null||kg<30||kg>200){showToast(`Weight must be 30-200 kg (66-440 lb)`,'var(--red)');return;}
+  profile.weight=+kg.toFixed(1);
+  profile.weight_source='manual';
+  const log=DB.get('weight_log',{})||{};
+  log[fd(new Date())]=profile.weight;
+  DB.set('weight_log',log);
   DB.set('user_profile',profile);
   syncUp();render();
-  showToast(profile.weight?`Weight set to ${profile.weight} kg`:'Weight cleared','var(--grn)');
+  showToast(`Weight set to ${fmtBodyWtBoth(profile.weight)}`,'var(--grn)');
 }
 
 // Quick weigh-in entry — pre-fills with most recent weight, writes to both
@@ -5218,19 +5251,21 @@ function logWeight(){
   const log=DB.get('weight_log',{})||{};
   const profile=DB.get('user_profile',{})||{};
   const dates=Object.keys(log).sort();
-  const last=dates.length?log[dates[dates.length-1]]:profile.weight||'';
-  const v=prompt(`Log today's weigh-in (kg).\n\n${last?`Last value: ${last} kg`:'No previous weigh-ins yet.'}`,last);
+  const u=bodyUnit();
+  const lastKg=dates.length?log[dates[dates.length-1]]:profile.weight||null;
+  const lastDisplay=lastKg?(u==='lb'?_kgToLb(lastKg).toFixed(1):lastKg.toFixed(1)):'';
+  const v=prompt(`Log today's weigh-in (${u}).\n\n${lastKg?`Last value: ${fmtBodyWtBoth(lastKg)}`:'No previous weigh-ins yet.'}\n\nEnter a number or include a unit ("82 kg" / "180 lb").`,lastDisplay);
   if(v===null)return;
-  const n=parseFloat(v);
-  if(isNaN(n)||n<30||n>200){showToast('Weight must be 30-200 kg','var(--red)');return;}
-  const kg=+n.toFixed(1);
-  log[fd(new Date())]=kg;
+  const kg=_parseBodyWeight(v);
+  if(kg==null||kg<30||kg>200){showToast('Weight must be 30-200 kg (66-440 lb)','var(--red)');return;}
+  const rounded=+kg.toFixed(1);
+  log[fd(new Date())]=rounded;
   DB.set('weight_log',log);
-  profile.weight=kg;
+  profile.weight=rounded;
   profile.weight_source='manual';
   DB.set('user_profile',profile);
   syncUp();render();
-  showToast(`✅ Logged ${kg} kg`,'var(--grn)');
+  showToast(`✅ Logged ${fmtBodyWtBoth(rounded)}`,'var(--grn)');
 }
 
 /* ── FITNESS / FATIGUE / FORM ── */
@@ -5629,7 +5664,9 @@ function rWeightChart(){
   const goal=profile.weight_goal||null;
 
   const logBtn=`<button onclick="logWeight()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer">+ Log weight</button>`;
-  const goalBtn=`<button onclick="editWeightGoal()" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:11px;font-weight:700;padding:8px 12px;cursor:pointer">🎯 ${goal?'Goal '+goal+'kg':'Set goal'}</button>`;
+  const _u=bodyUnit();
+  const _toU=kg=>_u==='lb'?_kgToLb(kg):kg; // kg → display units
+  const goalBtn=`<button onclick="editWeightGoal()" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:11px;font-weight:700;padding:8px 12px;cursor:pointer">🎯 ${goal?'Goal '+_toU(goal).toFixed(1)+_u:'Set goal'}</button>`;
 
   // Empty state
   if(!dates.length){
@@ -5658,7 +5695,9 @@ function rWeightChart(){
   const ptsAll=all.filter(p=>p.y!=null);
   const slope=_regSlope(pts.length>=2?pts:ptsAll); // kg per day
   const slopeWk=slope*7;
-  const slopeStr=Math.abs(slopeWk)<0.05?'→ stable':(slopeWk>0?'↑':'↓')+' '+Math.abs(slopeWk).toFixed(2)+' kg/week';
+  // Display rate in user's preferred unit. Threshold for "stable" is 0.05 kg = 0.11 lb.
+  const slopeWkDisp=_u==='lb'?_kgToLb(slopeWk):slopeWk;
+  const slopeStr=Math.abs(slopeWk)<0.05?'→ stable':(slopeWk>0?'↑':'↓')+' '+Math.abs(slopeWkDisp).toFixed(2)+' '+_u+'/week';
   const trendColor=Math.abs(slopeWk)<0.05?'var(--t2)':(goal&&cur>goal?(slopeWk<0?'var(--grn)':'var(--red)'):goal&&cur<goal?(slopeWk>0?'var(--grn)':'var(--red)'):'var(--t1)');
 
   // Single weigh-in: skip the chart, show value + button
@@ -5668,8 +5707,8 @@ function rWeightChart(){
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
     <div>
-      <div style="font-size:22px;font-weight:800">${cur} <span style="font-size:12px;color:var(--t2);font-weight:600">kg</span></div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">Logged ${dates[dates.length-1]}</div>
+      <div style="font-size:22px;font-weight:800">${_toU(cur).toFixed(1)} <span style="font-size:12px;color:var(--t2);font-weight:600">${_u}</span></div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">${_u==='lb'?cur.toFixed(1)+' kg · ':''}Logged ${dates[dates.length-1]}</div>
     </div>
     <div style="display:flex;gap:6px">${logBtn}${goalBtn}</div>
   </div>
@@ -5698,10 +5737,11 @@ function rWeightChart(){
   });
   const trendPath=trendPts.map((p,i)=>`${i===0?'M':'L'}${sx(p.x).toFixed(1)},${sy(p.y).toFixed(1)}`).join(' ');
 
-  // Horizontal gridlines (4 ticks)
+  // Horizontal gridlines (4 ticks) — labels in user's preferred unit
   const gridLines=[0,0.33,0.66,1].map(t=>{
     const y=padT+plotH*(1-t);
-    const label=(yMin+(yMax-yMin)*t).toFixed(1);
+    const labelKg=yMin+(yMax-yMin)*t;
+    const label=_toU(labelKg).toFixed(1);
     return`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--bord)" stroke-width="0.5" stroke-dasharray="2 3"/>
 <text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--t2)">${label}</text>`;
   }).join('');
@@ -5712,12 +5752,13 @@ function rWeightChart(){
 
   // Goal line (dashed amber, only if goal set + in visible range)
   const goalLine=goal?`<line x1="${padL}" y1="${sy(goal).toFixed(1)}" x2="${W-padR}" y2="${sy(goal).toFixed(1)}" stroke="var(--amb)" stroke-width="1.2" stroke-dasharray="4 3" opacity="0.7"/>
-<text x="${W-padR-2}" y="${sy(goal).toFixed(1)-3}" text-anchor="end" font-size="9" fill="var(--amb)" font-weight="700">goal ${goal}kg</text>`:'';
+<text x="${W-padR-2}" y="${sy(goal).toFixed(1)-3}" text-anchor="end" font-size="9" fill="var(--amb)" font-weight="700">goal ${_toU(goal).toFixed(1)}${_u}</text>`:'';
 
   // Total change over window
   const first=pts[0].y;
   const last=pts[pts.length-1].y;
   const totalChange=last-first;
+  const totalChangeDisp=_u==='lb'?_kgToLb(totalChange):totalChange;
   const pctChange=first>0?(totalChange/first*100):0;
 
   // Days to goal estimate
@@ -5738,19 +5779,19 @@ function rWeightChart(){
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:10px">
     <div>
-      <div style="font-size:22px;font-weight:800;line-height:1">${cur} <span style="font-size:12px;color:var(--t2);font-weight:600">kg</span></div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">Logged ${dates[dates.length-1]}</div>
+      <div style="font-size:22px;font-weight:800;line-height:1">${_toU(cur).toFixed(1)} <span style="font-size:12px;color:var(--t2);font-weight:600">${_u}</span></div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${_u==='lb'?cur.toFixed(1)+' kg · ':''}Logged ${dates[dates.length-1]}</div>
     </div>
     <div style="text-align:right">
       <div style="font-size:11px;color:var(--t2)">90-day change</div>
-      <div style="font-size:14px;font-weight:800;color:${totalChange<0?'var(--grn)':totalChange>0?(goal&&cur<goal?'var(--grn)':'var(--red)'):'var(--t2)'}">${totalChange>0?'+':''}${totalChange.toFixed(1)} kg ${pctChange?`<span style="font-size:10px;color:var(--t2);font-weight:600">(${pctChange>0?'+':''}${pctChange.toFixed(1)}%)</span>`:''}</div>
+      <div style="font-size:14px;font-weight:800;color:${totalChange<0?'var(--grn)':totalChange>0?(goal&&cur<goal?'var(--grn)':'var(--red)'):'var(--t2)'}">${totalChangeDisp>0?'+':''}${totalChangeDisp.toFixed(1)} ${_u} ${pctChange?`<span style="font-size:10px;color:var(--t2);font-weight:600">(${pctChange>0?'+':''}${pctChange.toFixed(1)}%)</span>`:''}</div>
     </div>
   </div>
   <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:170px;display:block">
     ${gridLines}
     ${goalLine}
     <path d="${trendPath}" stroke="var(--acc)" stroke-width="2" fill="none" opacity="0.7"/>
-    ${pts.map(p=>`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="var(--acc)" opacity="0.85"><title>${p.date} — ${p.y} kg</title></circle>`).join('')}
+    ${pts.map(p=>`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.y).toFixed(1)}" r="2.6" fill="var(--acc)" opacity="0.85"><title>${p.date} — ${_toU(p.y).toFixed(1)} ${_u}</title></circle>`).join('')}
     ${xMarks}
   </svg>
   ${goalEta}
@@ -5762,15 +5803,17 @@ function rWeightChart(){
 
 function editWeightGoal(){
   const profile=DB.get('user_profile',{})||{};
-  const v=prompt('Goal weight in kg.\n\nThe chart will show a dashed line at this value and estimate weeks to reach it.\n\nLeave blank to clear.',profile.weight_goal||'');
+  const u=bodyUnit();
+  const curDisplay=profile.weight_goal?(u==='lb'?_kgToLb(profile.weight_goal).toFixed(1):profile.weight_goal.toFixed(1)):'';
+  const v=prompt(`Goal weight in ${u}.\n\nThe chart will show a dashed line at this value and estimate weeks to reach it.\n\nEnter a number or include a unit ("82 kg" / "180 lb"). Leave blank to clear.`,curDisplay);
   if(v===null)return;
   if(!v.trim()){delete profile.weight_goal;DB.set('user_profile',profile);syncUp();render();showToast('Goal cleared','var(--t2)');return;}
-  const n=parseFloat(v);
-  if(isNaN(n)||n<30||n>200){showToast('Goal must be 30-200 kg','var(--red)');return;}
-  profile.weight_goal=+n.toFixed(1);
+  const kg=_parseBodyWeight(v);
+  if(kg==null||kg<30||kg>200){showToast('Goal must be 30-200 kg (66-440 lb)','var(--red)');return;}
+  profile.weight_goal=+kg.toFixed(1);
   DB.set('user_profile',profile);
   syncUp();render();
-  showToast(`Goal set to ${profile.weight_goal} kg`,'var(--grn)');
+  showToast(`Goal set to ${fmtBodyWtBoth(profile.weight_goal)}`,'var(--grn)');
 }
 
 /* ── CYCLING PROGRESS CHART ── */
