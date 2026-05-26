@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.31';
+const APP_VERSION='2.32';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.32',d:'Tighten cycling section grouping — remove redundant Fitness/Form hint card when no FTP set',det:'The "📊 Unlock training-load tracking" hint card was rendering between the Cycling Profile and the Cycling Progress chart whenever Strava was connected but no FTP was set yet — visually splitting the cycling block. The Cycling Profile card already shows the same "set FTP to unlock" guidance at its bottom, so the duplicate hint card was just clutter. Now when there\'s no fitness curve yet, the Fitness · Fatigue · Form section renders nothing, and the Cycling Profile sits directly adjacent to the Cycling Progress chart as intended.'},
   {v:'2.31',d:'Auto-estimate FTP from ride data + group cycling sections + hide them when cycling is not selected',det:'Three Training tab improvements. (1) FTP is now auto-estimated from your Strava ride NP data using Coggan\'s intensity model — duration-adjusted top-10% of per-ride NP values: 30-45min × 0.88, 45-75min × 0.95, 75-120min × 1.00, 120+ min × 1.05. Runs automatically on every Strava sync (if you haven\'t set FTP manually) and on app load. A new ESTIMATED badge replaces the STRAVA/MANUAL tag when the value came from auto-estimation. A new "📊 Estimate FTP from your rides" button appears on the Cycling Profile card whenever you have 3+ qualifying rides — tap to recompute and apply with a confirmation dialog. (2) All cycling sections (Cycling Profile, Fitness · Fatigue · Form, Cycling Progress, Performance Trends) are now grouped together at the top, followed by Body Weight, Gym Progress, then PRs. (3) The cycling block is hidden entirely when "Cycling" is not one of your selected activities — keeps the Training tab clean for gym-only users. Also added a hint explaining why weight can\'t be auto-derived from ride data (no weight signal in activity objects — needs to be set on Strava profile or entered manually).'},
   {v:'2.30',d:'Gym Progress charts — weekly tonnage with muscle-group split + per-exercise 1RM progression with plateau detection',det:'New 💪 Gym Progress section on the Training tab with two charts. (1) Weekly Tonnage: stacked bar chart of total weight × reps across all completed sets, broken down by muscle group (Push / Pull / Legs / Core), last 12 weeks. Trend badge in the header compares recent 4-week average to prior 4-week average. Each bar is tooltipped with the per-group breakdown. (2) Estimated 1RM Progression: pick any exercise from a dropdown (sorted by recent frequency) and see your estimated one-rep max trajectory over 180 days. Uses Epley formula (weight × (1 + reps/30)) on the peak set per session. Shows current, best, and trend rate (kg/lb per month). Dashed regression line indicates direction. Auto-flags plateaus when no new peak 1RM in 21+ days, suggesting a deload or rep-range switch. AI weekly review prompt now receives tonnage trend (recent vs prior 4-week average) and per-exercise 1RM trajectories for your top 6 most-trained lifts, including plateau flags — so coaching advice can reference specific lifts ("your bench has plateaued at 92.5kg for 3 weeks → time for a deload at 85kg × 8").'},
   {v:'2.29',d:'Body weight tracking with chart, goal target, ETA estimate, and AI integration',det:'New ⚖️ Body Weight panel on the Training tab logs weigh-ins over time. Tap + Log weight to drop a weigh-in (default: previous value, just nudge the digit). Chart shows raw dots + 7-day rolling average over 90 days, with auto-detected trend rate (kg/week) in the header. Set an optional 🎯 goal weight and a dashed amber line appears on the chart with an estimated "weeks to reach goal" projection based on your current trajectory. 90-day total change shown as a stat above the chart. The existing Cycling Profile ✏️ Edit weight button now also writes to the history log, so manual edits become weigh-ins. Strava\'s athlete weight is auto-seeded as today\'s value on first import (unless you\'ve already logged manually). The AI weekly review prompt now receives the full weight context: current value, goal proximity, 7-day and 28-day deltas, rate of change, and healthy cut/bulk reference ranges — so feedback can correlate weight trends with training load (e.g. "you\'re losing 0.7 kg/week while CTL keeps climbing — sustainable cut" vs "weight dropping but CTL also falling — under-fueling, eat more carbs on ride days").'},
@@ -5238,16 +5239,10 @@ function logWeight(){
 function rFitnessForm(){
   const curve=DB.get('bike_fitness_curve',null);
   const ftp=DB.get('user_profile',{})?.ftp;
-  if(!curve){
-    // Show a hint card if Strava is connected but no FTP set
-    if(DB.get('strava_token',null)&&!ftp){
-      return`<div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.25);border-radius:14px;padding:12px 15px;margin-bottom:10px">
-        <div style="font-size:12px;font-weight:700;color:var(--acc);margin-bottom:4px">📊 Unlock training-load tracking</div>
-        <div style="font-size:11px;color:var(--t2);line-height:1.5">Set your FTP below to compute TSS, fitness (CTL), fatigue (ATL) and form (TSB) across all your rides.</div>
-      </div>`;
-    }
-    return'';
-  }
+  // Render nothing when there's no fitness curve yet — the Cycling Profile card
+  // already contains the "set FTP to unlock" guidance, no need to duplicate it
+  // here (and it was visually splitting the Profile from the Progress chart).
+  if(!curve)return'';
   const todayKey=fd(new Date());
   const wkAgoKey=fd(addDays(new Date(),-7));
   const cur=curve[todayKey]||curve[fd(addDays(new Date(),-1))]||null;
