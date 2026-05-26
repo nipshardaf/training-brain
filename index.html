@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.41';
+const APP_VERSION='2.42';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.42',d:'Compact "Waiting for Strava" card on ride days + backdate weigh-ins',det:'TWO improvements. (1) RIDE-DAY UX — the big 4-field manual ride log form no longer takes up screen space on every ride day when you have Strava connected. Instead a compact single-row card appears with the last sync timestamp, a 🟠 Sync now button, and a 📝 toggle to expand the full manual form if you genuinely want to log without Strava. Future-dated ride days (planned but not yet arrived) hide the manual log form entirely — no point logging a ride that hasn\'t happened. Once you do tap 📝 to expand, the form stays expanded for the rest of the session. (2) BACKDATE WEIGH-INS — the body weight sheet now has a date picker (defaults to today, max = today, no future dates). Useful for filling in missed days from memory, especially when you want to see the chart appear ASAP after starting to log. Backdated entries write to weight_log at the selected date but only update your "current weight" (used for W/kg) if the selected date is your most recent — so backdating doesn\'t overwrite a more recent weigh-in.'},
   {v:'2.41',d:'Group cycling sections under one "🚴 Cycling Performance" header with subtle visual container',det:'The Training tab had 4 separate uppercase section headings ("CYCLING PROFILE", "💪 FITNESS · FATIGUE · FORM", "📊 CYCLING PROGRESS", "📈 CYCLING — WEEKLY SUMMARY") which felt redundant and busy. Replaced with one main "🚴 CYCLING PERFORMANCE" header wrapping all 4 subsections in a subtle purple-tinted bordered container. Each subsection now has a smaller inline label inside the container (Profile / 💪 Fitness · Fatigue · Form / 📊 Progress chart / 📈 Weekly summary) so they\'re still distinguishable but visually subordinate to the main cycling group. Trend metadata that lived in the sub-headers (trend badges, "vs N days ago") is preserved inline next to each sub-label. The logical flow within the group is now Profile (baseline) → Form (current state) → Progress chart (trend) → Weekly summary (volume) — moving from "where I am" to "how I\'m changing".'},
   {v:'2.40',d:'Reordered Training tab — daily data up top, config (goals/activities/plan) at the bottom',det:'Body Weight is now the very first section under the header — fastest path to log today\'s weigh-in. Followed by the cycling block (Profile, Fitness, Progress chart, Weekly Summary), then Gym Progress (Tonnage + 1RM), then PRs. The configuration sections (Your Goals, Your Activities, Training Plan / Workout preference) moved to the bottom just above History — you set those once and rarely touch them. Eliminates ~600px of scrolling past static config to reach the daily-action area.'},
   {v:'2.39',d:'FTP estimate transparency sheet — see which rides drove the number, spot missing power data',det:'Tapping "📊 Estimate FTP from your rides" no longer shows a generic browser confirm dialog. Instead a proper bottom sheet opens showing the suggested FTP at the top, then a list of the actual rides driving the estimate — each row shows date, duration, NP, the duration adjustment factor applied, and the resulting per-ride FTP estimate. A "Show all eligible rides" toggle expands to every ride considered, sorted by FTP-equivalent NP. If any of your rides ≥30 min lack power data, the sheet shows a warning ("⚠️ N rides skipped — no power data") explaining why HR-only rides can\'t feed the estimate. This is a transparency tool: if your hardest 1-hour Zone 4 effort isn\'t in the top-rides list, you immediately know it was an HR-only ride and the auto-estimator couldn\'t see it — so you can hit ✏️ Set my own value and enter what you actually know your FTP is. Three actions at the bottom: Apply the estimate, Set your own value (opens the manual FTP editor), or Cancel.'},
@@ -3963,21 +3964,41 @@ function rRideCard(dp){
   </div>
   ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
 </div>`:'';
-  // Manual ride log — inline form, shown when Strava has no activity for this day
+  // Manual ride log — inline form, shown when Strava has no activity for this day.
+  // Behavior depends on context:
+  //   - Future date: hide entirely (no point logging a planned ride)
+  //   - Strava connected + no manual data yet: compact "waiting for sync" card
+  //     (the big 4-field form is one tap behind a "Log manually" button)
+  //   - Otherwise: full manual form
   const manual=DB.get(DB.lk(new Date(dp.date+'T12:00:00')),null)?.ride;
   let manualHtml='';
-  if(!actual){
+  const todayStr=fd(new Date());
+  const isFuture=dp.date>todayStr;
+  if(!actual&&!isFuture){
     const r=manual||{};
+    const hasManualData=r.dur!=null;
     const stravaConnected=!!DB.get('strava_token',null);
     const lastSync=DB.get('strava_last_sync',null);
     const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
-    const syncLabel=syncAge===null?'Never synced':syncAge<2?'Synced just now':syncAge<60?`Synced ${syncAge}m ago`:`Synced ${Math.round(syncAge/60)}h ago`;
-    const hint=stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
-    const fld=(id,label,unit,val)=>`<div>
-      <label style="display:block;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}${unit?' · '+unit:''}</label>
-      <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" oninput="rideField('${dp.date}','${id.slice(3)}',this.value)"
-        style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:15px;font-weight:700;padding:9px 11px;outline:none;font-family:inherit;-webkit-appearance:none"></div>`;
-    manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:13px 14px;margin-bottom:13px">
+    const syncLabel=syncAge===null?'never':syncAge<2?'just now':syncAge<60?`${syncAge}m ago`:`${Math.round(syncAge/60)}h ago`;
+    const showCompact=stravaConnected&&!hasManualData&&!S.expandRideLog?.[dp.date];
+    if(showCompact){
+      // Compact card: just a sync button + manual log toggle
+      manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:11px 14px;margin-bottom:13px;display:flex;align-items:center;justify-content:space-between;gap:10px">
+  <div style="min-width:0;flex:1">
+    <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.5px">⏳ Waiting for Strava</div>
+    <div style="font-size:11px;color:var(--t2);margin-top:1px">Last sync: ${syncLabel}</div>
+  </div>
+  <button onclick="stravaFetchActivities()" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.4);border-radius:9px;color:#fc4c02;font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;flex:0 0 auto">🟠 Sync now</button>
+  <button onclick="expandRideLog('${dp.date}')" title="Log this ride manually" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:11px;font-weight:700;padding:7px 9px;cursor:pointer;flex:0 0 auto">📝</button>
+</div>`;
+    }else{
+      const hint=stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
+      const fld=(id,label,unit,val)=>`<div>
+        <label style="display:block;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}${unit?' · '+unit:''}</label>
+        <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" oninput="rideField('${dp.date}','${id.slice(3)}',this.value)"
+          style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:15px;font-weight:700;padding:9px 11px;outline:none;font-family:inherit;-webkit-appearance:none"></div>`;
+      manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:13px 14px;margin-bottom:13px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.7px">📝 ${_T('rl_title')}</div>
     ${stravaConnected?`<button onclick="stravaFetchActivities()" style="background:none;border:1px solid rgba(252,76,2,.4);border-radius:8px;color:#fc4c02;font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer">🟠 Sync now · ${syncLabel}</button>`:''}
@@ -3994,6 +4015,7 @@ function rRideCard(dp){
   <button onclick="saveRideLogInline('${dp.date}')" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:11px;cursor:pointer">${_T('rl_save')}</button>
   ${r.dur!=null?`<div style="font-size:10px;color:var(--grn);text-align:center;margin-top:7px;font-weight:600">✓ ${_T('rl_logged')}</div>`:''}
 </div>`;
+    }
   }
   const hasLogged=actual||(manual&&manual.dur!=null);
   return`<div class="ride-card" style="text-align:left">
@@ -5231,6 +5253,15 @@ function showWkgInfo(){
   document.body.appendChild(sheet);
 }
 
+// Expands the manual ride log form on a ride day where it was collapsed behind
+// a "📝" button (because Strava is connected and no manual data exists yet).
+// Stored on S so it survives renders within the session.
+function expandRideLog(dateStr){
+  S.expandRideLog=S.expandRideLog||{};
+  S.expandRideLog[dateStr]=true;
+  render();
+}
+
 // Manual trigger for FTP estimation — opens a transparency sheet showing which
 // rides drove the number so the user can validate (and notice if their hardest
 // effort is missing because that ride had no power data).
@@ -5382,6 +5413,13 @@ function openWeightSheet(mode){
 
   <div id="wt-conv" style="font-size:13px;color:var(--t2);text-align:center;margin-bottom:18px;min-height:18px"></div>
 
+  ${!isGoal?`<div style="margin-bottom:16px">
+    <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px">Date</div>
+    <input id="wt-date" type="date" value="${fd(new Date())}" max="${fd(new Date())}"
+      style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:14px;font-weight:600;padding:11px;outline:none;font-family:inherit;-webkit-appearance:none">
+    <div style="font-size:10px;color:var(--t2);margin-top:5px;line-height:1.4">Default is today. Backdate to log a missed weigh-in.</div>
+  </div>`:''}
+
   ${!isGoal&&lastKg!=null?`<div style="font-size:12px;color:var(--t2);text-align:center;margin-bottom:18px;padding:9px;background:var(--s2);border-radius:10px">Last weigh-in: <strong style="color:var(--txt)">${fmtBodyWtBoth(lastKg)}</strong> · ${dates[dates.length-1]}</div>`:''}
 
   <button id="wt-save" onclick="_wtSave('${mode}')" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">${isGoal?'Save goal':'Log weight'}</button>
@@ -5459,15 +5497,25 @@ function _wtSave(mode){
     syncUp();render();closeWeightSheet();
     showToast(`🎯 Goal set to ${fmtBodyWtBoth(rounded)}`,'var(--grn)');
   }else{
-    // Log mode: write current value AND append to weight history
-    profile.weight=rounded;
-    profile.weight_source='manual';
+    // Log mode: write to weight history at the selected date (defaults to today).
+    // Only update profile.weight (the "current" used for W/kg) if the selected
+    // date is today OR newer than any existing entry — backdated entries fill
+    // gaps in history without overwriting your current weight.
+    const dateInput=document.getElementById('wt-date');
+    const selDate=(dateInput&&dateInput.value)||fd(new Date());
     const log=DB.get('weight_log',{})||{};
-    log[fd(new Date())]=rounded;
+    log[selDate]=rounded;
     DB.set('weight_log',log);
-    DB.set('user_profile',profile);
+    const allDates=Object.keys(log).sort();
+    const latestDate=allDates[allDates.length-1];
+    if(selDate===latestDate){
+      profile.weight=rounded;
+      profile.weight_source='manual';
+      DB.set('user_profile',profile);
+    }
     syncUp();render();closeWeightSheet();
-    showToast(`✅ Logged ${fmtBodyWtBoth(rounded)}`,'var(--grn)');
+    const isToday=selDate===fd(new Date());
+    showToast(isToday?`✅ Logged ${fmtBodyWtBoth(rounded)}`:`✅ Backdated ${fmtBodyWtBoth(rounded)} to ${selDate}`,'var(--grn)');
   }
 }
 
