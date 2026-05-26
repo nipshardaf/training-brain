@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.38';
+const APP_VERSION='2.39';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.39',d:'FTP estimate transparency sheet — see which rides drove the number, spot missing power data',det:'Tapping "📊 Estimate FTP from your rides" no longer shows a generic browser confirm dialog. Instead a proper bottom sheet opens showing the suggested FTP at the top, then a list of the actual rides driving the estimate — each row shows date, duration, NP, the duration adjustment factor applied, and the resulting per-ride FTP estimate. A "Show all eligible rides" toggle expands to every ride considered, sorted by FTP-equivalent NP. If any of your rides ≥30 min lack power data, the sheet shows a warning ("⚠️ N rides skipped — no power data") explaining why HR-only rides can\'t feed the estimate. This is a transparency tool: if your hardest 1-hour Zone 4 effort isn\'t in the top-rides list, you immediately know it was an HR-only ride and the auto-estimator couldn\'t see it — so you can hit ✏️ Set my own value and enter what you actually know your FTP is. Three actions at the bottom: Apply the estimate, Set your own value (opens the manual FTP editor), or Cancel.'},
   {v:'2.38',d:'W/kg bands refined to match Coggan chart precisely — 7 tiers, Untrained tier added',det:'Cross-checked the W/kg categorization against the original Coggan/Allen table (from "Training and Racing with a Power Meter") and multiple other sources (Zwift Insider, Cycling Analytics, TrainingPeaks). Refined the male thresholds from 2.0/3.0/4.0/5.0/5.5 to 2.0/2.5/3.2/4.0/5.0/5.5 — adding a distinct "Untrained" tier (< 2.0 W/kg, sedentary or new to cycling) below "Beginner" (2.0-2.5, first few months of regular training). Recreational now starts at 2.5 W/kg (active weekend rider) instead of 2.0. Female bands adjusted similarly (≈0.5 W/kg lower per tier). The W/kg info sheet now shows all 7 tiers.'},
   {v:'2.37',d:'Remove redundant Weight card from Cycling Profile — single source of truth is now Body Weight section',det:'The Cycling Profile card showed Weight in the middle column AND the Body Weight section below repeated the same number. Both were already linked to the same profile.weight value, so the Cycling Profile copy was pure duplication. Removed the Weight column. Cycling Profile is now a cleaner 2-column layout (FTP + W/kg), with both cards visually larger (24px numeric values instead of 20px). The W/kg card now shows the calculation breakdown ("125W ÷ 244.1 lb") as a small subtitle so you can verify where the ratio comes from. When weight is unset but FTP is set, the W/kg card displays "Log weight ↓" pointing the user to the Body Weight section. When FTP is unset but weight is set, it says "Set FTP →".'},
   {v:'2.36',d:'W/kg categories now align with Coggan/Allen standard + gender-aware bands + info sheet',det:'The W/kg label below the W/KG stat was using overly generous bands ("Recreational" started at 0 W/kg). Corrected to match Coggan & Allen\'s "Training and Racing with a Power Meter" — the gold-standard reference used by TrainingPeaks, Zwift, and every credible cycling platform. 6 tiers: Beginner / Recreational / Trained / Strong / Cat 1 / Elite or Pro. Bands are now gender-aware — male thresholds at 2.0/3.0/4.0/5.0/5.5 W/kg, female at 1.5/2.5/3.5/4.5/5.0 W/kg (using profile.gender). New ⓘ info button next to "W/KG" opens a sheet showing all 6 bands with ranges, your current tier highlighted, and a note that W/kg matters most on climbs (absolute power matters more on flats due to CdA + drafting).'},
@@ -1907,20 +1908,38 @@ function _wkgLabel(wpkg,gender){
 // Takes the top-10% of per-ride estimates and averages them — robust against
 // outliers, captures genuine hard efforts. Returns null if not enough data.
 function _estimateFtpFromRides(rides){
+  const d=_ftpEstimateDetail(rides);
+  return d?d.ftp:null;
+}
+
+// Same algorithm as above but returns the contributing rides too — used by the
+// FTP estimate sheet so the user can SEE which rides drove the number (and
+// notice if their hardest effort is missing because it had no power data).
+function _ftpEstimateDetail(rides){
   if(!rides||rides.length<3)return null;
-  const ests=rides
+  const eligible=rides
     .filter(a=>a.weighted_average_watts&&a.moving_time>=30*60)
     .map(a=>{
       const min=a.moving_time/60;
       const f=min<45?0.88:min<75?0.95:min<120?1.0:1.05;
-      return a.weighted_average_watts*f;
+      return{
+        date:(a.start_date_local||'').slice(0,10),
+        name:a.name||'',
+        mins:Math.round(min),
+        np:Math.round(a.weighted_average_watts),
+        factor:f,
+        est:Math.round(a.weighted_average_watts*f)
+      };
     });
-  if(ests.length<3)return null;
-  ests.sort((a,b)=>b-a);
-  const topN=Math.max(1,Math.ceil(ests.length*0.1));
-  const top=ests.slice(0,topN);
-  const avg=top.reduce((s,v)=>s+v,0)/top.length;
-  return Math.round(avg/5)*5; // Round to nearest 5W
+  if(eligible.length<3)return null;
+  eligible.sort((a,b)=>b.est-a.est);
+  const topN=Math.max(1,Math.ceil(eligible.length*0.1));
+  const top=eligible.slice(0,topN);
+  const avg=top.reduce((s,v)=>s+v.est,0)/top.length;
+  const ftp=Math.round(avg/5)*5;
+  // How many rides total has power data, and how many don't (so we can flag missing data)
+  const withoutPower=rides.filter(a=>!a.weighted_average_watts&&a.moving_time>=30*60).length;
+  return{ftp,top,allEligible:eligible,withoutPower};
 }
 
 // Auto-apply FTP estimate if user hasn't set one. Returns true if applied.
@@ -5210,24 +5229,66 @@ function showWkgInfo(){
   document.body.appendChild(sheet);
 }
 
-// Manual trigger for FTP estimation — confirms with user before applying
+// Manual trigger for FTP estimation — opens a transparency sheet showing which
+// rides drove the number so the user can validate (and notice if their hardest
+// effort is missing because that ride had no power data).
 function estimateFtp(){
+  document.getElementById('ftp-est-sheet')?.remove();
   const rides=DB.get('strava_activities',[])||[];
-  const est=_estimateFtpFromRides(rides);
-  if(!est){showToast('Not enough ride data (need 3+ rides ≥30 min with power)','var(--red)');return;}
+  const d=_ftpEstimateDetail(rides);
+  if(!d){showToast('Not enough ride data (need 3+ rides ≥30 min with power)','var(--red)');return;}
   const profile=DB.get('user_profile',{})||{};
   const cur=profile.ftp;
-  const msg=cur
-    ?`Estimated FTP from your rides: ${est} W\n\nCurrent value: ${cur} W (${profile.ftp_source||'manual'})\n\nReplace with estimate?`
-    :`Estimated FTP from your rides: ${est} W\n\nThis is based on the top 10% of your ride NP values, adjusted for duration.\n\nApply this value?`;
-  if(!confirm(msg))return;
+  const showAll=DB.get('_ftp_show_all',false);
+  const visible=showAll?d.allEligible:d.top;
+  const sheet=document.createElement('div');
+  sheet.id='ftp-est-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="closeFtpEstSheet()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+28px);max-width:430px;margin:0 auto;width:100%;max-height:85vh;overflow-y:auto">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">📊 FTP from your rides</div>
+  <div style="font-size:13px;color:var(--t2);margin-bottom:18px;line-height:1.5">Top 10% of your hardest sustained efforts, duration-adjusted per Coggan's intensity model.</div>
+
+  <div style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.35);border-radius:14px;padding:16px;text-align:center;margin-bottom:18px">
+    <div style="font-size:11px;font-weight:700;color:var(--t2);letter-spacing:.4px">SUGGESTED FTP</div>
+    <div style="font-size:34px;font-weight:800;color:var(--acc);margin-top:4px">${d.ftp}<span style="font-size:14px;color:var(--t2);font-weight:600"> W</span></div>
+    ${cur?`<div style="font-size:11px;color:var(--t2);margin-top:4px">Current: <strong style="color:var(--al)">${cur}W</strong> (${profile.ftp_source||'manual'})</div>`:''}
+  </div>
+
+  <div style="font-size:12px;font-weight:700;color:var(--al);margin-bottom:8px">${showAll?`All ${d.allEligible.length} eligible rides:`:`Top ${d.top.length} ride${d.top.length!==1?'s':''} driving this estimate:`}</div>
+  <div style="background:var(--s2);border-radius:12px;overflow:hidden;margin-bottom:8px;max-height:240px;overflow-y:auto">
+    ${visible.map(r=>`<div style="padding:9px 12px;border-bottom:1px solid var(--bord);font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline">
+        <div style="font-weight:700;color:var(--al)">${r.date} · ${r.mins} min</div>
+        <div style="font-weight:800;color:var(--acc)">→ ${r.est} W</div>
+      </div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">NP ${r.np}W × ${r.factor.toFixed(2)}${r.name?' · '+_esc(r.name).slice(0,40):''}</div>
+    </div>`).join('')}
+  </div>
+  <button onclick="DB.set('_ftp_show_all',${!showAll});estimateFtp()" style="width:100%;background:none;border:none;color:var(--acc);font-size:11px;font-weight:700;cursor:pointer;padding:6px;margin-bottom:14px">${showAll?'▲ Show only top 10%':`▼ Show all ${d.allEligible.length} eligible rides`}</button>
+
+  ${d.withoutPower>0?`<div style="font-size:11px;color:var(--amb);background:rgba(251,146,60,.08);border:1px solid rgba(251,146,60,.25);border-radius:11px;padding:11px 13px;margin-bottom:16px;line-height:1.5">⚠️ <strong>${d.withoutPower} ride${d.withoutPower>1?'s':''} ≥30 min skipped</strong> — no power data. If your hardest efforts are missing, that's why. HR-only rides can't feed an FTP estimate; set it manually below.</div>`:''}
+
+  <button onclick="_applyFtpEst(${d.ftp})" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Apply ${d.ftp}W as FTP</button>
+  <button onclick="closeFtpEstSheet();editFtp()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--al);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:10px">✏️ Set my own value</button>
+  <button onclick="closeFtpEstSheet()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
+</div>`;
+  document.body.appendChild(sheet);
+}
+
+function closeFtpEstSheet(){document.getElementById('ftp-est-sheet')?.remove();}
+
+function _applyFtpEst(est){
+  const profile=DB.get('user_profile',{})||{};
   profile.ftp=est;profile.ftp_source='estimated';
   DB.set('user_profile',profile);
+  const rides=DB.get('strava_activities',[])||[];
   _annotateRideLoad(rides,est);
   DB.set('strava_activities',rides);
   const curve=computeFitnessCurve(rides);
   if(curve)DB.set('bike_fitness_curve',curve);
-  syncUp();render();
+  syncUp();closeFtpEstSheet();render();
   showToast(`📊 FTP set to ${est}W (estimated)`,'var(--grn)');
 }
 
