@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.37';
+const APP_VERSION='2.38';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.38',d:'W/kg bands refined to match Coggan chart precisely — 7 tiers, Untrained tier added',det:'Cross-checked the W/kg categorization against the original Coggan/Allen table (from "Training and Racing with a Power Meter") and multiple other sources (Zwift Insider, Cycling Analytics, TrainingPeaks). Refined the male thresholds from 2.0/3.0/4.0/5.0/5.5 to 2.0/2.5/3.2/4.0/5.0/5.5 — adding a distinct "Untrained" tier (< 2.0 W/kg, sedentary or new to cycling) below "Beginner" (2.0-2.5, first few months of regular training). Recreational now starts at 2.5 W/kg (active weekend rider) instead of 2.0. Female bands adjusted similarly (≈0.5 W/kg lower per tier). The W/kg info sheet now shows all 7 tiers.'},
   {v:'2.37',d:'Remove redundant Weight card from Cycling Profile — single source of truth is now Body Weight section',det:'The Cycling Profile card showed Weight in the middle column AND the Body Weight section below repeated the same number. Both were already linked to the same profile.weight value, so the Cycling Profile copy was pure duplication. Removed the Weight column. Cycling Profile is now a cleaner 2-column layout (FTP + W/kg), with both cards visually larger (24px numeric values instead of 20px). The W/kg card now shows the calculation breakdown ("125W ÷ 244.1 lb") as a small subtitle so you can verify where the ratio comes from. When weight is unset but FTP is set, the W/kg card displays "Log weight ↓" pointing the user to the Body Weight section. When FTP is unset but weight is set, it says "Set FTP →".'},
   {v:'2.36',d:'W/kg categories now align with Coggan/Allen standard + gender-aware bands + info sheet',det:'The W/kg label below the W/KG stat was using overly generous bands ("Recreational" started at 0 W/kg). Corrected to match Coggan & Allen\'s "Training and Racing with a Power Meter" — the gold-standard reference used by TrainingPeaks, Zwift, and every credible cycling platform. 6 tiers: Beginner / Recreational / Trained / Strong / Cat 1 / Elite or Pro. Bands are now gender-aware — male thresholds at 2.0/3.0/4.0/5.0/5.5 W/kg, female at 1.5/2.5/3.5/4.5/5.0 W/kg (using profile.gender). New ⓘ info button next to "W/KG" opens a sheet showing all 6 bands with ranges, your current tier highlighted, and a note that W/kg matters most on climbs (absolute power matters more on flats due to CdA + drafting).'},
   {v:'2.35',d:'Proper weight entry sheet — number input + lb/kg toggle + live conversion (no more browser prompt)',det:'Replaced the browser prompt() dialogs for weight entry with a proper bottom sheet modal matching the app\'s design language. The sheet has a single large numeric input, two pill toggle buttons (lb / kg) right below, a live conversion line ("≈ 110.7 kg") that updates as you type, and your last weigh-in shown for reference. Switching units mid-entry intelligently converts the current input value so you don\'t lose your typing. The same sheet is used for logging weigh-ins (from Cycling Profile ✏️ Edit, Body Weight + Log weight, or other entry points) and for setting your goal weight — same unit toggle, same live conversion. Logging a weight from the Cycling Profile card writes to both the current weight (powering W/kg) AND the weight history (powering the Body Weight chart) — so a single entry point updates everything. Clear-current-weight and clear-goal options are available as red secondary buttons on the sheet when there\'s an existing value to clear.'},
@@ -1881,15 +1882,17 @@ async function stravaFetchAthlete(){
 function _wkgLabel(wpkg,gender){
   const female=gender==='female';
   if(female){
-    if(wpkg<1.5)return'Beginner';
-    if(wpkg<2.5)return'Recreational';
+    if(wpkg<1.5)return'Untrained';
+    if(wpkg<2.0)return'Beginner';
+    if(wpkg<2.7)return'Recreational';
     if(wpkg<3.5)return'Trained';
     if(wpkg<4.5)return'Strong';
     if(wpkg<5.0)return'Cat 1';
     return'Elite / Pro';
   }
-  if(wpkg<2.0)return'Beginner';
-  if(wpkg<3.0)return'Recreational';
+  if(wpkg<2.0)return'Untrained';
+  if(wpkg<2.5)return'Beginner';
+  if(wpkg<3.2)return'Recreational';
   if(wpkg<4.0)return'Trained';
   if(wpkg<5.0)return'Strong';
   if(wpkg<5.5)return'Cat 1';
@@ -5180,8 +5183,8 @@ function showWkgInfo(){
   const female=profile.gender==='female';
   const wpkg=(profile.ftp&&profile.weight)?+(profile.ftp/profile.weight).toFixed(2):null;
   const bands=female
-    ?[{l:'Beginner',min:0,max:1.5},{l:'Recreational',min:1.5,max:2.5},{l:'Trained',min:2.5,max:3.5},{l:'Strong',min:3.5,max:4.5},{l:'Cat 1',min:4.5,max:5.0},{l:'Elite / Pro',min:5.0,max:Infinity}]
-    :[{l:'Beginner',min:0,max:2.0},{l:'Recreational',min:2.0,max:3.0},{l:'Trained',min:3.0,max:4.0},{l:'Strong',min:4.0,max:5.0},{l:'Cat 1',min:5.0,max:5.5},{l:'Elite / Pro',min:5.5,max:Infinity}];
+    ?[{l:'Untrained',min:0,max:1.5},{l:'Beginner',min:1.5,max:2.0},{l:'Recreational',min:2.0,max:2.7},{l:'Trained',min:2.7,max:3.5},{l:'Strong',min:3.5,max:4.5},{l:'Cat 1',min:4.5,max:5.0},{l:'Elite / Pro',min:5.0,max:Infinity}]
+    :[{l:'Untrained',min:0,max:2.0},{l:'Beginner',min:2.0,max:2.5},{l:'Recreational',min:2.5,max:3.2},{l:'Trained',min:3.2,max:4.0},{l:'Strong',min:4.0,max:5.0},{l:'Cat 1',min:5.0,max:5.5},{l:'Elite / Pro',min:5.5,max:Infinity}];
   const sheet=document.createElement('div');
   sheet.id='wkg-info-sheet';
   sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end';
