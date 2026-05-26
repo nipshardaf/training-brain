@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.42';
+const APP_VERSION='2.43';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.43',d:'Strava ride on a gym day no longer hides the planned gym work — explicit "Replace gym with ride" cascade option',det:'Previously: when a Strava ride synced on a planned gym day (e.g., went riding on Pull Tuesday), the week-view row replaced the gym label with the ride name and stats, making it look like the gym day vanished. The plan data was still PULL underneath, but the UI made it invisible. Now: the week-view row keeps showing the gym workout as the primary label (with its colour and icon) and adds a small orange "+ 🚴 X km · Y min logged" line below — both the planned gym and the actual ride are visible. When you open the day, a Strava-ride banner appears at the top with TWO clear actions: "🔄 Replace gym with ride" (cascades the gym workout forward, last gym day in the week becomes REST — mirroring the v2.20 add-workout cascade but in reverse) or "💪 Keep both" (do the gym workout in addition to the ride, prompt is dismissed but ride stays visible as a small inline note). The chosen state persists on the plan day (rideAlongside flag) so re-opens don\'t re-prompt.'},
   {v:'2.42',d:'Compact "Waiting for Strava" card on ride days + backdate weigh-ins',det:'TWO improvements. (1) RIDE-DAY UX — the big 4-field manual ride log form no longer takes up screen space on every ride day when you have Strava connected. Instead a compact single-row card appears with the last sync timestamp, a 🟠 Sync now button, and a 📝 toggle to expand the full manual form if you genuinely want to log without Strava. Future-dated ride days (planned but not yet arrived) hide the manual log form entirely — no point logging a ride that hasn\'t happened. Once you do tap 📝 to expand, the form stays expanded for the rest of the session. (2) BACKDATE WEIGH-INS — the body weight sheet now has a date picker (defaults to today, max = today, no future dates). Useful for filling in missed days from memory, especially when you want to see the chart appear ASAP after starting to log. Backdated entries write to weight_log at the selected date but only update your "current weight" (used for W/kg) if the selected date is your most recent — so backdating doesn\'t overwrite a more recent weigh-in.'},
   {v:'2.41',d:'Group cycling sections under one "🚴 Cycling Performance" header with subtle visual container',det:'The Training tab had 4 separate uppercase section headings ("CYCLING PROFILE", "💪 FITNESS · FATIGUE · FORM", "📊 CYCLING PROGRESS", "📈 CYCLING — WEEKLY SUMMARY") which felt redundant and busy. Replaced with one main "🚴 CYCLING PERFORMANCE" header wrapping all 4 subsections in a subtle purple-tinted bordered container. Each subsection now has a smaller inline label inside the container (Profile / 💪 Fitness · Fatigue · Form / 📊 Progress chart / 📈 Weekly summary) so they\'re still distinguishable but visually subordinate to the main cycling group. Trend metadata that lived in the sub-headers (trend badges, "vs N days ago") is preserved inline next to each sub-label. The logical flow within the group is now Profile (baseline) → Form (current state) → Progress chart (trend) → Weekly summary (volume) — moving from "where I am" to "how I\'m changing".'},
   {v:'2.40',d:'Reordered Training tab — daily data up top, config (goals/activities/plan) at the bottom',det:'Body Weight is now the very first section under the header — fastest path to log today\'s weigh-in. Followed by the cycling block (Profile, Fitness, Progress chart, Weekly Summary), then Gym Progress (Tonnage + 1RM), then PRs. The configuration sections (Your Goals, Your Activities, Training Plan / Workout preference) moved to the bottom just above History — you set those once and rarely touch them. Eliminates ~600px of scrolling past static config to reach the daily-action area.'},
@@ -3800,16 +3801,23 @@ function rDayRow(day,today){
   const wi=WI[day.type]||WI.REST;
   const w=day.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(day.type);
+  const isRest=day.type==='REST';
+  const isGym=!isRide&&!isRest;
   const v=verdict(w.score);
-  // If a Strava ride was recorded, always show the ride name and stats
-  const showStravaOverride=!!stravaRide;
+  // Override the day's type display with the Strava ride only when the plan was
+  // already a ride day or rest day. On a planned gym day, keep showing the gym
+  // type as primary (so the planned workout isn't visually erased) and surface
+  // the ride as a secondary "+ logged" line. v2.43 fix.
+  const showStravaOverride=!!stravaRide&&!isGym;
   const distStr=stravaRide?+((stravaRide.distance||0)/1000).toFixed(1):0;
   const durStr=stravaRide?Math.round((stravaRide.moving_time||0)/60):0;
+  const rideOnGymDay=!!stravaRide&&isGym;
   return`<div class="day-row${isToday?' is-today':''}${(done||isPast)?' is-done':''}" onclick="openDay('${day.date}')">
 <div class="dr-l">
   <div class="dr-day">${DNAMES[date.getDay()]} ${date.getDate()}</div>
   <div class="dr-type" style="color:${showStravaOverride?'#0891b2':wi.c}">${showStravaOverride?_icon('ride-day.png','🚴',16)+' '+(stravaRide.name||'Ride'):wi.i+' '+(typeof wi.l==='function'?wi.l():wi.l)}</div>
   <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min':(typeof wi.d==='function'?wi.d():wi.d)}</div>
+  ${rideOnGymDay?`<div style="font-size:11px;color:#fc4c02;font-weight:600;margin-top:3px">+ 🚴 ${distStr?distStr+' km · ':''}${durStr} min logged</div>`:''}
 </div>
 <div class="dr-r">
   <div class="dr-weather">${wIcon(w.code,w.rain)} ${w.tmax}°${w.rain>0?`<span class="dr-rain">${w.rain}mm</span>`:''}</div>
@@ -3836,6 +3844,12 @@ function rDay(){
   const ct=isRide?'ride':isGym?'gym':'rest';
   const log=DB.get(DB.lk(S.viewDate),null);
   const v=verdict(w.score);
+  // Strava ride on a planned gym day — surface it explicitly so the user can
+  // decide whether to ALSO do the gym work, or cascade the gym forward and
+  // count today as the ride day. v2.43. The prompt hides after the user has
+  // chosen "Keep both" (dp.rideAlongside === true).
+  const stravaRideOnThisDay=isGym&&!dp.rideAlongside?stravaRideOnDate(ds):null;
+  const rideAlongsideAck=isGym&&dp.rideAlongside?stravaRideOnDate(ds):null;
   return`<div class="screen">
 <div class="day-hdr">
   <button class="back-btn" onclick="go('week',{_dir:'back'})">← ${_T('back_week')}</button>
@@ -3849,6 +3863,37 @@ function rDay(){
   ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
   ${DB.get('home_day_'+ds,false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 At home today</div>`:''}
 </div>
+${rideAlongsideAck?(()=>{
+  const a=rideAlongsideAck;
+  const km=+((a.distance||0)/1000).toFixed(1);
+  const min=Math.round((a.moving_time||0)/60);
+  return`<div style="display:flex;align-items:center;gap:10px;padding:9px 13px;background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.25);border-radius:11px;margin-bottom:12px">
+  <span style="font-size:14px">🚴</span>
+  <div style="flex:1;min-width:0;font-size:11px;color:#fc4c02;font-weight:600">Strava ride logged: ${km} km · ${min} min · also doing gym today</div>
+</div>`;
+})():''}
+${stravaRideOnThisDay?(()=>{
+  const a=stravaRideOnThisDay;
+  const km=+((a.distance||0)/1000).toFixed(1);
+  const min=Math.round((a.moving_time||0)/60);
+  const hr=a.average_heartrate?Math.round(a.average_heartrate):null;
+  const np=a.weighted_average_watts?Math.round(a.weighted_average_watts):null;
+  const gymLbl=typeof wi.l==='function'?wi.l():wi.l;
+  return`<div style="background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.3);border-radius:14px;padding:13px 14px;margin-bottom:14px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+    <div style="font-size:22px;line-height:1">🚴</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:12px;font-weight:700;color:#fc4c02">🟠 Strava ride logged today</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">${a.name?_esc(a.name)+' · ':''}${km} km · ${min} min${hr?' · ❤️ '+hr+'bpm':''}${np?' · ⚡ '+np+'W NP':''}</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:10px">You also have a planned <strong style="color:var(--al)">${gymLbl}</strong> workout today. Choose:</div>
+  <div style="display:flex;gap:6px">
+    <button onclick="replaceGymWithRide('${ds}')" style="flex:1;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:700;padding:9px 8px;cursor:pointer;line-height:1.3">🔄 Replace gym with ride<br><span style="font-size:9px;opacity:.85;font-weight:600">Cascade ${gymLbl} forward</span></button>
+    <button onclick="dismissRideOnGymPrompt('${ds}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:11px;font-weight:700;padding:9px 8px;cursor:pointer;line-height:1.3">💪 Keep both<br><span style="font-size:9px;opacity:.7;font-weight:600">Do the ${gymLbl} too</span></button>
+  </div>
+</div>`;
+})():''}
 ${isGym?(()=>{const hd=DB.get('home_day_'+ds,false);return`<div onclick="toggleHomeDay('${ds}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:${hd?'rgba(124,58,237,.1)':'var(--s1)'};border:1px solid ${hd?'var(--acc)':'var(--bord)'};border-radius:12px;margin-bottom:14px;cursor:pointer">
   <span style="font-size:15px">🏠</span>
   <div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:${hd?'var(--al)':'var(--txt)'}">${hd?'Gym at home — bodyweight exercises':'Training at home today?'}</div>
@@ -7079,6 +7124,78 @@ function addGymToRideDay(dateStr,gymType,shift){
   syncUp();
   render();
   showToast(_T('add_gym_toast'),'var(--grn)');
+}
+
+// Inverse of addGymToRideDay: a Strava ride was logged on a planned gym day,
+// and the user wants to count today as the ride day. Replace today's plan type
+// with a ride (matched to the actual ride: indoor vs outdoor, short vs long)
+// and cascade the displaced gym work forward, shifting the last gym day to REST.
+function replaceGymWithRide(dateStr){
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(!plan)return;
+  const di=plan.findIndex(d=>d.date===dateStr);
+  if(di<0)return;
+  const a=stravaRideOnDate(dateStr);
+  if(!a)return;
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const displacedType=plan[di].type;
+  if(!gymTypes.includes(displacedType))return;
+  // Choose the ride plan type that fits the actual ride
+  const isIndoor=(a.type==='VirtualRide'||a.sport_type==='VirtualRide');
+  const isLong=(a.moving_time||0)>=60*60; // ≥1 hr
+  const newType=isIndoor?(isLong?'LONG_INDOOR':'SHORT_INDOOR'):(isLong?'LONG_OUTDOOR':'SHORT_OUTDOOR');
+  plan[di].type=newType;
+  delete plan[di].exercises;
+  delete plan[di].extraGym;
+  // Cascade: shift displaced gym work forward. Insert displacedType at the
+  // earliest available slot (REST or duplicate-of-displaced) AFTER di. If no
+  // slot is available, find the next gym day and shift its type forward, etc.
+  const gymTypesInWeek=plan.map((d,i)=>({d,i})).filter(({d,i})=>i>di&&gymTypes.includes(d.type)&&!d.locked);
+  // Prepend the displaced type so it gets reassigned first
+  const queue=[displacedType,...gymTypesInWeek.map(x=>x.d.type)];
+  const slotIndices=[];
+  // Slot candidates: REST days after di + the existing gym days (we'll overwrite their types in order)
+  for(let i=di+1;i<plan.length;i++){
+    if(plan[i].locked)continue;
+    if(plan[i].type==='REST'||gymTypes.includes(plan[i].type))slotIndices.push(i);
+  }
+  // Take the first N slot indices to place the N items from queue
+  // De-dup the queue: if displacedType already exists later in the week, drop one
+  const seen=new Set();
+  const dedup=queue.filter(t=>{if(seen.has(t))return false;seen.add(t);return true;});
+  for(let j=0;j<slotIndices.length;j++){
+    const idx=slotIndices[j];
+    if(j<dedup.length){
+      plan[idx].type=dedup[j];
+      plan[idx].exercises=genSession(dedup[j]);
+      delete plan[idx].extraGym;
+    }else{
+      // No more gym work to assign — leave as REST
+      plan[idx].type='REST';
+      delete plan[idx].exercises;
+    }
+  }
+  DB.set(pk,plan);
+  syncUp();
+  go('week',{_dir:'back'});
+  showToast(`🔄 ${displacedType.charAt(0)+displacedType.slice(1).toLowerCase()} cascaded forward — today is now a ride day`,'var(--grn)');
+}
+
+// User chose to keep BOTH the planned gym AND the logged ride. We track this
+// per-day so the prompt doesn't re-appear, and so the ride still surfaces
+// elsewhere (Strava synced badge, history) without nagging on the day screen.
+function dismissRideOnGymPrompt(dateStr){
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(!plan)return;
+  const di=plan.findIndex(d=>d.date===dateStr);
+  if(di<0)return;
+  plan[di].rideAlongside=true; // Acknowledges the ride; we'll still show a small inline note
+  DB.set(pk,plan);
+  syncUp();
+  render();
+  showToast('Keeping both — ride is logged, gym workout is still planned for today','var(--t2)');
 }
 
 function quickAddActivity(key){
