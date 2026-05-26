@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.34';
+const APP_VERSION='2.35';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.35',d:'Proper weight entry sheet — number input + lb/kg toggle + live conversion (no more browser prompt)',det:'Replaced the browser prompt() dialogs for weight entry with a proper bottom sheet modal matching the app\'s design language. The sheet has a single large numeric input, two pill toggle buttons (lb / kg) right below, a live conversion line ("≈ 110.7 kg") that updates as you type, and your last weigh-in shown for reference. Switching units mid-entry intelligently converts the current input value so you don\'t lose your typing. The same sheet is used for logging weigh-ins (from Cycling Profile ✏️ Edit, Body Weight + Log weight, or other entry points) and for setting your goal weight — same unit toggle, same live conversion. Logging a weight from the Cycling Profile card writes to both the current weight (powering W/kg) AND the weight history (powering the Body Weight chart) — so a single entry point updates everything. Clear-current-weight and clear-goal options are available as red secondary buttons on the sheet when there\'s an existing value to clear.'},
   {v:'2.34',d:'Body weight in lb/kg — flexible input parser, displays follow your unit preference (same setting as gym weights)',det:'All body weight inputs and displays now respect the app\'s unit preference (same setting controls gym weights and body weight — default lb). Weight prompts accept flexible input: bare numbers ("180" or "82") are interpreted in your preferred unit, or you can include an explicit suffix like "180 lb", "82kg", "180 pounds" to override. Editing the Cycling Profile weight stat, logging a daily weigh-in, and setting a goal weight all use the same flexible parser. Storage is always in kg internally so W/kg math stays consistent across the app regardless of display preference. The Body Weight chart Y-axis labels, current value, 90-day change, goal line annotation, slope/week rate, and dot tooltips all render in your preferred unit. Toasts confirm both units after each save (e.g. "Logged 82.5 kg (181.9 lb)") so you can sanity-check the conversion landed where you expected. When viewing in lb, the secondary "kg · logged date" line still shows the kg value for reference.'},
   {v:'2.33',d:'Performance Trends → "Cycling — Weekly Summary": removed gym column (redundant with dedicated Gym Progress section), added TSS column when FTP is set',det:'The 4-week trends panel now lives cleanly inside the cycling block as a pure cycling weekly summary. The Gym session-count column was redundant once the dedicated 💪 Gym Progress section with weekly tonnage chart shipped in v2.30. The Gym trend chip was replaced with a Rides chip, and a new TSS column appears in the table whenever FTP is set — surfacing the actual training-stress load per week alongside distance and kJ. Section heading renamed to "Cycling — Weekly Summary" for clarity.'},
   {v:'2.32',d:'Tighten cycling section grouping — remove redundant Fitness/Form hint card when no FTP set',det:'The "📊 Unlock training-load tracking" hint card was rendering between the Cycling Profile and the Cycling Progress chart whenever Strava was connected but no FTP was set yet — visually splitting the cycling block. The Cycling Profile card already shows the same "set FTP to unlock" guidance at its bottom, so the duplicate hint card was just clutter. Now when there\'s no fitness curve yet, the Fitness · Fatigue · Form section renders nothing, and the Cycling Profile sits directly adjacent to the Cycling Progress chart as intended.'},
@@ -5225,48 +5226,134 @@ function fmtBodyWtBoth(kg){
   return `${kg.toFixed(1)} kg (${_kgToLb(kg).toFixed(1)} lb)`;
 }
 
-function editWeight(){
-  const cur=DB.get('user_profile',{})?.weight;
-  const u=bodyUnit();
-  const curDisplay=cur?(u==='lb'?_kgToLb(cur).toFixed(1):cur.toFixed(1)):'';
-  const v=prompt(`Your body weight in ${u}.\n\nEnter just a number (e.g. "${u==='lb'?'180':'82'}") or include a unit ("180 lb" or "82 kg").\nUsed to compute W/kg ratios and tracked over time as a weigh-in.`,curDisplay);
-  if(v===null)return;
+// Proper modal sheet for entering body weight or goal weight. Replaces the
+// browser prompt() with a native-feeling bottom sheet that has a numeric input
+// and an inline lb/kg unit toggle, live cross-unit conversion, and the last
+// weigh-in for reference. mode: 'log' = weigh-in, 'goal' = target weight.
+function openWeightSheet(mode){
+  document.getElementById('weight-sheet')?.remove();
   const profile=DB.get('user_profile',{})||{};
-  if(!v.trim()){delete profile.weight;delete profile.weight_source;DB.set('user_profile',profile);syncUp();render();showToast('Weight cleared','var(--grn)');return;}
-  const kg=_parseBodyWeight(v);
-  if(kg==null||kg<30||kg>200){showToast(`Weight must be 30-200 kg (66-440 lb)`,'var(--red)');return;}
-  profile.weight=+kg.toFixed(1);
-  profile.weight_source='manual';
+  const isGoal=mode==='goal';
   const log=DB.get('weight_log',{})||{};
-  log[fd(new Date())]=profile.weight;
-  DB.set('weight_log',log);
-  DB.set('user_profile',profile);
-  syncUp();render();
-  showToast(`Weight set to ${fmtBodyWtBoth(profile.weight)}`,'var(--grn)');
+  const dates=Object.keys(log).sort();
+  const lastKg=dates.length?log[dates[dates.length-1]]:null;
+  const startKg=isGoal?profile.weight_goal:(profile.weight||lastKg||null);
+  const startUnit=bodyUnit(); // 'lb' or 'kg' from app preference
+  const startVal=startKg!=null?(startUnit==='lb'?_kgToLb(startKg):startKg).toFixed(1):'';
+
+  const sheet=document.createElement('div');
+  sheet.id='weight-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="closeWeightSheet()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+28px);max-width:430px;margin:0 auto;width:100%">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:4px">${isGoal?'🎯 Goal weight':'⚖️ Log weight'}</div>
+  <div style="font-size:13px;color:var(--t2);margin-bottom:22px">${isGoal?'Set a target — the chart will show a dashed line and estimate weeks to reach it.':new Date().toLocaleDateString('en',{weekday:'long',month:'long',day:'numeric'})}</div>
+
+  <input id="wt-input" type="number" inputmode="decimal" step="0.1" value="${startVal}" placeholder="0.0"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:34px;font-weight:800;padding:18px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none;margin-bottom:14px"
+    oninput="_wtUpdate()">
+
+  <div style="display:flex;gap:8px;margin-bottom:14px">
+    <button id="wt-u-lb" type="button" onclick="_wtSetU('lb')" style="flex:1;border-radius:11px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;border:1.5px solid ${startUnit==='lb'?'var(--acc)':'var(--bord)'};background:${startUnit==='lb'?'rgba(124,58,237,.14)':'var(--s2)'};color:${startUnit==='lb'?'var(--acc)':'var(--t2)'}">lb</button>
+    <button id="wt-u-kg" type="button" onclick="_wtSetU('kg')" style="flex:1;border-radius:11px;padding:12px;font-size:14px;font-weight:800;cursor:pointer;border:1.5px solid ${startUnit==='kg'?'var(--acc)':'var(--bord)'};background:${startUnit==='kg'?'rgba(124,58,237,.14)':'var(--s2)'};color:${startUnit==='kg'?'var(--acc)':'var(--t2)'}">kg</button>
+  </div>
+
+  <div id="wt-conv" style="font-size:13px;color:var(--t2);text-align:center;margin-bottom:18px;min-height:18px"></div>
+
+  ${!isGoal&&lastKg!=null?`<div style="font-size:12px;color:var(--t2);text-align:center;margin-bottom:18px;padding:9px;background:var(--s2);border-radius:10px">Last weigh-in: <strong style="color:var(--txt)">${fmtBodyWtBoth(lastKg)}</strong> · ${dates[dates.length-1]}</div>`:''}
+
+  <button id="wt-save" onclick="_wtSave('${mode}')" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">${isGoal?'Save goal':'Log weight'}</button>
+  ${isGoal&&profile.weight_goal?`<button onclick="_wtSave('clear-goal')" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--red);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:10px">Clear goal</button>`:''}
+  ${!isGoal&&profile.weight?`<button onclick="_wtSave('clear-weight')" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--red);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:10px">Clear current weight</button>`:''}
+  <button onclick="closeWeightSheet()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
+</div>`;
+  document.body.appendChild(sheet);
+  sheet.dataset.unit=startUnit;
+  setTimeout(()=>{const i=document.getElementById('wt-input');i?.focus();i?.select();_wtUpdate();},250);
 }
 
-// Quick weigh-in entry — pre-fills with most recent weight, writes to both
-// weight_log (history) and user_profile.weight (current value used for W/kg).
-function logWeight(){
-  const log=DB.get('weight_log',{})||{};
-  const profile=DB.get('user_profile',{})||{};
-  const dates=Object.keys(log).sort();
-  const u=bodyUnit();
-  const lastKg=dates.length?log[dates[dates.length-1]]:profile.weight||null;
-  const lastDisplay=lastKg?(u==='lb'?_kgToLb(lastKg).toFixed(1):lastKg.toFixed(1)):'';
-  const v=prompt(`Log today's weigh-in (${u}).\n\n${lastKg?`Last value: ${fmtBodyWtBoth(lastKg)}`:'No previous weigh-ins yet.'}\n\nEnter a number or include a unit ("82 kg" / "180 lb").`,lastDisplay);
-  if(v===null)return;
-  const kg=_parseBodyWeight(v);
-  if(kg==null||kg<30||kg>200){showToast('Weight must be 30-200 kg (66-440 lb)','var(--red)');return;}
-  const rounded=+kg.toFixed(1);
-  log[fd(new Date())]=rounded;
-  DB.set('weight_log',log);
-  profile.weight=rounded;
-  profile.weight_source='manual';
-  DB.set('user_profile',profile);
-  syncUp();render();
-  showToast(`✅ Logged ${fmtBodyWtBoth(rounded)}`,'var(--grn)');
+function closeWeightSheet(){document.getElementById('weight-sheet')?.remove();}
+
+// Inline conversion + unit-toggle handlers (kept global so onclick can reach them)
+function _wtSetU(u){
+  const sheet=document.getElementById('weight-sheet');if(!sheet)return;
+  const oldU=sheet.dataset.unit;
+  if(oldU===u)return;
+  // Convert current input value to new unit so the user keeps the same actual weight
+  const inp=document.getElementById('wt-input');
+  const v=parseFloat(inp.value);
+  if(!isNaN(v)){
+    const newV=oldU==='lb'&&u==='kg'?_lbToKg(v):oldU==='kg'&&u==='lb'?_kgToLb(v):v;
+    inp.value=newV.toFixed(1);
+  }
+  sheet.dataset.unit=u;
+  // Update toggle button styles
+  ['lb','kg'].forEach(x=>{
+    const b=document.getElementById('wt-u-'+x);if(!b)return;
+    const on=x===u;
+    b.style.border='1.5px solid '+(on?'var(--acc)':'var(--bord)');
+    b.style.background=on?'rgba(124,58,237,.14)':'var(--s2)';
+    b.style.color=on?'var(--acc)':'var(--t2)';
+  });
+  _wtUpdate();
 }
+function _wtUpdate(){
+  const sheet=document.getElementById('weight-sheet');if(!sheet)return;
+  const u=sheet.dataset.unit;
+  const v=parseFloat(document.getElementById('wt-input').value);
+  const conv=document.getElementById('wt-conv');if(!conv)return;
+  if(isNaN(v)||v<=0){conv.textContent='';return;}
+  const other=u==='lb'?_lbToKg(v).toFixed(1)+' kg':_kgToLb(v).toFixed(1)+' lb';
+  conv.innerHTML=`≈ <strong style="color:var(--al)">${other}</strong>`;
+}
+function _wtSave(mode){
+  const sheet=document.getElementById('weight-sheet');if(!sheet)return;
+  const profile=DB.get('user_profile',{})||{};
+  // Clear operations: skip parsing
+  if(mode==='clear-goal'){
+    delete profile.weight_goal;DB.set('user_profile',profile);syncUp();render();closeWeightSheet();
+    showToast('Goal cleared','var(--t2)');return;
+  }
+  if(mode==='clear-weight'){
+    delete profile.weight;delete profile.weight_source;DB.set('user_profile',profile);syncUp();render();closeWeightSheet();
+    showToast('Weight cleared','var(--grn)');return;
+  }
+  // Normal save: parse + validate
+  const u=sheet.dataset.unit;
+  const v=parseFloat(document.getElementById('wt-input').value);
+  if(isNaN(v)||v<=0){
+    const btn=document.getElementById('wt-save');btn.style.background='var(--red)';btn.textContent='Enter a number';
+    setTimeout(()=>{btn.style.background='var(--acc)';btn.textContent=mode==='goal'?'Save goal':'Log weight';},1200);return;
+  }
+  const kg=u==='lb'?_lbToKg(v):v;
+  if(kg<30||kg>200){
+    const btn=document.getElementById('wt-save');btn.style.background='var(--red)';btn.textContent='Out of range';
+    setTimeout(()=>{btn.style.background='var(--acc)';btn.textContent=mode==='goal'?'Save goal':'Log weight';},1200);return;
+  }
+  const rounded=+kg.toFixed(1);
+  if(mode==='goal'){
+    profile.weight_goal=rounded;
+    DB.set('user_profile',profile);
+    syncUp();render();closeWeightSheet();
+    showToast(`🎯 Goal set to ${fmtBodyWtBoth(rounded)}`,'var(--grn)');
+  }else{
+    // Log mode: write current value AND append to weight history
+    profile.weight=rounded;
+    profile.weight_source='manual';
+    const log=DB.get('weight_log',{})||{};
+    log[fd(new Date())]=rounded;
+    DB.set('weight_log',log);
+    DB.set('user_profile',profile);
+    syncUp();render();closeWeightSheet();
+    showToast(`✅ Logged ${fmtBodyWtBoth(rounded)}`,'var(--grn)');
+  }
+}
+
+// Thin wrappers for existing call sites — all weight UI now flows through the same sheet
+function editWeight(){openWeightSheet('log');}
+function logWeight(){openWeightSheet('log');}
+function editWeightGoal(){openWeightSheet('goal');}
 
 /* ── FITNESS / FATIGUE / FORM ── */
 // Reads bike_fitness_curve (computed on each Strava sync) and shows current CTL/ATL/TSB
