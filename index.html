@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.29';
+const APP_VERSION='2.30';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.30',d:'Gym Progress charts — weekly tonnage with muscle-group split + per-exercise 1RM progression with plateau detection',det:'New 💪 Gym Progress section on the Training tab with two charts. (1) Weekly Tonnage: stacked bar chart of total weight × reps across all completed sets, broken down by muscle group (Push / Pull / Legs / Core), last 12 weeks. Trend badge in the header compares recent 4-week average to prior 4-week average. Each bar is tooltipped with the per-group breakdown. (2) Estimated 1RM Progression: pick any exercise from a dropdown (sorted by recent frequency) and see your estimated one-rep max trajectory over 180 days. Uses Epley formula (weight × (1 + reps/30)) on the peak set per session. Shows current, best, and trend rate (kg/lb per month). Dashed regression line indicates direction. Auto-flags plateaus when no new peak 1RM in 21+ days, suggesting a deload or rep-range switch. AI weekly review prompt now receives tonnage trend (recent vs prior 4-week average) and per-exercise 1RM trajectories for your top 6 most-trained lifts, including plateau flags — so coaching advice can reference specific lifts ("your bench has plateaued at 92.5kg for 3 weeks → time for a deload at 85kg × 8").'},
   {v:'2.29',d:'Body weight tracking with chart, goal target, ETA estimate, and AI integration',det:'New ⚖️ Body Weight panel on the Training tab logs weigh-ins over time. Tap + Log weight to drop a weigh-in (default: previous value, just nudge the digit). Chart shows raw dots + 7-day rolling average over 90 days, with auto-detected trend rate (kg/week) in the header. Set an optional 🎯 goal weight and a dashed amber line appears on the chart with an estimated "weeks to reach goal" projection based on your current trajectory. 90-day total change shown as a stat above the chart. The existing Cycling Profile ✏️ Edit weight button now also writes to the history log, so manual edits become weigh-ins. Strava\'s athlete weight is auto-seeded as today\'s value on first import (unless you\'ve already logged manually). The AI weekly review prompt now receives the full weight context: current value, goal proximity, 7-day and 28-day deltas, rate of change, and healthy cut/bulk reference ranges — so feedback can correlate weight trends with training load (e.g. "you\'re losing 0.7 kg/week while CTL keeps climbing — sustainable cut" vs "weight dropping but CTL also falling — under-fueling, eat more carbs on ride days").'},
   {v:'2.28',d:'Cycling Progress chart — see fitness trends over 90 days with metric switcher (EF, NP, Power, HR, TSS, Distance, Suffer)',det:'A new SVG chart panel on the Training tab plots your last 90 days of rides. Tap chips at the top to switch between 7 metrics: Aerobic Efficiency (W/bpm — the gold-standard endurance fitness indicator, rising = aerobically fitter at the same effort), Normalised Power, Avg Power, Avg HR, TSS per ride, Distance, and Suffer Score. Each ride is a dot, the purple line is a 7-day rolling average for smoothing. The chart auto-picks a sensible default metric based on what data is available (EF if your rides have both power and HR, NP if power-only, HR if neither). A trend badge in the header (↑ IMPROVING / → STABLE / ↓ REGRESSING) uses linear regression across the window — and inverts for HR (lower = improving). Below the chart, first-half vs recent-half averages with a percentage change tell you the magnitude of improvement at a glance.'},
   {v:'2.27',d:'FTP + body weight + IF/TSS per ride + CTL/ATL/TSB fitness curve — proper training-load tracking and richer AI feedback',det:'Imports FTP and body weight from Strava\'s athlete endpoint on connect and every sync (preserves manual overrides — tap ✏️ on the Cycling Profile card to set values manually). With FTP known, every ride now gets an IF (Intensity Factor = NP/FTP) and TSS (Training Stress Score) computed and displayed as a badge on the ride card and history detail. A new Fitness · Fatigue · Form panel on the Training tab shows current CTL (42-day exponential-weighted average TSS — your fitness), ATL (7-day EMA — your fatigue), TSB (CTL−ATL — your form), with a 28-day fitness trend mini-chart and a plain-English interpretation ("Productive training zone" / "Carrying fatigue" etc). 7-day delta indicators show whether fitness is rising or falling. A new Cycling Profile card displays FTP/weight/W·kg⁻¹ with badges showing whether each value came from Strava or was manually set. The AI weekly review prompt now receives the full cycling profile (FTP, weight, W/kg), current CTL/ATL/TSB snapshot with 7-day and 28-day deltas, and per-ride TSS/IF — so feedback can reference your actual training load trajectory ("CTL +6 in 4 weeks is a healthy build, today\'s ride at IF 0.92 was suprathreshold"). On app load, existing users with an FTP set get IF/TSS backfilled and the curve computed without needing a fresh sync. Disconnecting Strava clears Strava-sourced FTP/weight but preserves manual values.'},
@@ -4331,7 +4332,52 @@ function collectReviewData(){
       logged_days:wDates.length
     };
   }
-  return{gymSessions,rides,prs:DB.get('prs',{}),plan:DB.get(DB.pk(getMon(today)),null),fitness,weight,profile:DB.get('user_profile',{})};
+  // Gym progress: weekly tonnage trend + top exercise 1RM progressions
+  const gymSets=_scanGymSets(84);
+  let gymProgress=null;
+  if(gymSets.length){
+    // Weekly tonnage for last 12 weeks
+    const weeks={};
+    for(const s of gymSets){
+      const wk=_weekKey(s.date);
+      weeks[wk]=(weeks[wk]||0)+s.w*s.r;
+    }
+    const weekList=[];
+    for(let i=11;i>=0;i--){
+      const wk=fd(getMon(addDays(today,-i*7)));
+      weekList.push({wk,tonnage:Math.round(weeks[wk]||0)});
+    }
+    const recent4=weekList.slice(-4).reduce((s,w)=>s+w.tonnage,0)/4;
+    const prior4=weekList.slice(-8,-4).reduce((s,w)=>s+w.tonnage,0)/4;
+    const tonnageTrend=prior4>0?+((recent4-prior4)/prior4*100).toFixed(1):0;
+    // Top 5 exercises by recent frequency → e1RM trend
+    const byEx={};
+    for(const s of gymSets){
+      if(!byEx[s.exId])byEx[s.exId]={name:s.exName,sessions:{},dates:new Set()};
+      byEx[s.exId].dates.add(s.date);
+      const e1=_e1rm(s.w,s.r);
+      if(!byEx[s.exId].sessions[s.date]||e1>byEx[s.exId].sessions[s.date])byEx[s.exId].sessions[s.date]=e1;
+    }
+    const exTrends=Object.entries(byEx).map(([id,d])=>{
+      const sessions=Object.entries(d.sessions).sort((a,b)=>a[0].localeCompare(b[0]));
+      if(sessions.length<2)return null;
+      const first=sessions[0][1], last=sessions[sessions.length-1][1];
+      const best=Math.max(...sessions.map(s=>s[1]));
+      const peakIdx=sessions.findIndex(s=>s[1]===best);
+      const peakDate=sessions[peakIdx][0];
+      const daysSincePeak=Math.round((Date.now()-new Date(peakDate+'T12:00:00').getTime())/86400000);
+      const change=last-first;
+      return{name:d.name,sessions:sessions.length,first,last,best,change,days_since_peak:daysSincePeak};
+    }).filter(Boolean).sort((a,b)=>b.sessions-a.sessions).slice(0,6);
+    gymProgress={
+      tonnage_recent_4wk_avg:Math.round(recent4),
+      tonnage_prior_4wk_avg:Math.round(prior4),
+      tonnage_trend_pct:tonnageTrend,
+      tonnage_this_week:weekList[weekList.length-1].tonnage,
+      top_exercises:exTrends
+    };
+  }
+  return{gymSessions,rides,prs:DB.get('prs',{}),plan:DB.get(DB.pk(getMon(today)),null),fitness,weight,gymProgress,profile:DB.get('user_profile',{})};
 }
 
 function buildReviewPrompt(d){
@@ -4369,6 +4415,21 @@ function buildReviewPrompt(d){
   const fitTxt=d.fitness?`Fitness (CTL, 42-day): ${d.fitness.ctl} · Fatigue (ATL, 7-day): ${d.fitness.atl} · Form (TSB): ${d.fitness.tsb>0?'+':''}${d.fitness.tsb}
 7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'} · 28-day CTL change: ${d.fitness.ctl_28d_delta!=null?(d.fitness.ctl_28d_delta>0?'+':'')+d.fitness.ctl_28d_delta:'n/a'}
 Interpretation: TSB > +15 = peaked/fresh; +5 to -10 = productive training; -10 to -25 = carrying fatigue; < -25 = deep fatigue, prioritise recovery. Healthy CTL build rate is 3-5 points/week.`:'No fitness curve yet — set FTP and sync Strava to enable.';
+  // Gym progress: tonnage trend + per-exercise 1RM trajectories
+  const gpTxt=d.gymProgress?(()=>{
+    const g=d.gymProgress;
+    const exLines=g.top_exercises.map(e=>{
+      const arrow=e.change>0?'↑':e.change<0?'↓':'→';
+      const plateauNote=e.days_since_peak>=21?` ⚠️ ${e.days_since_peak}d since peak (plateau candidate)`:'';
+      return`${e.name}: ${e.first}→${e.last} ${u} (best ${e.best}, ${arrow}${e.change>0?'+':''}${e.change}, ${e.sessions} sessions)${plateauNote}`;
+    }).join('\n');
+    return`This week's tonnage: ${g.tonnage_this_week} ${u} · 4-week avg: ${g.tonnage_recent_4wk_avg} ${u} (vs prior 4-week avg ${g.tonnage_prior_4wk_avg} ${u} — ${g.tonnage_trend_pct>0?'+':''}${g.tonnage_trend_pct}% trend)
+
+Per-exercise estimated 1RM (Epley, peak set per session):
+${exLines||'(no exercises with 2+ sessions yet)'}
+
+Interpretation: tonnage trending up moderately = productive overload; spikes >30% week-over-week often precede injury. Plateau on a key lift (no peak in 21+ days) suggests a deload week (drop 30% volume, keep intensity) or a rep-range switch.`;
+  })():'No gym sessions logged yet.';
   // Body weight trend
   const wTxt=d.weight?`Current: ${d.weight.current} kg${d.weight.goal?` (goal: ${d.weight.goal} kg, ${(d.weight.current-d.weight.goal>0?'+':'')+(d.weight.current-d.weight.goal).toFixed(1)} kg from target)`:''}
 Rate of change: ${d.weight.rate_kg_per_week>0?'+':''}${d.weight.rate_kg_per_week} kg/week
@@ -4398,6 +4459,9 @@ ${fitTxt}
 
 === BODY WEIGHT TREND ===
 ${wTxt}
+
+=== GYM PROGRESS (volume + per-lift 1RM) ===
+${gpTxt}
 
 === GYM SESSIONS (most recent first) ===
 ${gymTxt}
@@ -5176,6 +5240,315 @@ function rFitnessForm(){
 </div>`;
 }
 
+/* ── GYM PROGRESS: TONNAGE + 1RM ── */
+// Scans both log_ and extralog_ keys for the last N days, returns flat list of
+// {date, exId, exName, group, w, r} for every completed set.
+function _scanGymSets(days){
+  const today=new Date();
+  const out=[];
+  for(let i=0;i<days;i++){
+    const ds=fd(addDays(today,-i));
+    for(const k of ['log_'+ds,'extralog_'+ds]){
+      const log=DB.get(k,null);
+      if(!log||!log.exercises)continue;
+      for(const le of log.exercises){
+        const ex=EX[le.id];if(!ex)continue;
+        const grp=_EX_GROUP[ex.g]||'Other';
+        for(const s of(le.sets||[])){
+          if(!s.done||!s.w||!s.r)continue;
+          out.push({date:ds,exId:le.id,exName:ex.n,group:grp,w:+s.w,r:+s.r});
+        }
+      }
+    }
+  }
+  return out;
+}
+
+// Epley estimated 1RM
+function _e1rm(w,r){return r<=0?0:Math.round(w*(1+r/30));}
+
+// ISO Monday-start week key, e.g. '2025-W12'. We use Mondays as week starts to
+// match the rest of the app (DB.pk uses getMon).
+function _weekKey(dateStr){
+  const d=new Date(dateStr+'T12:00:00');
+  const mon=getMon(d);
+  return fd(mon);
+}
+
+/* ── WEEKLY TONNAGE CHART ── */
+function rGymTonnage(){
+  const sets=_scanGymSets(84); // 12 weeks
+  if(!sets.length){
+    return`<div style="margin-bottom:10px">
+<div class="sec-hdr">💪 Gym Progress</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:18px 15px;text-align:center;font-size:13px;color:var(--t2);line-height:1.5">
+  No gym sets logged yet.<br><span style="font-size:11px">Complete a workout and the volume chart will start populating.</span>
+</div></div>`;
+  }
+  // Bucket tonnage by week × group
+  const groups=['Push','Pull','Legs','Core','Other'];
+  const weeks={};
+  for(const s of sets){
+    const wk=_weekKey(s.date);
+    if(!weeks[wk])weeks[wk]={Push:0,Pull:0,Legs:0,Core:0,Other:0,total:0};
+    const t=s.w*s.r;
+    weeks[wk][s.group]+=t;
+    weeks[wk].total+=t;
+  }
+  // Last 12 weeks (most recent first becomes rightmost on chart)
+  const today=new Date();
+  const weekList=[];
+  for(let i=11;i>=0;i--){
+    const wk=fd(getMon(addDays(today,-i*7)));
+    weekList.push({key:wk,data:weeks[wk]||{Push:0,Pull:0,Legs:0,Core:0,Other:0,total:0}});
+  }
+  const maxTotal=Math.max(...weekList.map(w=>w.data.total),1);
+  // Compute current vs 4-week-ago, current vs 8-week-ago for trend
+  const curW=weekList[weekList.length-1].data.total;
+  const w4=weekList[weekList.length-5]?.data.total||0;
+  const w8=weekList[weekList.length-9]?.data.total||0;
+  // Recent 4-week avg vs prior 4-week avg
+  const recent4=weekList.slice(-4).reduce((s,w)=>s+w.data.total,0)/4;
+  const prior4=weekList.slice(-8,-4).reduce((s,w)=>s+w.data.total,0)/4;
+  const trend4=prior4>0?((recent4-prior4)/prior4*100):0;
+  const trendBadge=Math.abs(trend4)<5
+    ?`<span style="background:var(--s2);color:var(--t2);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">→ STABLE</span>`
+    :trend4>0
+      ?`<span style="background:rgba(16,185,129,.15);color:var(--grn);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↑ +${trend4.toFixed(0)}%</span>`
+      :`<span style="background:rgba(251,146,60,.12);color:var(--amb);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↓ ${trend4.toFixed(0)}%</span>`;
+
+  // Stacked bar chart
+  const W=320,H=180,padL=44,padR=10,padT=8,padB=30;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const barW=plotW/12;
+  // Y-axis ticks (4)
+  const u=unit();
+  const fmtK=v=>v>=1000?(v/1000).toFixed(1)+'k':Math.round(v);
+  const gridLines=[0,0.33,0.66,1].map(t=>{
+    const y=padT+plotH*(1-t);
+    return`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--bord)" stroke-width="0.5" stroke-dasharray="2 3"/>
+<text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--t2)">${fmtK(maxTotal*t)}</text>`;
+  }).join('');
+
+  const bars=weekList.map((w,wi)=>{
+    const x=padL+wi*barW+barW*0.1;
+    const bw=barW*0.8;
+    let yBase=padT+plotH;
+    const segs=[];
+    for(const g of groups){
+      const v=w.data[g];
+      if(v<=0)continue;
+      const h=(v/maxTotal)*plotH;
+      yBase-=h;
+      const color=_GROUP_META[g]?.color||'var(--t2)';
+      segs.push(`<rect x="${x.toFixed(1)}" y="${yBase.toFixed(1)}" width="${bw.toFixed(1)}" height="${h.toFixed(1)}" fill="${color}" opacity="0.85"><title>${w.key} · ${g}: ${fmtK(v)} ${u}</title></rect>`);
+    }
+    // Week label every 4 weeks
+    const dateLabel=(wi%4===0||wi===11)?`<text x="${(x+bw/2).toFixed(1)}" y="${H-14}" text-anchor="middle" font-size="9" fill="var(--t2)">${w.key.slice(5)}</text>`:'';
+    return segs.join('')+dateLabel;
+  }).join('');
+  // Total label above current week
+  const curX=padL+11*barW+barW/2;
+  const curBarTopY=padT+plotH-(curW/maxTotal)*plotH;
+  const curLabel=curW>0?`<text x="${curX.toFixed(1)}" y="${(curBarTopY-3).toFixed(1)}" text-anchor="middle" font-size="9" fill="var(--al)" font-weight="700">${fmtK(curW)}</text>`:'';
+
+  // Legend
+  const legend=`<div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:8px;justify-content:center">
+    ${groups.filter(g=>weekList.some(w=>w.data[g]>0)).map(g=>{
+      const m=_GROUP_META[g];
+      const total=weekList.reduce((s,w)=>s+w.data[g],0);
+      return`<div style="display:flex;align-items:center;gap:4px;font-size:10px;color:var(--t2)"><span style="width:9px;height:9px;background:${m.color};border-radius:2px;display:inline-block"></span>${g} <span style="color:var(--t2);font-weight:600">${fmtK(total)}</span></div>`;
+    }).join('')}
+  </div>`;
+
+  return`<div style="margin-bottom:10px">
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
+  <span>💪 Gym Progress</span>
+  ${trendBadge}
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:8px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-bottom:6px">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:var(--al)">Weekly Tonnage <span style="font-size:10px;font-weight:500;color:var(--t2)">(${u})</span></div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px">Sum of weight × reps across completed sets</div>
+    </div>
+    <div style="text-align:right">
+      <div style="font-size:10px;color:var(--t2)">This week</div>
+      <div style="font-size:16px;font-weight:800;color:var(--al)">${fmtK(curW)} <span style="font-size:10px;color:var(--t2);font-weight:600">${u}</span></div>
+    </div>
+  </div>
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:190px;display:block">
+    ${gridLines}
+    ${bars}
+    ${curLabel}
+  </svg>
+  ${legend}
+  <div style="font-size:10px;color:var(--t2);margin-top:6px;text-align:center">12-week window · last bar = this week (in progress)</div>
+</div>
+</div>`;
+}
+
+/* ── PER-EXERCISE 1RM PROGRESSION ── */
+function rExerciseProgress(){
+  const sets=_scanGymSets(180);
+  if(!sets.length)return''; // Tonnage panel already shows empty state
+  // Per-exercise stats: frequency, latest date, best 1RM
+  const byEx={};
+  for(const s of sets){
+    if(!byEx[s.exId])byEx[s.exId]={name:s.exName,group:s.group,sets:[],lastDate:s.date,best:0};
+    byEx[s.exId].sets.push(s);
+    if(s.date>byEx[s.exId].lastDate)byEx[s.exId].lastDate=s.date;
+    const e1=_e1rm(s.w,s.r);
+    if(e1>byEx[s.exId].best)byEx[s.exId].best=e1;
+  }
+  // Sort exercises: most-trained in last 30 days first, then by frequency
+  const cutoff30=fd(addDays(new Date(),-30));
+  const exList=Object.entries(byEx).map(([id,d])=>{
+    const recent=d.sets.filter(s=>s.date>=cutoff30).length;
+    return{id,name:d.name,group:d.group,recent,total:d.sets.length,lastDate:d.lastDate,best:d.best};
+  }).sort((a,b)=>b.recent-a.recent||b.total-a.total);
+  if(!exList.length)return'';
+
+  // Selected exercise: stored pref, fall back to first
+  let selId=DB.get('_gym_ex',null);
+  if(!selId||!byEx[selId])selId=exList[0].id;
+  const sel=byEx[selId];
+  // Per-session: max 1RM across the day's sets
+  const bySession={};
+  for(const s of sel.sets){
+    const e1=_e1rm(s.w,s.r);
+    if(!bySession[s.date]||e1>bySession[s.date].e1rm){
+      bySession[s.date]={e1rm:e1,w:s.w,r:s.r};
+    }
+  }
+  const points=Object.entries(bySession).map(([date,v])=>({date,...v})).sort((a,b)=>a.date.localeCompare(b.date));
+
+  // Dropdown — only show exercises with 2+ sessions for meaningful trend
+  const dropdownItems=exList.filter(e=>{
+    const sessions=new Set(byEx[e.id].sets.map(s=>s.date)).size;
+    return sessions>=1;
+  }).slice(0,40);
+  const dropdown=`<select onchange="DB.set('_gym_ex',this.value);render()" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:7px 10px;cursor:pointer;font-family:inherit;max-width:180px">
+    ${dropdownItems.map(e=>{
+      const sessions=new Set(byEx[e.id].sets.map(s=>s.date)).size;
+      return`<option value="${e.id}" ${e.id===selId?'selected':''}>${e.name} (${sessions})</option>`;
+    }).join('')}
+  </select>`;
+
+  if(points.length<2){
+    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+    <div>
+      <div style="font-size:12px;font-weight:700;color:var(--al)">Estimated 1RM Progression</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px">Epley formula: weight × (1 + reps/30)</div>
+    </div>
+    ${dropdown}
+  </div>
+  <div style="font-size:12px;color:var(--t2);text-align:center;padding:24px 8px">Log this exercise on a second session to see the trend.</div>
+</div>`;
+  }
+
+  // Chart dims
+  const W=320,H=160,padL=36,padR=10,padT=14,padB=22;
+  const plotW=W-padL-padR, plotH=H-padT-padB;
+  const u=unit();
+  const today=new Date();
+  const startMs=addDays(today,-180).getTime();
+  const ptsXY=points.map(p=>{
+    const dayMs=new Date(p.date+'T12:00:00').getTime();
+    return{...p,x:(dayMs-startMs)/86400000};
+  }).filter(p=>p.x>=0);
+  if(ptsXY.length<2)return'';
+  let yMin=Math.min(...ptsXY.map(p=>p.e1rm));
+  let yMax=Math.max(...ptsXY.map(p=>p.e1rm));
+  if(yMin===yMax){yMin-=2;yMax+=2;}
+  const yPad=(yMax-yMin)*0.15;
+  yMin-=yPad;yMax+=yPad;
+  if(yMin<0)yMin=0;
+  const sx=x=>padL+(x/180)*plotW;
+  const sy=y=>padT+plotH-((y-yMin)/(yMax-yMin))*plotH;
+
+  // Linear regression line
+  const reg=ptsXY.map(p=>({x:p.x,y:p.e1rm}));
+  const slope=_regSlope(reg);
+  const n=reg.length;
+  const meanX=reg.reduce((s,p)=>s+p.x,0)/n;
+  const meanY=reg.reduce((s,p)=>s+p.y,0)/n;
+  const intercept=meanY-slope*meanX;
+  const xLeft=Math.min(...reg.map(p=>p.x));
+  const xRight=Math.max(...reg.map(p=>p.x));
+  const yLeft=intercept+slope*xLeft;
+  const yRight=intercept+slope*xRight;
+  const regLine=`<line x1="${sx(xLeft).toFixed(1)}" y1="${sy(yLeft).toFixed(1)}" x2="${sx(xRight).toFixed(1)}" y2="${sy(yRight).toFixed(1)}" stroke="var(--acc)" stroke-width="1.5" stroke-dasharray="4 3" opacity="0.6"/>`;
+
+  // Connect points with thin line
+  const connectPath=ptsXY.map((p,i)=>`${i===0?'M':'L'}${sx(p.x).toFixed(1)},${sy(p.e1rm).toFixed(1)}`).join(' ');
+
+  const gridLines=[0,0.33,0.66,1].map(t=>{
+    const y=padT+plotH*(1-t);
+    const label=Math.round(yMin+(yMax-yMin)*t);
+    return`<line x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}" stroke="var(--bord)" stroke-width="0.5" stroke-dasharray="2 3"/>
+<text x="${padL-4}" y="${y+3}" text-anchor="end" font-size="9" fill="var(--t2)">${label}</text>`;
+  }).join('');
+  const xMarks=[{d:180,l:'180d'},{d:120,l:'120d'},{d:60,l:'60d'},{d:0,l:'today'}].map(t=>{
+    const x=sx(180-t.d);
+    return`<text x="${x}" y="${H-6}" text-anchor="middle" font-size="9" fill="var(--t2)">${t.l}</text>`;
+  }).join('');
+
+  // Stats: best, current, slope
+  const best=Math.max(...ptsXY.map(p=>p.e1rm));
+  const cur=ptsXY[ptsXY.length-1].e1rm;
+  const first=ptsXY[0].e1rm;
+  const totalGain=cur-first;
+  const pctGain=first>0?(totalGain/first*100):0;
+  const slopePerMonth=slope*30;
+  const slopeBadge=Math.abs(slopePerMonth)<0.5
+    ?`<span style="background:var(--s2);color:var(--t2);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">→ PLATEAU</span>`
+    :slopePerMonth>0
+      ?`<span style="background:rgba(16,185,129,.15);color:var(--grn);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↑ +${slopePerMonth.toFixed(1)}${u}/mo</span>`
+      :`<span style="background:rgba(239,68,68,.12);color:var(--red);font-size:10px;font-weight:800;padding:3px 8px;border-radius:8px">↓ ${slopePerMonth.toFixed(1)}${u}/mo</span>`;
+
+  // Plateau detection: no new e1rm peak in 21+ days
+  const peakIdx=ptsXY.reduce((bi,p,i)=>p.e1rm>=ptsXY[bi].e1rm?i:bi,0);
+  const daysSincePeak=Math.round((Date.now()-new Date(ptsXY[peakIdx].date+'T12:00:00').getTime())/86400000);
+  const plateauHint=daysSincePeak>=21&&ptsXY.length>=3
+    ?`<div style="font-size:11px;color:var(--amb);margin-top:6px;text-align:center;line-height:1.4">⚠️ ${daysSincePeak} days since peak 1RM — consider a deload or rep-range switch</div>`
+    :'';
+
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:10px">
+    <div style="min-width:0;flex:1">
+      <div style="font-size:12px;font-weight:700;color:var(--al)">Estimated 1RM Progression</div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px">Epley: w × (1 + r/30) · peak set per session</div>
+    </div>
+    ${dropdown}
+  </div>
+  <div style="display:flex;gap:10px;margin-bottom:8px">
+    <div style="flex:1;background:var(--s2);border-radius:10px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:var(--t2);font-weight:600">CURRENT</div>
+      <div style="font-size:16px;font-weight:800;color:var(--al)">${cur}<span style="font-size:9px;color:var(--t2);font-weight:600"> ${u}</span></div>
+    </div>
+    <div style="flex:1;background:var(--s2);border-radius:10px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:var(--t2);font-weight:600">BEST</div>
+      <div style="font-size:16px;font-weight:800;color:var(--acc)">${best}<span style="font-size:9px;color:var(--t2);font-weight:600"> ${u}</span></div>
+    </div>
+    <div style="flex:1;background:var(--s2);border-radius:10px;padding:8px;text-align:center">
+      <div style="font-size:10px;color:var(--t2);font-weight:600">TREND</div>
+      <div style="margin-top:2px">${slopeBadge}</div>
+    </div>
+  </div>
+  <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" style="width:100%;height:170px;display:block">
+    ${gridLines}
+    ${regLine}
+    <path d="${connectPath}" stroke="var(--acc)" stroke-width="1" fill="none" opacity="0.35"/>
+    ${ptsXY.map(p=>`<circle cx="${sx(p.x).toFixed(1)}" cy="${sy(p.e1rm).toFixed(1)}" r="2.8" fill="var(--acc)" opacity="0.9"><title>${p.date} — ${p.w}${u}×${p.r} → ~${p.e1rm}${u} 1RM</title></circle>`).join('')}
+    ${xMarks}
+  </svg>
+  <div style="font-size:11px;color:var(--t2);text-align:center;margin-top:6px">${ptsXY.length} sessions · total change <span style="color:${totalGain>0?'var(--grn)':totalGain<0?'var(--red)':'var(--t1)'};font-weight:700">${totalGain>0?'+':''}${totalGain}${u} (${pctGain>0?'+':''}${pctGain.toFixed(1)}%)</span></div>
+  ${plateauHint}
+</div>`;
+}
+
 /* ── BODY WEIGHT CHART ── */
 // Renders a weigh-in chart with raw dots + 7-day rolling average. Trend rate
 // (kg/week) computed via linear regression over the entire visible window.
@@ -5659,6 +6032,10 @@ ${rFitnessForm()}
 ${rCyclingChart()}
 
 ${rPerfTrends()}
+
+${rGymTonnage()}
+
+${rExerciseProgress()}
 
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
   <span>${_T('prs')}</span>
