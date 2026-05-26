@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.40';
+const APP_VERSION='2.41';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.41',d:'Group cycling sections under one "🚴 Cycling Performance" header with subtle visual container',det:'The Training tab had 4 separate uppercase section headings ("CYCLING PROFILE", "💪 FITNESS · FATIGUE · FORM", "📊 CYCLING PROGRESS", "📈 CYCLING — WEEKLY SUMMARY") which felt redundant and busy. Replaced with one main "🚴 CYCLING PERFORMANCE" header wrapping all 4 subsections in a subtle purple-tinted bordered container. Each subsection now has a smaller inline label inside the container (Profile / 💪 Fitness · Fatigue · Form / 📊 Progress chart / 📈 Weekly summary) so they\'re still distinguishable but visually subordinate to the main cycling group. Trend metadata that lived in the sub-headers (trend badges, "vs N days ago") is preserved inline next to each sub-label. The logical flow within the group is now Profile (baseline) → Form (current state) → Progress chart (trend) → Weekly summary (volume) — moving from "where I am" to "how I\'m changing".'},
   {v:'2.40',d:'Reordered Training tab — daily data up top, config (goals/activities/plan) at the bottom',det:'Body Weight is now the very first section under the header — fastest path to log today\'s weigh-in. Followed by the cycling block (Profile, Fitness, Progress chart, Weekly Summary), then Gym Progress (Tonnage + 1RM), then PRs. The configuration sections (Your Goals, Your Activities, Training Plan / Workout preference) moved to the bottom just above History — you set those once and rarely touch them. Eliminates ~600px of scrolling past static config to reach the daily-action area.'},
   {v:'2.39',d:'FTP estimate transparency sheet — see which rides drove the number, spot missing power data',det:'Tapping "📊 Estimate FTP from your rides" no longer shows a generic browser confirm dialog. Instead a proper bottom sheet opens showing the suggested FTP at the top, then a list of the actual rides driving the estimate — each row shows date, duration, NP, the duration adjustment factor applied, and the resulting per-ride FTP estimate. A "Show all eligible rides" toggle expands to every ride considered, sorted by FTP-equivalent NP. If any of your rides ≥30 min lack power data, the sheet shows a warning ("⚠️ N rides skipped — no power data") explaining why HR-only rides can\'t feed the estimate. This is a transparency tool: if your hardest 1-hour Zone 4 effort isn\'t in the top-rides list, you immediately know it was an HR-only ride and the auto-estimator couldn\'t see it — so you can hit ✏️ Set my own value and enter what you actually know your FTP is. Three actions at the bottom: Apply the estimate, Set your own value (opens the manual FTP editor), or Cancel.'},
   {v:'2.38',d:'W/kg bands refined to match Coggan chart precisely — 7 tiers, Untrained tier added',det:'Cross-checked the W/kg categorization against the original Coggan/Allen table (from "Training and Racing with a Power Meter") and multiple other sources (Zwift Insider, Cycling Analytics, TrainingPeaks). Refined the male thresholds from 2.0/3.0/4.0/5.0/5.5 to 2.0/2.5/3.2/4.0/5.0/5.5 — adding a distinct "Untrained" tier (< 2.0 W/kg, sedentary or new to cycling) below "Beginner" (2.0-2.5, first few months of regular training). Recreational now starts at 2.5 W/kg (active weekend rider) instead of 2.0. Female bands adjusted similarly (≈0.5 W/kg lower per tier). The W/kg info sheet now shows all 7 tiers.'},
@@ -5176,7 +5177,7 @@ function rCyclingProfile(){
   // Weight is single-sourced from the Body Weight section. W/kg uses it
   // implicitly — no separate weight card here (removed in v2.37 as redundant).
   const wDisp=wt?(bodyUnit()==='lb'?_kgToLb(wt).toFixed(1):wt.toFixed(1))+' '+bodyUnit():null;
-  return`<div class="sec-hdr">Cycling Profile</div>
+  return`<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin:4px 4px 6px">Profile</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
   <div style="display:flex;gap:10px">
     <div style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:11px;padding:12px;text-align:center">
@@ -5522,9 +5523,9 @@ function rFitnessForm(){
   })();
   const colStyle=`flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px 8px;text-align:center`;
   return`<div style="margin-bottom:10px">
-<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>💪 Fitness · Fatigue · Form</span>
-  <span style="font-size:10px;color:var(--t2);font-weight:500">vs 7 days ago</span>
+<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 4px 6px">
+  <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">💪 Fitness · Fatigue · Form</div>
+  <div style="font-size:10px;color:var(--t2);font-weight:500">vs 7 days ago</div>
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 14px">
   <div style="display:flex;gap:8px">
@@ -6104,7 +6105,7 @@ function rCyclingChart(){
 
   if(pts.length<2){
     return`<div style="margin-bottom:10px">
-<div class="sec-hdr">📊 Cycling Progress</div>
+<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin:4px 4px 6px">📊 Progress chart</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px">
   ${switcher}
   <div style="font-size:12px;color:var(--t2);text-align:center;padding:24px 8px">Not enough rides with ${m.label} data in the last 90 days.</div>
@@ -6177,8 +6178,8 @@ function rCyclingChart(){
   </div>`;
 
   return`<div style="margin-bottom:10px">
-<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>📊 Cycling Progress</span>
+<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 4px 6px">
+  <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">📊 Progress chart</div>
   ${trendBadge}
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px">
@@ -6246,9 +6247,9 @@ function rPerfTrends(){
   const cols=hasTss?'60px 1fr 1fr 1fr 1fr':'60px 1fr 1fr 1fr';
   const colStyle=`flex:1;min-width:0;background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px 8px;text-align:center`;
   return`<div style="margin-bottom:10px">
-<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>📈 Cycling — Weekly Summary</span>
-  <span style="font-size:10px;color:var(--t2);font-weight:500">vs 4 weeks ago</span>
+<div style="display:flex;justify-content:space-between;align-items:center;margin:4px 4px 6px">
+  <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">📈 Weekly summary</div>
+  <div style="font-size:10px;color:var(--t2);font-weight:500">vs 4 weeks ago</div>
 </div>
 <div style="display:flex;gap:6px;margin-bottom:10px">
   ${trendChips.map(c=>`<div style="${colStyle}">
@@ -6319,10 +6320,13 @@ function rPRs(){
 
 ${rWeightChart()}
 
-${(()=>{const p=DB.get('user_profile',null);const hasCy=(p?.activities||[]).includes('cycling');return hasCy?`${rCyclingProfile()}
+${(()=>{const p=DB.get('user_profile',null);const hasCy=(p?.activities||[]).includes('cycling');return hasCy?`<div class="sec-hdr">🚴 Cycling Performance</div>
+<div style="background:rgba(124,58,237,.04);border:1px solid rgba(124,58,237,.18);border-radius:18px;padding:10px 8px 4px;margin-bottom:14px">
+${rCyclingProfile()}
 ${rFitnessForm()}
 ${rCyclingChart()}
-${rPerfTrends()}`:'';})()}
+${rPerfTrends()}
+</div>`:'';})()}
 
 ${rGymTonnage()}
 
