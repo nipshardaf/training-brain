@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.32';
+const APP_VERSION='2.33';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.33',d:'Performance Trends → "Cycling — Weekly Summary": removed gym column (redundant with dedicated Gym Progress section), added TSS column when FTP is set',det:'The 4-week trends panel now lives cleanly inside the cycling block as a pure cycling weekly summary. The Gym session-count column was redundant once the dedicated 💪 Gym Progress section with weekly tonnage chart shipped in v2.30. The Gym trend chip was replaced with a Rides chip, and a new TSS column appears in the table whenever FTP is set — surfacing the actual training-stress load per week alongside distance and kJ. Section heading renamed to "Cycling — Weekly Summary" for clarity.'},
   {v:'2.32',d:'Tighten cycling section grouping — remove redundant Fitness/Form hint card when no FTP set',det:'The "📊 Unlock training-load tracking" hint card was rendering between the Cycling Profile and the Cycling Progress chart whenever Strava was connected but no FTP was set yet — visually splitting the cycling block. The Cycling Profile card already shows the same "set FTP to unlock" guidance at its bottom, so the duplicate hint card was just clutter. Now when there\'s no fitness curve yet, the Fitness · Fatigue · Form section renders nothing, and the Cycling Profile sits directly adjacent to the Cycling Progress chart as intended.'},
   {v:'2.31',d:'Auto-estimate FTP from ride data + group cycling sections + hide them when cycling is not selected',det:'Three Training tab improvements. (1) FTP is now auto-estimated from your Strava ride NP data using Coggan\'s intensity model — duration-adjusted top-10% of per-ride NP values: 30-45min × 0.88, 45-75min × 0.95, 75-120min × 1.00, 120+ min × 1.05. Runs automatically on every Strava sync (if you haven\'t set FTP manually) and on app load. A new ESTIMATED badge replaces the STRAVA/MANUAL tag when the value came from auto-estimation. A new "📊 Estimate FTP from your rides" button appears on the Cycling Profile card whenever you have 3+ qualifying rides — tap to recompute and apply with a confirmation dialog. (2) All cycling sections (Cycling Profile, Fitness · Fatigue · Form, Cycling Progress, Performance Trends) are now grouped together at the top, followed by Body Weight, Gym Progress, then PRs. (3) The cycling block is hidden entirely when "Cycling" is not one of your selected activities — keeps the Training tab clean for gym-only users. Also added a hint explaining why weight can\'t be auto-derived from ride data (no weight signal in activity objects — needs to be set on Strava profile or entered manually).'},
   {v:'2.30',d:'Gym Progress charts — weekly tonnage with muscle-group split + per-exercise 1RM progression with plateau detection',det:'New 💪 Gym Progress section on the Training tab with two charts. (1) Weekly Tonnage: stacked bar chart of total weight × reps across all completed sets, broken down by muscle group (Push / Pull / Legs / Core), last 12 weeks. Trend badge in the header compares recent 4-week average to prior 4-week average. Each bar is tooltipped with the per-group breakdown. (2) Estimated 1RM Progression: pick any exercise from a dropdown (sorted by recent frequency) and see your estimated one-rep max trajectory over 180 days. Uses Epley formula (weight × (1 + reps/30)) on the peak set per session. Shows current, best, and trend rate (kg/lb per month). Dashed regression line indicates direction. Auto-flags plateaus when no new peak 1RM in 21+ days, suggesting a deload or rep-range switch. AI weekly review prompt now receives tonnage trend (recent vs prior 4-week average) and per-exercise 1RM trajectories for your top 6 most-trained lifts, including plateau flags — so coaching advice can reference specific lifts ("your bench has plateaued at 92.5kg for 3 weeks → time for a deload at 85kg × 8").'},
@@ -5963,21 +5964,15 @@ function rPerfTrends(){
       const ds=(a.start_date_local||'').slice(0,10);
       return ds>=wStart&&ds<=wEnd;
     });
-    let totalKm=0,totalKj=0,npSum=0,npCount=0,sufferSum=0;
+    let totalKm=0,totalKj=0,npSum=0,npCount=0,sufferSum=0,tssSum=0;
     for(const a of wRides){
       totalKm+=(a.distance||0)/1000;
       totalKj+=a.kilojoules||0;
       if(a.weighted_average_watts){npSum+=a.weighted_average_watts;npCount++;}
       sufferSum+=a.suffer_score||0;
+      tssSum+=a._tss||0;
     }
-    // Gym logs in this week
-    let gymDone=0;
-    for(let d=0;d<7;d++){
-      const dd=addDays(wMon,d);
-      const log=DB.get(DB.lk(dd),null);
-      if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))gymDone++;
-    }
-    weeks.push({label:wLabel,km:+totalKm.toFixed(1),kj:Math.round(totalKj),np:npCount?Math.round(npSum/npCount):null,sufferSum,rides:wRides.length,gym:gymDone});
+    weeks.push({label:wLabel,km:+totalKm.toFixed(1),kj:Math.round(totalKj),np:npCount?Math.round(npSum/npCount):null,tss:Math.round(tssSum),sufferSum,rides:wRides.length});
   }
   // Trend arrows: compare week[0] (newest) vs week[3] (oldest)
   const _arr=(a,b,hi=true)=>{
@@ -5989,17 +5984,20 @@ function rPerfTrends(){
       :`<span style="color:${hi?'var(--red)':'var(--grn)'};font-size:13px">↓</span>`;
   };
   const newest=weeks[0],oldest=weeks[3]||weeks[weeks.length-1];
-  // Overall trend chips
+  // Overall trend chips — all cycling now (Gym chip moved to dedicated Gym Progress section)
   const trendChips=[
     {l:'Distance',v:_arr(newest.km,oldest.km,false)},
     {l:'Load (kJ)',v:_arr(newest.kj,oldest.kj,false)},
     {l:'Avg NP',v:newest.np&&oldest.np?_arr(newest.np,oldest.np,false):'<span style="color:var(--t2)">—</span>'},
-    {l:'Gym',v:_arr(newest.gym,oldest.gym,false)},
+    {l:'Rides',v:_arr(newest.rides,oldest.rides,false)},
   ];
+  // Show TSS column only if there's any TSS data (requires FTP to compute)
+  const hasTss=weeks.some(w=>w.tss>0);
+  const cols=hasTss?'60px 1fr 1fr 1fr 1fr':'60px 1fr 1fr 1fr';
   const colStyle=`flex:1;min-width:0;background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px 8px;text-align:center`;
   return`<div style="margin-bottom:10px">
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>📈 Performance Trends</span>
+  <span>📈 Cycling — Weekly Summary</span>
   <span style="font-size:10px;color:var(--t2);font-weight:500">vs 4 weeks ago</span>
 </div>
 <div style="display:flex;gap:6px;margin-bottom:10px">
@@ -6009,15 +6007,15 @@ function rPerfTrends(){
   </div>`).join('')}
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden">
-  <div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:0;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:1px solid var(--bord);background:var(--s2)">
-    <div>Week</div><div style="text-align:right">Rides</div><div style="text-align:right">km</div><div style="text-align:right">kJ</div><div style="text-align:right">Gym</div>
+  <div style="display:grid;grid-template-columns:${cols};gap:0;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:1px solid var(--bord);background:var(--s2)">
+    <div>Week</div><div style="text-align:right">Rides</div><div style="text-align:right">km</div><div style="text-align:right">kJ</div>${hasTss?'<div style="text-align:right">TSS</div>':''}
   </div>
-  ${weeks.map((w,wi)=>`<div style="display:grid;grid-template-columns:60px 1fr 1fr 1fr 1fr;gap:0;padding:9px 10px;border-bottom:${wi<weeks.length-1?'1px solid var(--bord)':'none'};${wi===0?'font-weight:700;color:var(--al)':''}">
+  ${weeks.map((w,wi)=>`<div style="display:grid;grid-template-columns:${cols};gap:0;padding:9px 10px;border-bottom:${wi<weeks.length-1?'1px solid var(--bord)':'none'};${wi===0?'font-weight:700;color:var(--al)':''}">
     <div style="font-size:11px">${w.label}</div>
     <div style="text-align:right;font-size:12px">${w.rides||'—'}</div>
     <div style="text-align:right;font-size:12px">${w.km||'—'}</div>
     <div style="text-align:right;font-size:12px">${w.kj?w.kj.toLocaleString():'—'}</div>
-    <div style="text-align:right;font-size:12px">${w.gym||'—'}</div>
+    ${hasTss?`<div style="text-align:right;font-size:12px">${w.tss||'—'}</div>`:''}
   </div>`).join('')}
 </div>
 </div>`;
