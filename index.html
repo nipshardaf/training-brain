@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.44';
+const APP_VERSION='2.45';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.45',d:'Ask Coach sees full week plan + knows its capabilities (read-only for now, points users to UI buttons for changes)',det:'Two small but important upgrades to the v2.44 Ask Coach prompt. (1) The AI now receives the FULL current week plan (all 7 days, with type, lock state, completion status, and any extraGym additions) — not just today\'s plan. So if you ask "swap my Tuesday Pull to Wednesday," the AI can actually see what\'s on Wednesday and reason about whether the swap makes sense. (2) The prompt now explicitly tells the AI what it CAN do (analyse, suggest, recommend) vs CANNOT do (directly modify plan, log workouts, swap days). When the AI recommends a change, it now points the user to the specific UI button to tap — "Swap ↕" on the week row, "+ Add workout" on a ride day, or "🔄 Replace gym with ride" prompt when Strava logs a ride on a gym day. No more false promises like "I\'ll swap them for you." Full plan-modification via Gemini function calling is the bigger v2.46 work — that\'ll let the AI actually execute the change (with a confirmation card before applying).'},
   {v:'2.44',d:'Ask the Coach — interactive AI Q&A on the Week view, with tiered access (admin/pro/basic) to cap API costs',det:'New 💬 Ask the Coach panel at the top of the Week view. Tap a suggested chip ("Should I ride today or rest?", "Am I overtraining?", "How is my week going?", "Should I take a recovery day?", "What should I focus on this week?", "Why is my form negative?") or type your own question. The AI receives FULL context: today\'s plan + weather, what you\'ve already logged today, yesterday\'s training, your CTL/ATL/TSB fitness curve, body weight trend, last 7 days of gym + Strava rides with TSS, FTP, W/kg, and your goals/level/activities. Response is short (2-3 sentences, ~80 words max) and specifically cites your actual numbers — not generic advice. ACCESS TIERS to control API costs: admin (unlimited, you — ht9323@gmail.com), pro (20/day, trusted users — edit _PRO_EMAILS array to grant), basic (0/day, default — sees a locked teaser). The tier badge appears next to the panel header so you always know your level. Daily counter shown ("3 of 20 left today"). Quota tracked locally and synced via Firebase per signed-in user, resets at midnight local time. Limit-reached state disables the input and shows when access resets. Errors fall back gracefully with the error message inline.'},
   {v:'2.43',d:'Strava ride on a gym day no longer hides the planned gym work — explicit "Replace gym with ride" cascade option',det:'Previously: when a Strava ride synced on a planned gym day (e.g., went riding on Pull Tuesday), the week-view row replaced the gym label with the ride name and stats, making it look like the gym day vanished. The plan data was still PULL underneath, but the UI made it invisible. Now: the week-view row keeps showing the gym workout as the primary label (with its colour and icon) and adds a small orange "+ 🚴 X km · Y min logged" line below — both the planned gym and the actual ride are visible. When you open the day, a Strava-ride banner appears at the top with TWO clear actions: "🔄 Replace gym with ride" (cascades the gym workout forward, last gym day in the week becomes REST — mirroring the v2.20 add-workout cascade but in reverse) or "💪 Keep both" (do the gym workout in addition to the ride, prompt is dismissed but ride stays visible as a small inline note). The chosen state persists on the plan day (rideAlongside flag) so re-opens don\'t re-prompt.'},
   {v:'2.42',d:'Compact "Waiting for Strava" card on ride days + backdate weigh-ins',det:'TWO improvements. (1) RIDE-DAY UX — the big 4-field manual ride log form no longer takes up screen space on every ride day when you have Strava connected. Instead a compact single-row card appears with the last sync timestamp, a 🟠 Sync now button, and a 📝 toggle to expand the full manual form if you genuinely want to log without Strava. Future-dated ride days (planned but not yet arrived) hide the manual log form entirely — no point logging a ride that hasn\'t happened. Once you do tap 📝 to expand, the form stays expanded for the rest of the session. (2) BACKDATE WEIGH-INS — the body weight sheet now has a date picker (defaults to today, max = today, no future dates). Useful for filling in missed days from memory, especially when you want to see the chart appear ASAP after starting to log. Backdated entries write to weight_log at the selected date but only update your "current weight" (used for W/kg) if the selected date is your most recent — so backdating doesn\'t overwrite a more recent weigh-in.'},
@@ -4718,6 +4719,19 @@ function buildAskPrompt(question){
   const ydayStr2=ydayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?`Yesterday: gym (${ydayLog.type})`:ydayRide?`Yesterday: rode ${+((ydayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((ydayRide.moving_time||0)/60)}min`:'Yesterday: rest';
   const fitTxt=d.fitness?`CTL ${d.fitness.ctl} (fitness) / ATL ${d.fitness.atl} (fatigue) / TSB ${d.fitness.tsb>0?'+':''}${d.fitness.tsb} (form). 7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'}.`:'No fitness curve available.';
   const wTxt=d.weight?`${d.weight.current} kg, ${d.weight.rate_kg_per_week>0?'+':''}${d.weight.rate_kg_per_week} kg/wk, 28d Δ ${d.weight.d28!=null?d.weight.d28+'kg':'n/a'}`:'no weight log';
+  // Full current week plan — important for "swap day X" type questions so AI sees
+  // what's on each day, not just today
+  const weekPlanLines=[];
+  if(wPlan){
+    for(const day of [...wPlan].sort((a,b)=>a.date.localeCompare(b.date))){
+      const dlog=DB.get('log_'+day.date,null);
+      const dride=stravaRideOnDate(day.date);
+      const status=dlog?.completed?' ✓done':dlog?.exercises?.some(e=>e.sets.some(s=>s.done))?' (partial)':dride?' ✓rode':'';
+      const extra=day.extraGym?` + extra ${_typeLabel[day.extraGym.type]||day.extraGym.type}`:'';
+      const lock=day.locked?' [locked]':'';
+      weekPlanLines.push(`  ${day.date} ${day.date===todayStr?'(TODAY)':''}: ${_typeLabel[day.type]||day.type}${extra}${lock}${status}`);
+    }
+  }
   // Recent training (last 7 days, compressed)
   const recent=[];
   for(let i=1;i<=7;i++){
@@ -4736,9 +4750,16 @@ function buildAskPrompt(question){
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
   return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers (CTL, TSS, recent rides/gym, weight trend) when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless TSB is genuinely low or they've trained 5+ days in a row.${langNote}
 
+CAPABILITIES — what you can and cannot do:
+- You CAN: analyse their plan, training history, fitness curve, and body weight. Suggest swaps, cascades, or rest days in plain language.
+- You CANNOT: directly modify the plan, swap days, log workouts, or add/remove sessions. If you recommend a plan change, tell the user to use the "Swap ↕" button on the week view (each day has one), or to tap the "+ Add workout" button on ride days, or to use the "🔄 Replace gym with ride" prompt that appears on a gym day when Strava logs a ride that day. Don't promise to do it for them — they'll execute the change themselves.
+
 === USER PROFILE ===
 Goal: ${goalStr} | Level: ${profile.level||'intermediate'} | Activities: ${(profile.activities||[]).join(', ')||'gym'}
 ${profile.ftp?`FTP: ${profile.ftp}W`:'No FTP set'}${profile.weight?` · Weight: ${profile.weight}kg`:''}${profile.ftp&&profile.weight?` (${(profile.ftp/profile.weight).toFixed(2)} W/kg)`:''}
+
+=== CURRENT WEEK PLAN ===
+${weekPlanLines.length?weekPlanLines.join('\n'):'  No plan generated for this week yet'}
 
 === TODAY (${todayStr}) ===
 Plan: ${todayPlanStr}
@@ -4759,7 +4780,7 @@ ${recent.length?recent.join('\n'):'  No training logged in the last 7 days'}
 === USER'S QUESTION ===
 ${question}
 
-Now answer concisely. Open with the verdict (yes/no/it depends) then 1-2 sentences of reasoning citing their actual numbers.`;
+Now answer concisely. Open with the verdict (yes/no/it depends) then 1-2 sentences of reasoning citing their actual numbers. If they want a plan change, tell them which button to tap.`;
 }
 
 async function sendAskCoach(){
