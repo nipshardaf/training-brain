@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.45';
+const APP_VERSION='2.46';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.46',d:'Ask Coach can now actually modify your plan via Gemini function calling — confirmation card before every change',det:'The chatbot is no longer read-only. Four new tools the AI can call when you ask for a plan change: (1) swap_workout_days(date1, date2) — swaps types and exercises between two days; (2) change_day_type(date, new_type) — change a day to REST or any other type, with auto-cascade when a gym day becomes REST; (3) add_workout_to_ride_day(date, gym_type) — stack a gym session on top of a ride day with cascade; (4) replace_gym_with_ride(date) — convert a planned gym day to a ride day (requires a Strava ride on that date). Safety pattern: when the AI calls a tool, the response shows your normal coach text answer PLUS a purple "⚡ Proposed change" confirmation card describing exactly what will happen (e.g. "Swap Tue 26 (Pull) ↔ Wed 27 (Legs)"). You tap ✓ Apply or Skip — nothing changes until you confirm. After applying, a green "✓ done" line replaces the card so you can see what was executed. Multiple tools can be returned in one response and confirmed independently. The AI is instructed to only call tools when you explicitly ask for changes (questions like "am I overtraining?" still get pure text answers).'},
   {v:'2.45',d:'Ask Coach sees full week plan + knows its capabilities (read-only for now, points users to UI buttons for changes)',det:'Two small but important upgrades to the v2.44 Ask Coach prompt. (1) The AI now receives the FULL current week plan (all 7 days, with type, lock state, completion status, and any extraGym additions) — not just today\'s plan. So if you ask "swap my Tuesday Pull to Wednesday," the AI can actually see what\'s on Wednesday and reason about whether the swap makes sense. (2) The prompt now explicitly tells the AI what it CAN do (analyse, suggest, recommend) vs CANNOT do (directly modify plan, log workouts, swap days). When the AI recommends a change, it now points the user to the specific UI button to tap — "Swap ↕" on the week row, "+ Add workout" on a ride day, or "🔄 Replace gym with ride" prompt when Strava logs a ride on a gym day. No more false promises like "I\'ll swap them for you." Full plan-modification via Gemini function calling is the bigger v2.46 work — that\'ll let the AI actually execute the change (with a confirmation card before applying).'},
   {v:'2.44',d:'Ask the Coach — interactive AI Q&A on the Week view, with tiered access (admin/pro/basic) to cap API costs',det:'New 💬 Ask the Coach panel at the top of the Week view. Tap a suggested chip ("Should I ride today or rest?", "Am I overtraining?", "How is my week going?", "Should I take a recovery day?", "What should I focus on this week?", "Why is my form negative?") or type your own question. The AI receives FULL context: today\'s plan + weather, what you\'ve already logged today, yesterday\'s training, your CTL/ATL/TSB fitness curve, body weight trend, last 7 days of gym + Strava rides with TSS, FTP, W/kg, and your goals/level/activities. Response is short (2-3 sentences, ~80 words max) and specifically cites your actual numbers — not generic advice. ACCESS TIERS to control API costs: admin (unlimited, you — ht9323@gmail.com), pro (20/day, trusted users — edit _PRO_EMAILS array to grant), basic (0/day, default — sees a locked teaser). The tier badge appears next to the panel header so you always know your level. Daily counter shown ("3 of 20 left today"). Quota tracked locally and synced via Firebase per signed-in user, resets at midnight local time. Limit-reached state disables the input and shows when access resets. Errors fall back gracefully with the error message inline.'},
   {v:'2.43',d:'Strava ride on a gym day no longer hides the planned gym work — explicit "Replace gym with ride" cascade option',det:'Previously: when a Strava ride synced on a planned gym day (e.g., went riding on Pull Tuesday), the week-view row replaced the gym label with the ride name and stats, making it look like the gym day vanished. The plan data was still PULL underneath, but the UI made it invisible. Now: the week-view row keeps showing the gym workout as the primary label (with its colour and icon) and adds a small orange "+ 🚴 X km · Y min logged" line below — both the planned gym and the actual ride are visible. When you open the day, a Strava-ride banner appears at the top with TWO clear actions: "🔄 Replace gym with ride" (cascades the gym workout forward, last gym day in the week becomes REST — mirroring the v2.20 add-workout cascade but in reverse) or "💪 Keep both" (do the gym workout in addition to the ride, prompt is dismissed but ride stays visible as a small inline note). The chosen state persists on the plan day (rideAlongside flag) so re-opens don\'t re-prompt.'},
@@ -4750,9 +4751,15 @@ function buildAskPrompt(question){
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
   return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers (CTL, TSS, recent rides/gym, weight trend) when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless TSB is genuinely low or they've trained 5+ days in a row.${langNote}
 
-CAPABILITIES — what you can and cannot do:
-- You CAN: analyse their plan, training history, fitness curve, and body weight. Suggest swaps, cascades, or rest days in plain language.
-- You CANNOT: directly modify the plan, swap days, log workouts, or add/remove sessions. If you recommend a plan change, tell the user to use the "Swap ↕" button on the week view (each day has one), or to tap the "+ Add workout" button on ride days, or to use the "🔄 Replace gym with ride" prompt that appears on a gym day when Strava logs a ride that day. Don't promise to do it for them — they'll execute the change themselves.
+CAPABILITIES — what you can do:
+- ANALYSE: their plan, training history, fitness curve, and body weight. Give specific data-driven advice.
+- MODIFY the plan directly via function calls. You have access to these tools (all require the user to confirm before they take effect — you don't need to ask permission in your text response, just call the tool):
+  · swap_workout_days(date1, date2) — swap workout types between two days
+  · change_day_type(date, new_type) — set a day to REST or change to another workout type. Setting a gym day to REST auto-cascades displaced gym work forward.
+  · add_workout_to_ride_day(date, gym_type) — stack a gym workout on a ride day; cascades remaining gym days forward.
+  · replace_gym_with_ride(date) — convert a planned gym day to a ride day (only when Strava has a ride logged on that date). Cascades displaced gym work forward.
+- ONLY call a tool when the user clearly asks for a plan change. For pure questions ("am I overtraining?", "how is my week?"), just answer in text — don't call tools.
+- When you DO call a tool, also include a brief text response (1 sentence) explaining what you're proposing. The user will see your text PLUS a confirmation card before the change applies.
 
 === USER PROFILE ===
 Goal: ${goalStr} | Level: ${profile.level||'intermediate'} | Activities: ${(profile.activities||[]).join(', ')||'gym'}
@@ -4783,6 +4790,144 @@ ${question}
 Now answer concisely. Open with the verdict (yes/no/it depends) then 1-2 sentences of reasoning citing their actual numbers. If they want a plan change, tell them which button to tap.`;
 }
 
+// Tool/function declarations the AI can call to actually modify the plan.
+// Each tool maps to a handler in COACH_TOOL_HANDLERS below. The AI returns a
+// functionCall in its response; we show a confirmation card before executing.
+const COACH_TOOLS=[{
+  function_declarations:[
+    {
+      name:'swap_workout_days',
+      description:"Swap the workout types between two days in the current week's plan. Use this when the user wants to move a workout from one day to another (e.g. 'swap my Tuesday Pull with Wednesday Legs').",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date1:{type:'STRING',description:'First date in YYYY-MM-DD format'},
+          date2:{type:'STRING',description:'Second date in YYYY-MM-DD format'}
+        },
+        required:['date1','date2']
+      }
+    },
+    {
+      name:'change_day_type',
+      description:"Change a single day's plan to a different workout type. Used to set a day to REST, or change PUSH→PULL, or convert a gym day to a ride day. Setting a gym day to REST auto-cascades the displaced gym work forward to later gym days. Valid types: PUSH, PULL, LEGS, UPPER_PUMP, LONG_OUTDOOR, SHORT_OUTDOOR, LONG_INDOOR, SHORT_INDOOR, REST.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date in YYYY-MM-DD format'},
+          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
+        },
+        required:['date','new_type']
+      }
+    },
+    {
+      name:'add_workout_to_ride_day',
+      description:"Stack a gym workout on top of an existing ride day. Use when the user wants to do both a ride AND a gym session on the same day. The week's remaining gym days will cascade forward, and the last one becomes REST. The target day must currently be a ride day (LONG_OUTDOOR, SHORT_OUTDOOR, LONG_INDOOR, SHORT_INDOOR).",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Ride day date in YYYY-MM-DD'},
+          gym_type:{type:'STRING',description:'Gym workout type to add',enum:['PUSH','PULL','LEGS','UPPER_PUMP']}
+        },
+        required:['date','gym_type']
+      }
+    },
+    {
+      name:'replace_gym_with_ride',
+      description:"Convert a planned gym day to a ride day when the user actually rode that day instead. Cascades the displaced gym workout forward to later in the week. Only valid when the target day is currently a gym day (PUSH/PULL/LEGS/UPPER_PUMP) AND a Strava ride exists for that date. Use when the user says something like 'I biked today instead of doing gym'.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date in YYYY-MM-DD'}
+        },
+        required:['date']
+      }
+    }
+  ]
+}];
+
+// Maps a function name + args to a human-readable summary for the confirmation
+// card, plus the actual mutation handler. Each handler returns a short result
+// string used for the success toast.
+const COACH_TOOL_HANDLERS={
+  swap_workout_days:{
+    summarize:({date1,date2})=>{
+      const pk=DB.pk(getMon(new Date(date1+'T12:00:00')));
+      const plan=DB.get(pk,null)||[];
+      const d1=plan.find(d=>d.date===date1);
+      const d2=plan.find(d=>d.date===date2);
+      if(!d1||!d2)return`Swap ${date1} ↔ ${date2}`;
+      return`Swap ${_dayLbl(date1)} (${_typeShort(d1.type)}) ↔ ${_dayLbl(date2)} (${_typeShort(d2.type)})`;
+    },
+    execute:({date1,date2})=>{
+      const pk=DB.pk(getMon(new Date(date1+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      if(!plan)return{ok:false,msg:'No plan for that week'};
+      const i1=plan.findIndex(d=>d.date===date1);
+      const i2=plan.findIndex(d=>d.date===date2);
+      if(i1<0||i2<0)return{ok:false,msg:'Date not in plan'};
+      [plan[i1].type,plan[i2].type]=[plan[i2].type,plan[i1].type];
+      [plan[i1].exercises,plan[i2].exercises]=[plan[i2].exercises,plan[i1].exercises];
+      [plan[i1].extraGym,plan[i2].extraGym]=[plan[i2].extraGym,plan[i1].extraGym];
+      DB.set(pk,plan);
+      syncUp();
+      return{ok:true,msg:`Swapped ${date1} ↔ ${date2}`};
+    }
+  },
+  change_day_type:{
+    summarize:({date,new_type})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null)||[];
+      const d=plan.find(x=>x.date===date);
+      const oldStr=d?_typeShort(d.type):'?';
+      return`Change ${_dayLbl(date)}: ${oldStr} → ${_typeShort(new_type)}`;
+    },
+    execute:({date,new_type})=>{
+      // doSwap handles type changes including cascade-when-gym-becomes-rest
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      if(!plan||!plan.find(d=>d.date===date))return{ok:false,msg:'Date not in plan'};
+      doSwap(date,new_type);
+      return{ok:true,msg:`${date} → ${new_type}`};
+    }
+  },
+  add_workout_to_ride_day:{
+    summarize:({date,gym_type})=>`Add ${_typeShort(gym_type)} workout to ${_dayLbl(date)} (cascade remaining gym days forward)`,
+    execute:({date,gym_type})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      if(!plan)return{ok:false,msg:'No plan'};
+      const d=plan.find(x=>x.date===date);
+      const rideTypes=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'];
+      if(!d||!rideTypes.includes(d.type))return{ok:false,msg:'Not a ride day'};
+      addGymToRideDay(date,gym_type,1); // shift=1 = cascade
+      return{ok:true,msg:`Added ${gym_type} to ${date}, cascaded forward`};
+    }
+  },
+  replace_gym_with_ride:{
+    summarize:({date})=>`Replace ${_dayLbl(date)} gym with the Strava ride; cascade gym work forward`,
+    execute:({date})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      const d=plan?.find(x=>x.date===date);
+      const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+      if(!d||!gymTypes.includes(d.type))return{ok:false,msg:'Not a gym day'};
+      if(!stravaRideOnDate(date))return{ok:false,msg:'No Strava ride on that date'};
+      replaceGymWithRide(date);
+      return{ok:true,msg:`Replaced ${date} gym with the ride`};
+    }
+  }
+};
+
+// Compact label helpers used in confirmation summaries
+function _dayLbl(dateStr){
+  const d=new Date(dateStr+'T12:00:00');
+  return DNAMES[d.getDay()]+' '+d.getDate();
+}
+function _typeShort(t){
+  const m={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',LONG_OUTDOOR:'Long Ride (Outdoor)',SHORT_OUTDOOR:'Short Ride (Outdoor)',LONG_INDOOR:'Long Ride (Indoor)',SHORT_INDOOR:'Short Ride (Indoor)',REST:'Rest'};
+  return m[t]||t;
+}
+
 async function sendAskCoach(){
   const inp=document.getElementById('ask-coach-input');
   if(!inp)return;
@@ -4797,14 +4942,29 @@ async function sendAskCoach(){
   try{
     const prompt=buildAskPrompt(question);
     const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:500,temperature:0.6,thinkingConfig:{thinkingBudget:0}}})});
+      body:JSON.stringify({
+        contents:[{parts:[{text:prompt}]}],
+        tools:COACH_TOOLS,
+        toolConfig:{functionCallingConfig:{mode:'AUTO'}},
+        generationConfig:{maxOutputTokens:600,temperature:0.6,thinkingConfig:{thinkingBudget:0}}
+      })});
     if(!r.ok)throw new Error('API '+r.status);
     const json=await r.json();
-    const text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if(!text)throw new Error('empty response');
+    const parts=json.candidates?.[0]?.content?.parts||[];
+    // Separate text and function calls from the response parts
+    const textParts=parts.filter(p=>p.text).map(p=>p.text.trim()).filter(Boolean);
+    const fnCalls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
+    const text=textParts.join('\n\n');
+    if(!text&&!fnCalls.length)throw new Error('empty response');
     incrementAskQuota();
     trackAICall?.('ask_coach',true);
-    S.askResponse={question,answer:_esc(text).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'),at:new Date().toISOString()};
+    S.askResponse={
+      question,
+      answer:text?_esc(text).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'):'',
+      pendingActions:fnCalls,
+      appliedActions:[],
+      at:new Date().toISOString()
+    };
     S.askLoading=false;
     syncUp();render();
   }catch(e){
@@ -4813,6 +4973,31 @@ async function sendAskCoach(){
     S.askLoading=false;S.askError=e?.message||'Network error';
     render();
   }
+}
+
+// Apply or skip a single pending action from the askResponse. After all
+// actions are resolved, the confirmation UI disappears.
+function applyCoachAction(idx){
+  if(!S.askResponse?.pendingActions)return;
+  const fc=S.askResponse.pendingActions[idx];
+  if(!fc)return;
+  const handler=COACH_TOOL_HANDLERS[fc.name];
+  if(!handler){showToast(`Unknown action: ${fc.name}`,'var(--red)');return;}
+  const result=handler.execute(fc.args||{});
+  if(result.ok){
+    S.askResponse.appliedActions=S.askResponse.appliedActions||[];
+    S.askResponse.appliedActions.push({fc,result,at:new Date().toISOString()});
+    S.askResponse.pendingActions.splice(idx,1);
+    showToast(`✓ ${result.msg}`,'var(--grn)');
+  }else{
+    showToast(`⚠️ ${result.msg}`,'var(--red)');
+  }
+  render();
+}
+function skipCoachAction(idx){
+  if(!S.askResponse?.pendingActions)return;
+  S.askResponse.pendingActions.splice(idx,1);
+  render();
 }
 
 function clearAskResponse(){
@@ -4849,8 +5034,10 @@ function rAskCoach(){
   const counter=cfg.quota===-1
     ?`<span style="font-size:10px;color:var(--t2);font-weight:600">unlimited</span>`
     :`<span style="font-size:10px;color:${limitReached?'var(--red)':'var(--t2)'};font-weight:600">${remaining} of ${cfg.quota} left today</span>`;
-  // Response state
+  // Response state — text answer + any pending tool-call confirmation cards
   if(S.askResponse){
+    const pending=S.askResponse.pendingActions||[];
+    const applied=S.askResponse.appliedActions||[];
     return`<div style="background:var(--s1);border:1px solid rgba(124,58,237,.3);border-radius:14px;padding:13px 15px;margin-bottom:12px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div style="display:flex;align-items:center;gap:6px">
@@ -4860,7 +5047,22 @@ function rAskCoach(){
     <button onclick="clearAskResponse()" style="background:none;border:none;color:var(--t2);font-size:11px;font-weight:700;cursor:pointer;padding:2px 6px">✕ Clear</button>
   </div>
   <div style="font-size:11px;color:var(--t2);font-style:italic;margin-bottom:8px">"${_esc(S.askResponse.question)}"</div>
-  <div style="font-size:13px;color:var(--t1);line-height:1.55">${S.askResponse.answer}</div>
+  ${S.askResponse.answer?`<div style="font-size:13px;color:var(--t1);line-height:1.55;margin-bottom:${pending.length||applied.length?'10px':'0'}">${S.askResponse.answer}</div>`:''}
+  ${pending.map((fc,i)=>{
+    const handler=COACH_TOOL_HANDLERS[fc.name];
+    const summary=handler?handler.summarize(fc.args||{}):`${fc.name}(${JSON.stringify(fc.args)})`;
+    return`<div style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.35);border-radius:11px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+        <span style="font-size:11px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:.5px">⚡ Proposed change</span>
+      </div>
+      <div style="font-size:12px;color:var(--al);font-weight:600;line-height:1.45;margin-bottom:9px">${_esc(summary)}</div>
+      <div style="display:flex;gap:6px">
+        <button onclick="applyCoachAction(${i})" style="flex:1;background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:8px;cursor:pointer">✓ Apply</button>
+        <button onclick="skipCoachAction(${i})" style="flex:0 0 auto;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer">Skip</button>
+      </div>
+    </div>`;
+  }).join('')}
+  ${applied.map(a=>`<div style="font-size:11px;color:var(--grn);background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:9px;padding:7px 10px;margin-bottom:6px;font-weight:600">✓ ${_esc(a.result.msg)}</div>`).join('')}
   <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--bord)">
     ${counter}
     <button onclick="clearAskResponse()" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 12px;cursor:pointer">Ask another</button>
