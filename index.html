@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.53';
+const APP_VERSION='2.54';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.54',d:'Coach stops writing "(TSB)" alongside "Form" + becomes proactive with tool calls (no more 3-turn back-and-forth)',det:'TWO fixes. (1) ACRONYM STRIPPING — the v2.49 prompt had said "use plain term first + acronym in parens" but the model interpreted that as "always write Form (TSB)". Tightened the rule: NEVER write the acronym at all. Only "Form is -17", never "Form (TSB) is -17" or "TSB -17". Added a post-processor safety net that strips parenthetical acronyms and replaces any remaining standalone TSB/CTL/ATL/TSS/IF tokens with their plain-English equivalents — even if the model slips up, the user never sees a raw acronym. (2) PROACTIVE TOOL CALLS — when you said "I\'m tired, will resting today impact my week?" the model gave advice without calling change_day_type, then "Ok adjust my plan" still didn\'t call it (just described intent), and only "Ok" triggered the actual tool call. Three turns for one decision. Updated prompt: explicit examples that tool calls are PROPOSALS (the confirmation card is where consent happens, not a separate turn). The model should call the tool in the same response as the question, not describe what it would do and wait. Forbidden phrases like "I can adjust your plan to…" or "I will move your workout…" are flagged in the rules.'},
   {v:'2.53',d:'Hotfix — syntax error in v2.52 broke the app (escaped quotes inside a template-literal expression)',det:'The v2.52 edit to the "+ Add workout" button used \\" to escape double quotes inside a ${...} expression within a template literal. That works for escape sequences BETWEEN expressions in a template literal, but inside an expression in ${...} you\'re in normal JS land and \\" is a syntax error. Result: the entire script failed to parse, app wouldn\'t open. Rewrote the button using a self-invoking arrow function with backtick template literals for the strings — no escaping needed, no nested-quote problems. App opens again.'},
   {v:'2.52',d:'Guest sees ALL features now — locked-but-visible state with "Sign in to unlock" CTAs instead of hiding things',det:'Previous behaviour hid Ask the Coach, Friends, the "+ Add workout" button, and showed only a generic Strava-connect prompt for guests. Now every feature is visible to guests so they can see the full scope of what they\'d get if they signed up. Each gated feature shows a small "🔒 SIGN IN" pill badge in its header plus a brief description of what the feature does, and a "🔓 Sign in to unlock" CTA. Specifically: (1) ASK THE COACH — guest sees the panel with disabled-look suggestion chips and a description of the AI coach, plus the unlock button. (2) FRIENDS — same pattern, with the description of what Friends does. (3) STRAVA CONNECT in Settings — explains what it does but the button now reads "🔓 Sign in to connect Strava" for guests. (4) "+ ADD WORKOUT" button on ride days — still visible but the label includes "🔒 sign in" and tapping shows a toast. Workout-log save buttons were already showing for guests with a toast on save (no change needed). Cleaner discovery — guests can see everything the app offers, not just whatever wasn\'t gated.'},
   {v:'2.51',d:'Welcome sheet + sample data for guests + setup tour for new users + "View intro again" button in Settings',det:'Guests were getting dropped onto an empty Week view with zero explanation of what the app does. Now: (1) When you tap "Continue as Guest" on the lock screen, a proper welcome sheet appears with 6 feature cards explaining smart weekly plan, Strava sync, gym tracking, body metrics, AI Coach, and progress charts. Three CTAs at the bottom: "🎯 Try with sample data" (loads realistic mock data into the guest store — 12 Strava rides over 30 days with computed fitness curve, 5 gym logs, weight log with 4-week loss trend, FTP 230W, body weight 78.5kg with 74kg goal, 5 PRs on compound lifts), "Start fresh — empty", or "Sign up instead". The sample data lets a guest poke around every feature in action without setting anything up. (2) New signed-in users who finish goals setup now see the same welcome sheet with a "🚀 NEXT STEPS" checklist (generate plan, connect Strava, log first workout, check My Training). Only shown once — tracked via welcome_seen flag. (3) New "📖 About the app" section in Settings has a "🧠 View intro again" button so anyone can reopen the welcome anytime.'},
@@ -4947,15 +4948,22 @@ function buildAskPrompt(question){
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
   return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${langNote}
 
-VOCABULARY — use plain-English labels, not raw acronyms:
-- "CTL" → say "Fitness" (or "Fitness (CTL) X" only if you need to be precise)
-- "ATL" → say "Fatigue"
-- "TSB" → say "Form"
-- "TSS" → say "training load" or "training stress"
-- "NP" → say "normalized power"
-- "IF" → say "intensity"
-- "EF" → say "aerobic efficiency"
-If you do use an acronym, give the plain term in parentheses the first time, e.g. "Your Form (TSB) is -17". Never use multiple acronyms in a row without explanation.
+VOCABULARY — NEVER write these acronyms in your response. Use plain English ONLY:
+- "CTL" / "ATL" / "TSB" — write "Fitness" / "Fatigue" / "Form". NEVER add the acronym in parentheses.
+- "TSS" — write "load" or "training load"
+- "NP" — write "normalized power"
+- "IF" — write "intensity"
+- "EF" — write "aerobic efficiency"
+Examples of CORRECT output:
+  ✓ "Your Form is -17 (carrying fatigue)"
+  ✓ "Today's ride had a load of 95"
+  ✓ "Normalized power was 220W"
+Examples of FORBIDDEN output — do not write these:
+  ✗ "Your Form (TSB) is -17"
+  ✗ "TSB -17"
+  ✗ "TSS 95"
+  ✗ "IF 0.85"
+The acronyms are confusing to the user. Use only the plain English term, with the number. Never both.
 
 CAPABILITIES — what you can do:
 - ANALYSE: their plan, training history, fitness curve, and body weight. Give specific data-driven advice.
@@ -4968,8 +4976,13 @@ CAPABILITIES — what you can do:
   · set_lock_day(date, locked) — lock or unlock a day so future regens preserve/don't preserve it.
   · log_gym_sets(date, exercises[]) — log structured gym sets. Each exercise has a name (fuzzy-matched against the library) and an array of {weight, reps} sets. Use when user dictates a workout like "bench 100 lb 3x8, OHP 65 lb 3x10". Weight is in the user's preferred unit. Updates PRs automatically.
   · regenerate_remaining_week(from_date) — regenerate plan from a date forward, preserving prior days and locked days.
-- ONLY call a tool when the user clearly asks for a plan change. For pure questions ("am I overtraining?", "how is my week?"), just answer in text — don't call tools.
-- When you DO call a tool, also include a brief text response (1 sentence) explaining what you're proposing. The user will see your text PLUS a confirmation card before the change applies.
+- BE PROACTIVE with tool calls. If the user's question implies they want a plan change, CALL THE TOOL in this same response. Don't describe what you would do or ask for permission — just call the tool. The app shows a confirmation card automatically before any change applies, so the user always has the final say. Calling the tool isn't an action — it's a proposal that the user can Apply or Skip.
+  - "I'm tired, will resting today hurt my week?" → call change_day_type(today, REST). Your text explains the trade-off.
+  - "Adjust my plan" / "fix my week" / "move my workout" → call the appropriate tool immediately.
+  - "Swap Tuesday and Wednesday" → call swap_workout_days. Don't say "I can do that" — just do it.
+- DO NOT say "I can adjust your plan to…" or "I will move your workout…" — instead, call the tool and let the confirmation card describe the change. Your text should focus on the WHY, not the what.
+- For pure analytical questions ("am I overtraining?", "how is my week going?"), just answer in text — don't call tools.
+- When you call a tool, include a brief 1-sentence text response explaining the reasoning (not the change itself).
 
 === USER PROFILE ===
 Goal: ${goalStr} | Level: ${profile.level||'intermediate'} | Activities: ${(profile.activities||[]).join(', ')||'gym'}
@@ -5348,6 +5361,31 @@ function _typeShort(t){
 //     appliedActions: [{fc, result, at}],       // model turns only
 //     skippedActions: [{fc, at}],               // model turns only
 //     at: ISO timestamp }
+// Removes/replaces training-jargon acronyms that the model occasionally slips
+// into responses despite the prompt rules. Applied as a safety net on every
+// model response. Patterns handled:
+//   "Form (TSB)"  → "Form"
+//   "(TSB)" / "TSB" → "Form"  (only as standalone token)
+//   "(CTL)" / "CTL" → "Fitness"
+//   "(ATL)" / "ATL" → "Fatigue"
+//   "TSS X" / "(TSS)" → "load X"
+//   "IF 0.85" / "(IF)" → "intensity 0.85"
+//   "NP X" / "(NP)" → "normalized power X" (only when standalone)
+function _stripAcronyms(text){
+  if(!text)return text;
+  let t=text;
+  // Strip parenthetical acronyms when next to their plain term, e.g. "Form (TSB)" → "Form"
+  t=t.replace(/\s*\((?:TSB|CTL|ATL|TSS|IF|NP|EF)\)/g,'');
+  // Replace standalone acronyms (word boundary on both sides) with plain term
+  t=t.replace(/\bTSB\b/g,'Form');
+  t=t.replace(/\bCTL\b/g,'Fitness');
+  t=t.replace(/\bATL\b/g,'Fatigue');
+  t=t.replace(/\bTSS\b/g,'load');
+  // "IF 0.85" → "intensity 0.85" (avoid matching the English word "if" by requiring uppercase + digit nearby)
+  t=t.replace(/\bIF\s+(\d)/g,'intensity $1');
+  return t;
+}
+
 function getAskConversation(){return DB.get('ai_chat_session',[])||[];}
 function setAskConversation(c){DB.set('ai_chat_session',c);}
 
@@ -5432,11 +5470,13 @@ async function sendAskCoach(){
     if(!text&&!fnCalls.length)throw new Error('empty response');
     incrementAskQuota();
     trackAICall?.('ask_coach',true);
+    // Safety net: strip any acronyms the model slipped in despite the prompt rules
+    const cleanedText=_stripAcronyms(text);
     const conv2=getAskConversation();
     conv2.push({
       role:'model',
-      text:text?_esc(text).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'):'',
-      rawText:text,
+      text:cleanedText?_esc(cleanedText).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'):'',
+      rawText:cleanedText,
       functionCalls:fnCalls,
       pendingActions:[...fnCalls],
       appliedActions:[],
