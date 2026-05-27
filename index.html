@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.50';
+const APP_VERSION='2.51';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.51',d:'Welcome sheet + sample data for guests + setup tour for new users + "View intro again" button in Settings',det:'Guests were getting dropped onto an empty Week view with zero explanation of what the app does. Now: (1) When you tap "Continue as Guest" on the lock screen, a proper welcome sheet appears with 6 feature cards explaining smart weekly plan, Strava sync, gym tracking, body metrics, AI Coach, and progress charts. Three CTAs at the bottom: "🎯 Try with sample data" (loads realistic mock data into the guest store — 12 Strava rides over 30 days with computed fitness curve, 5 gym logs, weight log with 4-week loss trend, FTP 230W, body weight 78.5kg with 74kg goal, 5 PRs on compound lifts), "Start fresh — empty", or "Sign up instead". The sample data lets a guest poke around every feature in action without setting anything up. (2) New signed-in users who finish goals setup now see the same welcome sheet with a "🚀 NEXT STEPS" checklist (generate plan, connect Strava, log first workout, check My Training). Only shown once — tracked via welcome_seen flag. (3) New "📖 About the app" section in Settings has a "🧠 View intro again" button so anyone can reopen the welcome anytime.'},
   {v:'2.50',d:'Plain-English everywhere: "Load" not "TSS", "Intensity" not "IF", "Fitness − Fatigue" not "CTL−ATL" + info sheet explaining all the cycling metrics',det:'Sweep through every UI label that was using TrainingPeaks acronyms and replaced with plain English. Ride card badge: "📊 TSS 95 · IF 0.85" → "📊 Load 95 · Intensity 0.85". Fitness · Fatigue · Form panel: "CTL−ATL" subtitle under Form → "Fitness − Fatigue". Cycling Progress chart metric chips: "EF" → "Efficiency", "TSS" → "Load" (full label "Training Load per Ride"). Weekly Summary table column: "TSS" → "Load". History row Strava entries: "TSS X · IF Y" → "Load X · Intensity Y". NEW ⓘ button on the Fitness · Fatigue · Form section header opens an info sheet that explains each metric in plain English with concrete examples and your CURRENT NUMBERS plugged in — so you can see "Fatigue: 25" and read what that means alongside "Form: -17 = carrying fatigue, monitor recovery". Each metric chip in the chart also has a one-line hint shown below the metric label.'},
   {v:'2.49',d:'Coach uses plain-English labels — "Form" not "TSB", "Fitness" not "CTL", etc.',det:'The Ask Coach prompt was letting the AI sprinkle raw acronyms (TSB, CTL, ATL, NP, IF, EF, TSS) into responses without explanation, which is confusing if you haven\'t memorized the cycling-coach lexicon. Updated the prompt with an explicit VOCABULARY section: CTL → "Fitness", ATL → "Fatigue", TSB → "Form", TSS → "training load", NP → "normalized power", IF → "intensity", EF → "aerobic efficiency". When the AI does need to be precise, it puts the plain term first and the acronym in parentheses ("Your Form (TSB) is -17"). No more bare "-17 TSB" mystery numbers. Existing conversation history isn\'t retroactively translated, but new questions get the friendlier vocabulary.'},
   {v:'2.48',d:'Ask Coach is now multi-turn — full conversation with memory, scrollable thread, follow-up questions just work',det:'Single-shot Q&A replaced with a real chat thread. Each user message and coach response appears as a bubble (user right-aligned in purple, coach left-aligned in grey) inside a scrollable container. The full conversation history is sent to Gemini on every new question — so follow-ups like "what about Wednesday too?" or "actually undo that" work naturally because the model sees the previous turns. Confirmation cards for plan changes still appear inside the corresponding coach bubble, and applied actions stay visible in the thread so you can scroll back and see what got executed. A new "🗑 Reset" button at the top of the panel clears the conversation when you want a fresh start. Conversation persists across page reloads via ai_chat_session (synced through Firebase). When the AI sees applied actions from earlier in the conversation, those are summarized in its system context for the next turn so it doesn\'t re-propose the same change. Loading state now shows a typing-dots bubble inside the thread instead of just disabling the input. Suggested-question chips only appear when the conversation is empty (don\'t clutter mid-thread).'},
@@ -1698,6 +1699,11 @@ function openGoalsSetup(isEdit=false,startStep=1){
     syncUp();
     sheet.remove();
     render();
+    // First-time onboarding: show welcome sheet after goals are saved
+    // (only for the initial setup, not for users editing later)
+    if(!isEdit&&!S.guest&&!DB.get('welcome_seen',false)){
+      setTimeout(()=>openWelcomeSheet('authed-new'),250);
+    }
   }
 
   function gsRender(){
@@ -3133,6 +3139,182 @@ function enterGuest(){
   // Fresh guest session — wipe any previous in-memory data
   Object.keys(_guestStore).forEach(k=>delete _guestStore[k]);
   S.guest=true;S.authed=true;render();
+  // Show welcome sheet on every guest entry so they understand what they're seeing
+  setTimeout(()=>openWelcomeSheet('guest'),200);
+}
+
+// Welcome / onboarding sheet. Three modes:
+//   'guest'      — guest just landed; offers sample data, start blank, or sign up
+//   'authed-new' — signed-in user just finished goals setup; just a "let's go" CTA
+//   'manual'     — reopened from Settings; just a Close CTA
+function openWelcomeSheet(mode){
+  document.getElementById('welcome-sheet')?.remove();
+  const features=[
+    {i:'📅',t:'Smart weekly plan',d:'Auto-generated from your activities, weather, and recovery'},
+    {i:'🚴',t:'Strava sync',d:'Auto-import rides — fitness, fatigue and form computed for you'},
+    {i:'🏋️',t:'Gym tracking',d:'Sets, reps, PRs, weekly volume across muscle groups'},
+    {i:'⚖️',t:'Body metrics',d:'Weight trend with goal target, W/kg, body composition'},
+    {i:'💬',t:'AI Coach',d:'Ask anything — answers grounded in your actual data, can modify your plan'},
+    {i:'📊',t:'Progress charts',d:'90-day trend lines for every metric that matters'}
+  ];
+  const sheet=document.createElement('div');
+  sheet.id='welcome-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:950;display:flex;flex-direction:column;justify-content:flex-end';
+  let ctaHtml='';
+  if(mode==='guest'){
+    ctaHtml=`<button onclick="seedGuestSampleData();closeWelcomeSheet()" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:8px">🎯 Try with sample data</button>
+<button onclick="closeWelcomeSheet()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--al);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:8px">Start fresh — empty</button>
+<button onclick="closeWelcomeSheet();lockApp()" style="width:100%;background:none;border:none;color:var(--t2);font-size:12px;font-weight:600;padding:8px;cursor:pointer">← Sign up instead (full features)</button>`;
+  }else if(mode==='authed-new'){
+    ctaHtml=`<div style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:11px;padding:11px 13px;margin-bottom:12px">
+  <div style="font-size:11px;font-weight:700;color:var(--acc);margin-bottom:6px">🚀 NEXT STEPS</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.6">
+    1. Tap <strong style="color:var(--al)">Generate plan</strong> to build your first week<br>
+    2. Connect <strong style="color:var(--al)">Strava</strong> in Settings to auto-sync rides<br>
+    3. Tap any day to log your first workout<br>
+    4. Check <strong style="color:var(--al)">My Training</strong> for charts and weight tracking
+  </div>
+</div>
+<button onclick="closeWelcomeSheet();markWelcomeSeen()" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer">Let's get started →</button>`;
+  }else{
+    ctaHtml=`<button onclick="closeWelcomeSheet()" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer">Got it</button>`;
+  }
+  const greeting=mode==='guest'?'Try the app without signing up':mode==='authed-new'?"Your profile's saved. Here's what the app does:":'A quick tour of what the app does';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(6px)" onclick="closeWelcomeSheet()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+24px);max-width:430px;margin:0 auto;width:100%;max-height:90vh;overflow-y:auto">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
+  <div style="text-align:center;margin-bottom:20px">
+    <div style="font-size:36px;line-height:1;margin-bottom:8px">🧠</div>
+    <div style="font-size:22px;font-weight:800;color:var(--al);margin-bottom:5px">Welcome to Training Brain</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.5">${greeting}</div>
+  </div>
+
+  <div style="margin-bottom:18px">
+    ${features.map(f=>`<div style="display:flex;gap:11px;padding:10px 0;border-bottom:1px solid var(--bord);align-items:flex-start">
+      <div style="font-size:22px;line-height:1;flex-shrink:0;width:28px;text-align:center">${f.i}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:700;color:var(--al);line-height:1.3">${f.t}</div>
+        <div style="font-size:11px;color:var(--t2);line-height:1.45;margin-top:2px">${f.d}</div>
+      </div>
+    </div>`).join('')}
+  </div>
+
+  ${ctaHtml}
+</div>`;
+  document.body.appendChild(sheet);
+}
+
+function closeWelcomeSheet(){document.getElementById('welcome-sheet')?.remove();}
+function markWelcomeSeen(){DB.set('welcome_seen',true);syncUp();}
+function hasSeenWelcome(){return DB.get('welcome_seen',false);}
+
+// Seeds the guest store with realistic mock data so a guest can poke around
+// and see every feature in action without setting anything up.
+function seedGuestSampleData(){
+  if(!S.guest)return;
+  const today=new Date();
+  const t=ds=>fd(addDays(today,ds));
+  // 1. User profile
+  _guestStore['user_profile']={
+    goals:['muscle','endurance'],goal:'muscle',
+    activities:['gym','cycling'],days:5,level:'intermediate',
+    gender:'male',onboarded:true,
+    ftp:230,ftp_source:'estimated',
+    weight:78.5,weight_source:'manual',
+    weight_goal:74,
+    height:178,heightUnit:'cm',age:34
+  };
+  _guestStore['bike_pref']='weather';
+  _guestStore['unit']='kg';
+  _guestStore['welcome_seen']=true;
+  // 2. Weight log — gradual loss trend over 4 weeks
+  const wLog={};
+  for(let i=28;i>=0;i-=2){
+    const noise=(Math.random()-0.5)*0.6;
+    wLog[t(-i)]=+(80-i*0.06+noise).toFixed(1);
+  }
+  _guestStore['weight_log']=wLog;
+  // 3. Mock Strava activities — 12 rides over 30 days, varied loads
+  const ftp=230;
+  const _rides=[
+    {d:-1,name:'Saturday endurance',min:75,km:32,np:175,avg:165,hr:142,maxhr:158,cad:88,kj:780,elev:340,suffer:48},
+    {d:-3,name:'Morning Zwift',min:45,km:22,np:205,avg:195,hr:152,maxhr:172,cad:92,kj:540,elev:120,suffer:65,indoor:true},
+    {d:-5,name:'Tempo intervals',min:60,km:26,np:225,avg:200,hr:158,maxhr:178,cad:90,kj:720,elev:280,suffer:88},
+    {d:-7,name:'Long Sunday',min:110,km:48,np:170,avg:160,hr:138,maxhr:155,cad:87,kj:1120,elev:520,suffer:72},
+    {d:-9,name:'Recovery spin',min:40,km:16,np:130,avg:125,hr:118,maxhr:135,cad:85,kj:310,elev:90,suffer:22},
+    {d:-12,name:'Threshold push',min:55,km:24,np:230,avg:210,hr:162,maxhr:181,cad:91,kj:690,elev:240,suffer:94},
+    {d:-14,name:'Coffee ride',min:80,km:30,np:155,avg:148,hr:132,maxhr:148,cad:85,kj:710,elev:380,suffer:42},
+    {d:-17,name:'Hill repeats',min:65,km:25,np:215,avg:185,hr:160,maxhr:182,cad:88,kj:720,elev:680,suffer:90},
+    {d:-20,name:'Easy spin',min:35,km:14,np:140,avg:135,hr:120,maxhr:135,cad:86,kj:295,elev:85,suffer:18},
+    {d:-23,name:'Long endurance',min:130,km:55,np:165,avg:158,hr:140,maxhr:156,cad:86,kj:1290,elev:580,suffer:80},
+    {d:-26,name:'Tempo Tuesday',min:50,km:21,np:215,avg:198,hr:155,maxhr:174,cad:90,kj:600,elev:200,suffer:72},
+    {d:-29,name:'Saturday club ride',min:120,km:52,np:185,avg:172,hr:148,maxhr:170,cad:88,kj:1310,elev:640,suffer:95}
+  ];
+  const mockActs=_rides.map(r=>{
+    const moving_time=r.min*60;
+    const distance=r.km*1000;
+    const weighted_average_watts=r.np;
+    const _tss=Math.round((moving_time*r.np*r.np)/(ftp*ftp*3600)*100);
+    const _if=+(r.np/ftp).toFixed(2);
+    return{
+      start_date_local:t(r.d)+'T09:30:00',
+      moving_time,elapsed_time:moving_time+300,distance,
+      average_heartrate:r.hr,max_heartrate:r.maxhr,
+      average_watts:r.avg,weighted_average_watts,max_watts:Math.round(r.np*2.2),device_watts:true,
+      total_elevation_gain:r.elev,average_cadence:r.cad,
+      average_speed:+(distance/moving_time).toFixed(2),
+      kilojoules:r.kj,suffer_score:r.suffer,
+      perceived_exertion:null,pr_count:r.d===-12?2:0,workout_type:r.d===-12?'3':null,
+      name:r.name,type:r.indoor?'VirtualRide':'Ride',sport_type:r.indoor?'VirtualRide':'Ride',
+      _tss,_if
+    };
+  });
+  _guestStore['strava_activities']=mockActs;
+  _guestStore['strava_token']={access:'sample',athlete:{name:'Sample'},expires:Date.now()/1000+3600};
+  _guestStore['strava_last_sync']=new Date().toISOString();
+  // 4. Compute fitness curve
+  const curve=computeFitnessCurve(mockActs);
+  if(curve)_guestStore['bike_fitness_curve']=curve;
+  // 5. PRs — a handful of compound + isolation
+  _guestStore['prs']={
+    bb_bench:{w:90,r:5,date:t(-10)},
+    bb_squat:{w:120,r:5,date:t(-7)},
+    db_row:{w:32,r:8,date:t(-14)},
+    ohp:{w:50,r:5,date:t(-12)},
+    bb_deadlift:{w:140,r:3,date:t(-21)}
+  };
+  // 6. Recent gym logs (last 14 days, ~3-4 sessions per week)
+  const _logs=[
+    {d:-2,type:'PULL',exs:[
+      {id:'bb_row',sets:[{w:70,r:8,done:true},{w:70,r:8,done:true},{w:72.5,r:7,done:true}]},
+      {id:'lat_pull',sets:[{w:60,r:10,done:true},{w:60,r:9,done:true},{w:60,r:8,done:true}]},
+      {id:'db_curl',sets:[{w:14,r:10,done:true},{w:14,r:10,done:true},{w:14,r:9,done:true}]}
+    ]},
+    {d:-4,type:'PUSH',exs:[
+      {id:'bb_bench',sets:[{w:80,r:8,done:true},{w:85,r:6,done:true},{w:85,r:5,done:true}]},
+      {id:'ohp',sets:[{w:45,r:8,done:true},{w:45,r:7,done:true},{w:45,r:6,done:true}]},
+      {id:'tri_pushdown',sets:[{w:30,r:12,done:true},{w:30,r:11,done:true},{w:30,r:10,done:true}]}
+    ]},
+    {d:-6,type:'LEGS',exs:[
+      {id:'bb_squat',sets:[{w:110,r:6,done:true},{w:115,r:5,done:true},{w:115,r:5,done:true}]},
+      {id:'rdl',sets:[{w:90,r:8,done:true},{w:90,r:8,done:true}]},
+      {id:'leg_curl',sets:[{w:45,r:12,done:true},{w:45,r:11,done:true}]}
+    ]},
+    {d:-9,type:'PUSH',exs:[
+      {id:'bb_bench',sets:[{w:80,r:8,done:true},{w:85,r:6,done:true},{w:85,r:5,done:true}]},
+      {id:'incline_db',sets:[{w:24,r:10,done:true},{w:24,r:9,done:true}]}
+    ]},
+    {d:-11,type:'PULL',exs:[
+      {id:'bb_row',sets:[{w:70,r:8,done:true},{w:70,r:8,done:true},{w:70,r:7,done:true}]},
+      {id:'lat_pull',sets:[{w:55,r:10,done:true},{w:55,r:10,done:true}]}
+    ]}
+  ];
+  for(const l of _logs){
+    _guestStore['log_'+t(l.d)]={date:t(l.d),type:l.type,exercises:l.exs,completed:true};
+  }
+  S.askConversation=[];
+  showToast('🎯 Sample data loaded — explore freely','var(--grn)');
+  render();
 }
 function lockApp(){S.authed=false;S.guest=false;_pinBuf='';S.lockMode='choose';render();}
 
@@ -3356,7 +3538,7 @@ async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session'];
+    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
@@ -7637,6 +7819,12 @@ ${(()=>{
   <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">🟠 Connect Strava</button>
 </div>`;
 })()}
+
+<div class="sec-hdr">📖 About the app</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">A quick tour of what Training Brain does and how to use it.</div>
+  <button onclick="openWelcomeSheet('manual')" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer">🧠 View intro again</button>
+</div>
 
 <div class="sec-hdr">👥 Friends</div>
 ${rFriendsSection()}
