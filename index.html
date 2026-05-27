@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.49';
+const APP_VERSION='2.50';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.50',d:'Plain-English everywhere: "Load" not "TSS", "Intensity" not "IF", "Fitness − Fatigue" not "CTL−ATL" + info sheet explaining all the cycling metrics',det:'Sweep through every UI label that was using TrainingPeaks acronyms and replaced with plain English. Ride card badge: "📊 TSS 95 · IF 0.85" → "📊 Load 95 · Intensity 0.85". Fitness · Fatigue · Form panel: "CTL−ATL" subtitle under Form → "Fitness − Fatigue". Cycling Progress chart metric chips: "EF" → "Efficiency", "TSS" → "Load" (full label "Training Load per Ride"). Weekly Summary table column: "TSS" → "Load". History row Strava entries: "TSS X · IF Y" → "Load X · Intensity Y". NEW ⓘ button on the Fitness · Fatigue · Form section header opens an info sheet that explains each metric in plain English with concrete examples and your CURRENT NUMBERS plugged in — so you can see "Fatigue: 25" and read what that means alongside "Form: -17 = carrying fatigue, monitor recovery". Each metric chip in the chart also has a one-line hint shown below the metric label.'},
   {v:'2.49',d:'Coach uses plain-English labels — "Form" not "TSB", "Fitness" not "CTL", etc.',det:'The Ask Coach prompt was letting the AI sprinkle raw acronyms (TSB, CTL, ATL, NP, IF, EF, TSS) into responses without explanation, which is confusing if you haven\'t memorized the cycling-coach lexicon. Updated the prompt with an explicit VOCABULARY section: CTL → "Fitness", ATL → "Fatigue", TSB → "Form", TSS → "training load", NP → "normalized power", IF → "intensity", EF → "aerobic efficiency". When the AI does need to be precise, it puts the plain term first and the acronym in parentheses ("Your Form (TSB) is -17"). No more bare "-17 TSB" mystery numbers. Existing conversation history isn\'t retroactively translated, but new questions get the friendlier vocabulary.'},
   {v:'2.48',d:'Ask Coach is now multi-turn — full conversation with memory, scrollable thread, follow-up questions just work',det:'Single-shot Q&A replaced with a real chat thread. Each user message and coach response appears as a bubble (user right-aligned in purple, coach left-aligned in grey) inside a scrollable container. The full conversation history is sent to Gemini on every new question — so follow-ups like "what about Wednesday too?" or "actually undo that" work naturally because the model sees the previous turns. Confirmation cards for plan changes still appear inside the corresponding coach bubble, and applied actions stay visible in the thread so you can scroll back and see what got executed. A new "🗑 Reset" button at the top of the panel clears the conversation when you want a fresh start. Conversation persists across page reloads via ai_chat_session (synced through Firebase). When the AI sees applied actions from earlier in the conversation, those are summarized in its system context for the next turn so it doesn\'t re-propose the same change. Loading state now shows a typing-dots bubble inside the thread instead of just disabling the input. Suggested-question chips only appear when the conversation is empty (don\'t clutter mid-thread).'},
   {v:'2.47',d:'Ask Coach gains four more tools: mark_day_complete, set_lock_day, log_gym_sets, regenerate_remaining_week',det:'Builds on v2.46\'s tool-calling. Four new tools the AI can call (still gated by confirmation cards before any change applies): (1) mark_day_complete(date, completed?) — flip the completion flag for a gym day. Use when user says "I finished my workout today" without dictating sets. (2) set_lock_day(date, locked?) — lock/unlock a day so future regens preserve or don\'t preserve it. (3) log_gym_sets(date, exercises[]) — log structured gym data. Each exercise has a name (fuzzy-matched against the library — "bench" → Barbell Bench Press) and an array of {weight, reps} sets. Updates PRs automatically. User can say "log my Push: bench 100 lb 3x8, OHP 65 lb 3x10" and the AI structures it. Returns a note about any names that couldn\'t be matched. (4) regenerate_remaining_week(from_date) — regenerates the plan from a date forward. Days before from_date are temp-locked so buildWeek preserves them; original lock state is restored after. Used when user wants a fresh plan for the rest of the week without losing what they\'ve already done.'},
@@ -4042,7 +4043,7 @@ function rRideCard(dp){
 <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
     <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
-    ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 TSS ${actual._tss}${actual._if?` · IF ${actual._if}`:''}</span>`:''}
+    ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 Load ${actual._tss}${actual._if?` · Intensity ${actual._if}`:''}</span>`:''}
     ${actual.suffer_score?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">⚡ Load ${actual.suffer_score}</span>`:''}
     ${actual.kilojoules?`<span class="bdg" style="background:rgba(59,130,246,.1);color:#60a5fa">🔋 ${Math.round(actual.kilojoules)}kJ</span>`:''}
   </div>
@@ -6013,6 +6014,75 @@ function rCyclingProfile(){
 </div>`;
 }
 
+// Info sheet — plain-English explanation of the training-load metrics with
+// the user's actual current numbers as concrete examples. Opens from the ⓘ
+// button on the Fitness · Fatigue · Form panel.
+function showFitnessInfo(){
+  document.getElementById('fitness-info-sheet')?.remove();
+  const curve=DB.get('bike_fitness_curve',null);
+  const cur=curve?(curve[fd(new Date())]||curve[fd(addDays(new Date(),-1))]):null;
+  const ctl=cur?Math.round(cur.ctl):'—';
+  const atl=cur?Math.round(cur.atl):'—';
+  const tsb=cur?Math.round(cur.tsb):'—';
+  const sheet=document.createElement('div');
+  sheet.id='fitness-info-sheet';
+  sheet.style.cssText='position:fixed;inset:0;z-index:900;display:flex;flex-direction:column;justify-content:flex-end';
+  sheet.innerHTML=`<div style="position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)" onclick="this.parentElement.remove()"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+28px);max-width:430px;margin:0 auto;width:100%;max-height:85vh;overflow-y:auto">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
+  <div style="font-size:18px;font-weight:800;margin-bottom:6px">💪 What these numbers mean</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px;line-height:1.5">All three numbers come from your <strong style="color:var(--al)">Strava rides</strong>. You don't input anything — the app computes them from your ride duration, power, and your FTP.</div>
+
+  <div style="background:var(--s2);border-radius:12px;padding:13px 14px;margin-bottom:10px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+      <div style="font-size:14px;font-weight:800;color:var(--al)">Load <span style="font-size:10px;color:var(--t2);font-weight:600">per ride (aka TSS)</span></div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.55">How hard a single ride was on your body. Computed from duration × power² ÷ FTP². Reference:<br>
+      &nbsp;• <strong style="color:var(--al)">~50</strong> = easy hour<br>
+      &nbsp;• <strong style="color:var(--al)">~100</strong> = hard hour at threshold<br>
+      &nbsp;• <strong style="color:var(--al)">~150+</strong> = brutal session
+    </div>
+  </div>
+
+  <div style="background:var(--s2);border-radius:12px;padding:13px 14px;margin-bottom:10px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+      <div style="font-size:14px;font-weight:800;color:var(--al)">Fitness <span style="font-size:10px;color:var(--t2);font-weight:600">(aka CTL)</span></div>
+      <div style="font-size:18px;font-weight:800;color:var(--acc)">${ctl}</div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.55">Your <strong style="color:var(--al)">42-day average Load</strong>. Builds slowly, decays slowly. Higher = more durable engine. Going up by 3-5 points/week is a healthy build.</div>
+  </div>
+
+  <div style="background:var(--s2);border-radius:12px;padding:13px 14px;margin-bottom:10px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+      <div style="font-size:14px;font-weight:800;color:var(--al)">Fatigue <span style="font-size:10px;color:var(--t2);font-weight:600">(aka ATL)</span></div>
+      <div style="font-size:18px;font-weight:800;color:var(--amb)">${atl}</div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.55">Your <strong style="color:var(--al)">7-day average Load</strong>. Reacts fast — a hard ride yesterday spikes this. Falls quickly when you rest.</div>
+  </div>
+
+  <div style="background:var(--s2);border-radius:12px;padding:13px 14px;margin-bottom:14px">
+    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
+      <div style="font-size:14px;font-weight:800;color:var(--al)">Form <span style="font-size:10px;color:var(--t2);font-weight:600">(aka TSB)</span></div>
+      <div style="font-size:18px;font-weight:800;color:${cur?(cur.tsb>5?'var(--grn)':cur.tsb>-10?'var(--acc)':cur.tsb>-25?'var(--amb)':'var(--red)'):'var(--t2)'}">${tsb>0?'+':''}${tsb}</div>
+    </div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.55"><strong style="color:var(--al)">Fitness − Fatigue</strong>. How fresh you are right now.<br>
+      &nbsp;• <strong style="color:var(--grn)">+5 to +25</strong> = race-ready, fresh<br>
+      &nbsp;• <strong style="color:var(--acc)">-10 to +5</strong> = productive training zone (sweet spot)<br>
+      &nbsp;• <strong style="color:var(--amb)">-10 to -25</strong> = carrying fatigue, monitor recovery<br>
+      &nbsp;• <strong style="color:var(--red)">below -25</strong> = deep fatigue, rest needed
+    </div>
+  </div>
+
+  <div style="background:rgba(124,58,237,.06);border:1px solid rgba(124,58,237,.25);border-radius:11px;padding:11px 13px;margin-bottom:14px">
+    <div style="font-size:11px;font-weight:700;color:var(--acc);margin-bottom:4px">💡 In plain English</div>
+    <div style="font-size:11px;color:var(--t2);line-height:1.5">"Fitness" = how strong your engine is overall. "Fatigue" = how cooked your legs are right now. "Form" tells you if you're fresh enough to perform or too tired and need a break.</div>
+  </div>
+
+  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Got it</button>
+</div>`;
+  document.body.appendChild(sheet);
+}
+
 // Info sheet explaining the W/kg categories with the user's current tier highlighted
 function showWkgInfo(){
   document.getElementById('wkg-info-sheet')?.remove();
@@ -6366,7 +6436,7 @@ function rFitnessForm(){
   const colStyle=`flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px 8px;text-align:center`;
   return`<div style="margin-bottom:10px">
 <div style="display:flex;justify-content:space-between;align-items:center;margin:4px 4px 6px">
-  <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">💪 Fitness · Fatigue · Form</div>
+  <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">💪 Fitness · Fatigue · Form <button onclick="showFitnessInfo()" style="background:none;border:none;color:var(--t2);font-size:11px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>
   <div style="font-size:10px;color:var(--t2);font-weight:500">vs 7 days ago</div>
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 14px">
@@ -6384,7 +6454,7 @@ function rFitnessForm(){
     <div style="${colStyle}">
       <div style="font-size:20px;font-weight:800;line-height:1;color:${formColor}">${cur.tsb>0?'+':''}${Math.round(cur.tsb)}</div>
       <div style="font-size:10px;color:var(--t2);margin-top:2px;font-weight:600">FORM</div>
-      <div style="margin-top:3px;font-size:10px;color:var(--t2)">CTL−ATL</div>
+      <div style="margin-top:3px;font-size:10px;color:var(--t2)">Fitness − Fatigue</div>
     </div>
   </div>
   <div style="font-size:11px;color:${formColor};margin-top:9px;text-align:center;font-weight:600">${formLabel}</div>
@@ -6872,22 +6942,25 @@ function editWeightGoal(){
 // present (EF if power+HR available, NP if power-only, HR otherwise). Trend badge
 // in the header computed via linear regression slope across the window.
 const CYCLE_METRICS={
-  ef:{label:'Aerobic Efficiency',unit:'W/bpm',short:'EF',
+  ef:{label:'Aerobic Efficiency',unit:'W/bpm',short:'Efficiency',
       get:a=>(a.average_watts&&a.average_heartrate)?+(a.average_watts/a.average_heartrate).toFixed(3):null,
-      hint:'Watts per heartbeat. Rising = aerobically fitter at the same effort.',better:'up'},
+      hint:'Watts produced per heartbeat. Rising = getting fitter at the same effort.',better:'up'},
   power:{label:'Avg Power',unit:'W',short:'Power',
       get:a=>a.average_watts?Math.round(a.average_watts):null,better:'up'},
-  np:{label:'Normalised Power',unit:'W',short:'NP',
-      get:a=>a.weighted_average_watts?Math.round(a.weighted_average_watts):null,better:'up'},
+  np:{label:'Normalized Power (effort-weighted)',unit:'W',short:'NP',
+      get:a=>a.weighted_average_watts?Math.round(a.weighted_average_watts):null,
+      hint:'Like average power, but penalizes hard surges — closer to how hard the ride felt.',better:'up'},
   hr:{label:'Avg Heart Rate',unit:'bpm',short:'HR',
       get:a=>a.average_heartrate?Math.round(a.average_heartrate):null,
       hint:'Falling at the same effort = improving fitness.',better:'down'},
-  tss:{label:'TSS per Ride',unit:'',short:'TSS',
-      get:a=>a._tss||null,better:'flat'},
-  dist:{label:'Distance',unit:'km',short:'Dist',
+  tss:{label:'Training Load per Ride',unit:'',short:'Load',
+      get:a=>a._tss||null,
+      hint:'How hard a ride was on your body. ~50=easy hour, ~100=hard hour at threshold, 150+=brutal.',better:'flat'},
+  dist:{label:'Distance',unit:'km',short:'Distance',
       get:a=>a.distance?+(a.distance/1000).toFixed(1):null,better:'up'},
-  suffer:{label:'Suffer Score',unit:'',short:'Suffer',
-      get:a=>a.suffer_score||null,better:'flat'}
+  suffer:{label:'Suffer Score (Strava)',unit:'',short:'Suffer',
+      get:a=>a.suffer_score||null,
+      hint:"Strava's heart-rate-based stress score for the ride.",better:'flat'}
 };
 
 function _pickChartDefault(rides){
@@ -7101,7 +7174,7 @@ function rPerfTrends(){
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden">
   <div style="display:grid;grid-template-columns:${cols};gap:0;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;padding:8px 10px;border-bottom:1px solid var(--bord);background:var(--s2)">
-    <div>Week</div><div style="text-align:right">Rides</div><div style="text-align:right">km</div><div style="text-align:right">kJ</div>${hasTss?'<div style="text-align:right">TSS</div>':''}
+    <div>Week</div><div style="text-align:right">Rides</div><div style="text-align:right">km</div><div style="text-align:right">kJ</div>${hasTss?'<div style="text-align:right">Load</div>':''}
   </div>
   ${weeks.map((w,wi)=>`<div style="display:grid;grid-template-columns:${cols};gap:0;padding:9px 10px;border-bottom:${wi<weeks.length-1?'1px solid var(--bord)':'none'};${wi===0?'font-weight:700;color:var(--al)':''}">
     <div style="font-size:11px">${w.label}</div>
@@ -7271,7 +7344,7 @@ ${!history.length
       if(log.elev)_sumParts.push(`↗ ${log.elev}m`);
       const summaryLine=_sumParts.join(' · ');
       // Secondary summary: TSS + power + HR condensed
-      const _tssStr=log.tss?`📊 TSS ${log.tss}${log.intf?` · IF ${log.intf}`:''}`:'';
+      const _tssStr=log.tss?`📊 Load ${log.tss}${log.intf?` · Intensity ${log.intf}`:''}`:'';
       const _pow=log.np?`NP ${log.np}W`:(log.watts?`${log.watts}W avg`:'');
       const _hrt=log.hr?`❤️ ${log.hr}${log.maxhr?'/'+log.maxhr:''}`:'' ;
       const _kjStr=log.kj?`🔥 ${log.kj.toLocaleString()}kJ`:'';
