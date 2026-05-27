@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.48';
+const APP_VERSION='2.49';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.49',d:'Coach uses plain-English labels — "Form" not "TSB", "Fitness" not "CTL", etc.',det:'The Ask Coach prompt was letting the AI sprinkle raw acronyms (TSB, CTL, ATL, NP, IF, EF, TSS) into responses without explanation, which is confusing if you haven\'t memorized the cycling-coach lexicon. Updated the prompt with an explicit VOCABULARY section: CTL → "Fitness", ATL → "Fatigue", TSB → "Form", TSS → "training load", NP → "normalized power", IF → "intensity", EF → "aerobic efficiency". When the AI does need to be precise, it puts the plain term first and the acronym in parentheses ("Your Form (TSB) is -17"). No more bare "-17 TSB" mystery numbers. Existing conversation history isn\'t retroactively translated, but new questions get the friendlier vocabulary.'},
   {v:'2.48',d:'Ask Coach is now multi-turn — full conversation with memory, scrollable thread, follow-up questions just work',det:'Single-shot Q&A replaced with a real chat thread. Each user message and coach response appears as a bubble (user right-aligned in purple, coach left-aligned in grey) inside a scrollable container. The full conversation history is sent to Gemini on every new question — so follow-ups like "what about Wednesday too?" or "actually undo that" work naturally because the model sees the previous turns. Confirmation cards for plan changes still appear inside the corresponding coach bubble, and applied actions stay visible in the thread so you can scroll back and see what got executed. A new "🗑 Reset" button at the top of the panel clears the conversation when you want a fresh start. Conversation persists across page reloads via ai_chat_session (synced through Firebase). When the AI sees applied actions from earlier in the conversation, those are summarized in its system context for the next turn so it doesn\'t re-propose the same change. Loading state now shows a typing-dots bubble inside the thread instead of just disabling the input. Suggested-question chips only appear when the conversation is empty (don\'t clutter mid-thread).'},
   {v:'2.47',d:'Ask Coach gains four more tools: mark_day_complete, set_lock_day, log_gym_sets, regenerate_remaining_week',det:'Builds on v2.46\'s tool-calling. Four new tools the AI can call (still gated by confirmation cards before any change applies): (1) mark_day_complete(date, completed?) — flip the completion flag for a gym day. Use when user says "I finished my workout today" without dictating sets. (2) set_lock_day(date, locked?) — lock/unlock a day so future regens preserve or don\'t preserve it. (3) log_gym_sets(date, exercises[]) — log structured gym data. Each exercise has a name (fuzzy-matched against the library — "bench" → Barbell Bench Press) and an array of {weight, reps} sets. Updates PRs automatically. User can say "log my Push: bench 100 lb 3x8, OHP 65 lb 3x10" and the AI structures it. Returns a note about any names that couldn\'t be matched. (4) regenerate_remaining_week(from_date) — regenerates the plan from a date forward. Days before from_date are temp-locked so buildWeek preserves them; original lock state is restored after. Used when user wants a fresh plan for the rest of the week without losing what they\'ve already done.'},
   {v:'2.46',d:'Ask Coach can now actually modify your plan via Gemini function calling — confirmation card before every change',det:'The chatbot is no longer read-only. Four new tools the AI can call when you ask for a plan change: (1) swap_workout_days(date1, date2) — swaps types and exercises between two days; (2) change_day_type(date, new_type) — change a day to REST or any other type, with auto-cascade when a gym day becomes REST; (3) add_workout_to_ride_day(date, gym_type) — stack a gym session on top of a ride day with cascade; (4) replace_gym_with_ride(date) — convert a planned gym day to a ride day (requires a Strava ride on that date). Safety pattern: when the AI calls a tool, the response shows your normal coach text answer PLUS a purple "⚡ Proposed change" confirmation card describing exactly what will happen (e.g. "Swap Tue 26 (Pull) ↔ Wed 27 (Legs)"). You tap ✓ Apply or Skip — nothing changes until you confirm. After applying, a green "✓ done" line replaces the card so you can see what was executed. Multiple tools can be returned in one response and confirmed independently. The AI is instructed to only call tools when you explicitly ask for changes (questions like "am I overtraining?" still get pure text answers).'},
@@ -4751,7 +4752,17 @@ function buildAskPrompt(question){
   }
   const zh=DB.get('lang','en')==='zh';
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
-  return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers (CTL, TSS, recent rides/gym, weight trend) when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless TSB is genuinely low or they've trained 5+ days in a row.${langNote}
+  return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${langNote}
+
+VOCABULARY — use plain-English labels, not raw acronyms:
+- "CTL" → say "Fitness" (or "Fitness (CTL) X" only if you need to be precise)
+- "ATL" → say "Fatigue"
+- "TSB" → say "Form"
+- "TSS" → say "training load" or "training stress"
+- "NP" → say "normalized power"
+- "IF" → say "intensity"
+- "EF" → say "aerobic efficiency"
+If you do use an acronym, give the plain term in parentheses the first time, e.g. "Your Form (TSB) is -17". Never use multiple acronyms in a row without explanation.
 
 CAPABILITIES — what you can do:
 - ANALYSE: their plan, training history, fitness curve, and body weight. Give specific data-driven advice.
