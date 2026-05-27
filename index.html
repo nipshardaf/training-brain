@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.43';
+const APP_VERSION='2.44';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.44',d:'Ask the Coach — interactive AI Q&A on the Week view, with tiered access (admin/pro/basic) to cap API costs',det:'New 💬 Ask the Coach panel at the top of the Week view. Tap a suggested chip ("Should I ride today or rest?", "Am I overtraining?", "How is my week going?", "Should I take a recovery day?", "What should I focus on this week?", "Why is my form negative?") or type your own question. The AI receives FULL context: today\'s plan + weather, what you\'ve already logged today, yesterday\'s training, your CTL/ATL/TSB fitness curve, body weight trend, last 7 days of gym + Strava rides with TSS, FTP, W/kg, and your goals/level/activities. Response is short (2-3 sentences, ~80 words max) and specifically cites your actual numbers — not generic advice. ACCESS TIERS to control API costs: admin (unlimited, you — ht9323@gmail.com), pro (20/day, trusted users — edit _PRO_EMAILS array to grant), basic (0/day, default — sees a locked teaser). The tier badge appears next to the panel header so you always know your level. Daily counter shown ("3 of 20 left today"). Quota tracked locally and synced via Firebase per signed-in user, resets at midnight local time. Limit-reached state disables the input and shows when access resets. Errors fall back gracefully with the error message inline.'},
   {v:'2.43',d:'Strava ride on a gym day no longer hides the planned gym work — explicit "Replace gym with ride" cascade option',det:'Previously: when a Strava ride synced on a planned gym day (e.g., went riding on Pull Tuesday), the week-view row replaced the gym label with the ride name and stats, making it look like the gym day vanished. The plan data was still PULL underneath, but the UI made it invisible. Now: the week-view row keeps showing the gym workout as the primary label (with its colour and icon) and adds a small orange "+ 🚴 X km · Y min logged" line below — both the planned gym and the actual ride are visible. When you open the day, a Strava-ride banner appears at the top with TWO clear actions: "🔄 Replace gym with ride" (cascades the gym workout forward, last gym day in the week becomes REST — mirroring the v2.20 add-workout cascade but in reverse) or "💪 Keep both" (do the gym workout in addition to the ride, prompt is dismissed but ride stays visible as a small inline note). The chosen state persists on the plan day (rideAlongside flag) so re-opens don\'t re-prompt.'},
   {v:'2.42',d:'Compact "Waiting for Strava" card on ride days + backdate weigh-ins',det:'TWO improvements. (1) RIDE-DAY UX — the big 4-field manual ride log form no longer takes up screen space on every ride day when you have Strava connected. Instead a compact single-row card appears with the last sync timestamp, a 🟠 Sync now button, and a 📝 toggle to expand the full manual form if you genuinely want to log without Strava. Future-dated ride days (planned but not yet arrived) hide the manual log form entirely — no point logging a ride that hasn\'t happened. Once you do tap 📝 to expand, the form stays expanded for the rest of the session. (2) BACKDATE WEIGH-INS — the body weight sheet now has a date picker (defaults to today, max = today, no future dates). Useful for filling in missed days from memory, especially when you want to see the chart appear ASAP after starting to log. Backdated entries write to weight_log at the selected date but only update your "current weight" (used for W/kg) if the selected date is your most recent — so backdating doesn\'t overwrite a more recent weigh-in.'},
   {v:'2.41',d:'Group cycling sections under one "🚴 Cycling Performance" header with subtle visual container',det:'The Training tab had 4 separate uppercase section headings ("CYCLING PROFILE", "💪 FITNESS · FATIGUE · FORM", "📊 CYCLING PROGRESS", "📈 CYCLING — WEEKLY SUMMARY") which felt redundant and busy. Replaced with one main "🚴 CYCLING PERFORMANCE" header wrapping all 4 subsections in a subtle purple-tinted bordered container. Each subsection now has a smaller inline label inside the container (Profile / 💪 Fitness · Fatigue · Form / 📊 Progress chart / 📈 Weekly summary) so they\'re still distinguishable but visually subordinate to the main cycling group. Trend metadata that lived in the sub-headers (trend badges, "vs N days ago") is preserved inline next to each sub-label. The logical flow within the group is now Profile (baseline) → Form (current state) → Progress chart (trend) → Weekly summary (volume) — moving from "where I am" to "how I\'m changing".'},
@@ -1224,6 +1225,46 @@ function _TD(){return(TRANS[DB.get('lang','en')]||TRANS.en).days;}
 
 /* ── AI COACH ── */
 const GEMINI_PROXY='https://training-brain-ai.ht9323.workers.dev';
+
+/* ── ACCESS TIERS (controls the interactive Ask Coach feature) ──
+ * Edit the email lists below to grant access. Tiers:
+ *   admin: unlimited questions, sees admin diagnostics
+ *   pro:   higher quota (for trusted users)
+ *   basic: no access by default (would burn API)
+ * Quota -1 means unlimited. Reset is per local day. */
+const _TIERS={
+  admin:{quota:-1,label:'Admin',color:'#7c3aed'},
+  pro:{quota:20,label:'Pro',color:'#10b981'},
+  basic:{quota:0,label:'Basic',color:'#6b7280'}
+};
+const _ADMIN_EMAILS=['ht9323@gmail.com'];
+const _PRO_EMAILS=[]; // add trusted-user emails here
+
+// Returns the user's tier based on their signed-in email. Defaults to 'basic'
+// (no Ask Coach access). Emails are normalized to lowercase for matching.
+function getUserTier(){
+  const email=(S.fbUser?.email||'').toLowerCase();
+  if(!email)return 'basic';
+  if(_ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(email))return 'admin';
+  if(_PRO_EMAILS.map(e=>e.toLowerCase()).includes(email))return 'pro';
+  return 'basic';
+}
+
+// Daily Ask Coach quota — tracked in localStorage keyed by date string.
+// Cleaned up weekly so the map doesn't grow forever.
+function getAskQuotaUsed(){
+  const usage=DB.get('ai_chat_usage',{})||{};
+  return usage[fd(new Date())]||0;
+}
+function incrementAskQuota(){
+  const usage=DB.get('ai_chat_usage',{})||{};
+  const today=fd(new Date());
+  usage[today]=(usage[today]||0)+1;
+  // Prune dates older than 14 days
+  const cutoff=fd(addDays(new Date(),-14));
+  for(const k of Object.keys(usage))if(k<cutoff)delete usage[k];
+  DB.set('ai_chat_usage',usage);
+}
 const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
@@ -3309,7 +3350,7 @@ async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage'];
+    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
@@ -3705,6 +3746,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   ${plan?`<button onclick="genPlan()" title="Regenerate plan" style="background:none;border:none;font-size:15px;cursor:pointer;padding:4px 6px;color:var(--t2);line-height:1;opacity:0.7">🔄</button>`:''}
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
+${rAskCoach()}
 ${rReviewCard()}
 ${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');
@@ -4648,6 +4690,183 @@ function parseReview(text){
     out[k.toLowerCase()]=c;
   });
   return out;
+}
+
+/* ── ASK COACH — interactive Q&A on the week view ── */
+// Builds a focused conversational prompt that gives the AI all the context it
+// needs to answer "should I X today?" type questions. Uses the same data
+// collector as the weekly review but asks for a short conversational answer
+// instead of the structured 5-section format.
+function buildAskPrompt(question){
+  const d=collectReviewData();
+  const u=unit();
+  const profile=d.profile||{};
+  const goalStr=(profile.goals||[]).filter(Boolean).join(', ')||(profile.goal||'general fitness');
+  const todayStr=fd(new Date());
+  const pk=DB.pk(getMon(new Date()));
+  const wPlan=DB.get(pk,null);
+  const todayPlan=wPlan?.find(p=>p.date===todayStr);
+  const todayLog=DB.get('log_'+todayStr,null);
+  const todayRide=stravaRideOnDate(todayStr);
+  const ydayStr=fd(addDays(new Date(),-1));
+  const ydayLog=DB.get('log_'+ydayStr,null);
+  const ydayRide=stravaRideOnDate(ydayStr);
+  // Format today's plan + weather
+  const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest'};
+  const todayPlanStr=todayPlan?`${_typeLabel[todayPlan.type]||todayPlan.type}${todayPlan.weather?` · weather ${todayPlan.weather.tmin}-${todayPlan.weather.tmax}°C, rain ${todayPlan.weather.rain}mm`:''}`:'no plan';
+  const todayDoneStr=todayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?'GYM ALREADY DONE TODAY':todayRide?`RIDE ALREADY LOGGED TODAY: ${+((todayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((todayRide.moving_time||0)/60)}min`:'nothing logged yet';
+  const ydayStr2=ydayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?`Yesterday: gym (${ydayLog.type})`:ydayRide?`Yesterday: rode ${+((ydayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((ydayRide.moving_time||0)/60)}min`:'Yesterday: rest';
+  const fitTxt=d.fitness?`CTL ${d.fitness.ctl} (fitness) / ATL ${d.fitness.atl} (fatigue) / TSB ${d.fitness.tsb>0?'+':''}${d.fitness.tsb} (form). 7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'}.`:'No fitness curve available.';
+  const wTxt=d.weight?`${d.weight.current} kg, ${d.weight.rate_kg_per_week>0?'+':''}${d.weight.rate_kg_per_week} kg/wk, 28d Δ ${d.weight.d28!=null?d.weight.d28+'kg':'n/a'}`:'no weight log';
+  // Recent training (last 7 days, compressed)
+  const recent=[];
+  for(let i=1;i<=7;i++){
+    const ds=fd(addDays(new Date(),-i));
+    const log=DB.get('log_'+ds,null);
+    const ride=stravaRideOnDate(ds);
+    const bits=[];
+    if(log?.exercises?.some(e=>e.sets.some(s=>s.done)))bits.push(`gym ${log.type}`);
+    if(ride){
+      const tss=ride._tss?`,TSS ${ride._tss}`:'';
+      bits.push(`ride ${+((ride.distance||0)/1000).toFixed(1)}km/${Math.round((ride.moving_time||0)/60)}min${tss}`);
+    }
+    if(bits.length)recent.push(`  ${ds}: ${bits.join(' + ')}`);
+  }
+  const zh=DB.get('lang','en')==='zh';
+  const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
+  return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers (CTL, TSS, recent rides/gym, weight trend) when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless TSB is genuinely low or they've trained 5+ days in a row.${langNote}
+
+=== USER PROFILE ===
+Goal: ${goalStr} | Level: ${profile.level||'intermediate'} | Activities: ${(profile.activities||[]).join(', ')||'gym'}
+${profile.ftp?`FTP: ${profile.ftp}W`:'No FTP set'}${profile.weight?` · Weight: ${profile.weight}kg`:''}${profile.ftp&&profile.weight?` (${(profile.ftp/profile.weight).toFixed(2)} W/kg)`:''}
+
+=== TODAY (${todayStr}) ===
+Plan: ${todayPlanStr}
+Status: ${todayDoneStr}
+
+=== YESTERDAY ===
+${ydayStr2}
+
+=== FITNESS / FATIGUE / FORM ===
+${fitTxt}
+
+=== BODY WEIGHT ===
+${wTxt}
+
+=== LAST 7 DAYS TRAINING ===
+${recent.length?recent.join('\n'):'  No training logged in the last 7 days'}
+
+=== USER'S QUESTION ===
+${question}
+
+Now answer concisely. Open with the verdict (yes/no/it depends) then 1-2 sentences of reasoning citing their actual numbers.`;
+}
+
+async function sendAskCoach(){
+  const inp=document.getElementById('ask-coach-input');
+  if(!inp)return;
+  const question=inp.value.trim();
+  if(!question)return;
+  const tier=getUserTier();
+  const cfg=_TIERS[tier];
+  if(cfg.quota===0){showToast('Ask Coach access by invitation only — contact the app owner','var(--t2)');return;}
+  const used=getAskQuotaUsed();
+  if(cfg.quota!==-1&&used>=cfg.quota){showToast(`Daily limit reached (${cfg.quota}). Resets at midnight.`,'var(--amb)');return;}
+  S.askLoading=true;S.askError=null;render();
+  try{
+    const prompt=buildAskPrompt(question);
+    const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:500,temperature:0.6,thinkingConfig:{thinkingBudget:0}}})});
+    if(!r.ok)throw new Error('API '+r.status);
+    const json=await r.json();
+    const text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(!text)throw new Error('empty response');
+    incrementAskQuota();
+    trackAICall?.('ask_coach',true);
+    S.askResponse={question,answer:_esc(text).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'),at:new Date().toISOString()};
+    S.askLoading=false;
+    syncUp();render();
+  }catch(e){
+    console.warn('Ask Coach failed:',e);
+    trackAICall?.('ask_coach',false);
+    S.askLoading=false;S.askError=e?.message||'Network error';
+    render();
+  }
+}
+
+function clearAskResponse(){
+  S.askResponse=null;S.askError=null;render();
+}
+
+// Suggested questions (varied to surface different facets of the user's data)
+const _ASK_SUGGESTIONS=[
+  '🚴 Should I ride today or rest?',
+  '💪 Am I overtraining?',
+  '📈 How is my week going?',
+  '😴 Should I take a recovery day?',
+  '🎯 What should I focus on this week?',
+  '⚡ Why is my form negative?'
+];
+
+function rAskCoach(){
+  // Only signed-in users see this at all (gates against guests)
+  if(!S.fbUser||S.guest)return'';
+  const tier=getUserTier();
+  const cfg=_TIERS[tier];
+  const used=getAskQuotaUsed();
+  const isAdmin=tier==='admin';
+  const remaining=cfg.quota===-1?'∞':Math.max(0,cfg.quota-used);
+  const limitReached=cfg.quota!==-1&&used>=cfg.quota;
+  // Basic tier (no access): show a locked teaser only on Week view
+  if(cfg.quota===0){
+    return`<div style="background:var(--s1);border:1px dashed var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px;text-align:center">
+  <div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:4px">🔒 Ask the Coach</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.5">Interactive AI coaching is in private beta. Contact the app owner for access.</div>
+</div>`;
+  }
+  const tierBadge=`<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;background:${cfg.color}22;color:${cfg.color};letter-spacing:.4px">${cfg.label.toUpperCase()}</span>`;
+  const counter=cfg.quota===-1
+    ?`<span style="font-size:10px;color:var(--t2);font-weight:600">unlimited</span>`
+    :`<span style="font-size:10px;color:${limitReached?'var(--red)':'var(--t2)'};font-weight:600">${remaining} of ${cfg.quota} left today</span>`;
+  // Response state
+  if(S.askResponse){
+    return`<div style="background:var(--s1);border:1px solid rgba(124,58,237,.3);border-radius:14px;padding:13px 15px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:13px;font-weight:700;color:var(--acc)">💬 Coach</span>
+      ${tierBadge}
+    </div>
+    <button onclick="clearAskResponse()" style="background:none;border:none;color:var(--t2);font-size:11px;font-weight:700;cursor:pointer;padding:2px 6px">✕ Clear</button>
+  </div>
+  <div style="font-size:11px;color:var(--t2);font-style:italic;margin-bottom:8px">"${_esc(S.askResponse.question)}"</div>
+  <div style="font-size:13px;color:var(--t1);line-height:1.55">${S.askResponse.answer}</div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--bord)">
+    ${counter}
+    <button onclick="clearAskResponse()" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 12px;cursor:pointer">Ask another</button>
+  </div>
+</div>`;
+  }
+  // Input state
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <div style="display:flex;align-items:center;gap:6px">
+      <span style="font-size:13px;font-weight:700;color:var(--al)">💬 Ask the Coach</span>
+      ${tierBadge}
+    </div>
+    ${counter}
+  </div>
+  ${S.askError?`<div style="font-size:11px;color:var(--red);margin-bottom:8px">⚠️ ${_esc(S.askError)}</div>`:''}
+  <div style="display:flex;gap:6px;margin-bottom:8px">
+    <input id="ask-coach-input" type="text" placeholder="${limitReached?'Daily limit reached':'Ask anything about your training…'}" ${limitReached?'disabled':''}
+      onkeydown="if(event.key==='Enter')sendAskCoach()"
+      style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:9px 12px;outline:none;font-family:inherit;${limitReached?'opacity:.5':''}">
+    <button onclick="sendAskCoach()" ${limitReached||S.askLoading?'disabled':''}
+      style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer;${(limitReached||S.askLoading)?'opacity:.5;cursor:not-allowed':''}">${S.askLoading?'…':'Ask'}</button>
+  </div>
+  ${!limitReached?`<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
+    ${_ASK_SUGGESTIONS.map(q=>`<button onclick="document.getElementById('ask-coach-input').value=this.textContent.trim();sendAskCoach()" style="flex:0 0 auto;padding:6px 11px;border-radius:100px;border:1px solid var(--bord);background:var(--s2);color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">${q}</button>`).join('')}
+  </div>`:`<div style="font-size:11px;color:var(--t2);text-align:center;padding:4px 0">Resets at midnight. ${isAdmin?'':'Contact the app owner for higher access.'}</div>`}
+</div>`;
 }
 
 async function generateWeeklyReview(){
