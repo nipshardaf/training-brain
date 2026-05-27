@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.47';
+const APP_VERSION='2.48';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.48',d:'Ask Coach is now multi-turn — full conversation with memory, scrollable thread, follow-up questions just work',det:'Single-shot Q&A replaced with a real chat thread. Each user message and coach response appears as a bubble (user right-aligned in purple, coach left-aligned in grey) inside a scrollable container. The full conversation history is sent to Gemini on every new question — so follow-ups like "what about Wednesday too?" or "actually undo that" work naturally because the model sees the previous turns. Confirmation cards for plan changes still appear inside the corresponding coach bubble, and applied actions stay visible in the thread so you can scroll back and see what got executed. A new "🗑 Reset" button at the top of the panel clears the conversation when you want a fresh start. Conversation persists across page reloads via ai_chat_session (synced through Firebase). When the AI sees applied actions from earlier in the conversation, those are summarized in its system context for the next turn so it doesn\'t re-propose the same change. Loading state now shows a typing-dots bubble inside the thread instead of just disabling the input. Suggested-question chips only appear when the conversation is empty (don\'t clutter mid-thread).'},
   {v:'2.47',d:'Ask Coach gains four more tools: mark_day_complete, set_lock_day, log_gym_sets, regenerate_remaining_week',det:'Builds on v2.46\'s tool-calling. Four new tools the AI can call (still gated by confirmation cards before any change applies): (1) mark_day_complete(date, completed?) — flip the completion flag for a gym day. Use when user says "I finished my workout today" without dictating sets. (2) set_lock_day(date, locked?) — lock/unlock a day so future regens preserve or don\'t preserve it. (3) log_gym_sets(date, exercises[]) — log structured gym data. Each exercise has a name (fuzzy-matched against the library — "bench" → Barbell Bench Press) and an array of {weight, reps} sets. Updates PRs automatically. User can say "log my Push: bench 100 lb 3x8, OHP 65 lb 3x10" and the AI structures it. Returns a note about any names that couldn\'t be matched. (4) regenerate_remaining_week(from_date) — regenerates the plan from a date forward. Days before from_date are temp-locked so buildWeek preserves them; original lock state is restored after. Used when user wants a fresh plan for the rest of the week without losing what they\'ve already done.'},
   {v:'2.46',d:'Ask Coach can now actually modify your plan via Gemini function calling — confirmation card before every change',det:'The chatbot is no longer read-only. Four new tools the AI can call when you ask for a plan change: (1) swap_workout_days(date1, date2) — swaps types and exercises between two days; (2) change_day_type(date, new_type) — change a day to REST or any other type, with auto-cascade when a gym day becomes REST; (3) add_workout_to_ride_day(date, gym_type) — stack a gym session on top of a ride day with cascade; (4) replace_gym_with_ride(date) — convert a planned gym day to a ride day (requires a Strava ride on that date). Safety pattern: when the AI calls a tool, the response shows your normal coach text answer PLUS a purple "⚡ Proposed change" confirmation card describing exactly what will happen (e.g. "Swap Tue 26 (Pull) ↔ Wed 27 (Legs)"). You tap ✓ Apply or Skip — nothing changes until you confirm. After applying, a green "✓ done" line replaces the card so you can see what was executed. Multiple tools can be returned in one response and confirmed independently. The AI is instructed to only call tools when you explicitly ask for changes (questions like "am I overtraining?" still get pure text answers).'},
   {v:'2.45',d:'Ask Coach sees full week plan + knows its capabilities (read-only for now, points users to UI buttons for changes)',det:'Two small but important upgrades to the v2.44 Ask Coach prompt. (1) The AI now receives the FULL current week plan (all 7 days, with type, lock state, completion status, and any extraGym additions) — not just today\'s plan. So if you ask "swap my Tuesday Pull to Wednesday," the AI can actually see what\'s on Wednesday and reason about whether the swap makes sense. (2) The prompt now explicitly tells the AI what it CAN do (analyse, suggest, recommend) vs CANNOT do (directly modify plan, log workouts, swap days). When the AI recommends a change, it now points the user to the specific UI button to tap — "Swap ↕" on the week row, "+ Add workout" on a ride day, or "🔄 Replace gym with ride" prompt when Strava logs a ride on a gym day. No more false promises like "I\'ll swap them for you." Full plan-modification via Gemini function calling is the bigger v2.46 work — that\'ll let the AI actually execute the change (with a confirmation card before applying).'},
@@ -3353,7 +3354,7 @@ async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage'];
+    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
@@ -5133,6 +5134,67 @@ function _typeShort(t){
   return m[t]||t;
 }
 
+// Multi-turn chat — v2.48. The Coach now maintains a running conversation.
+// Stored in DB.get('ai_chat_session') as an array of turns. Each turn:
+//   { role: 'user' | 'model',
+//     text: string (escaped HTML for display),
+//     rawText: string (raw text used to rebuild API contents),
+//     functionCalls: [{name, args}],            // model turns only
+//     pendingActions: [{name, args}],           // model turns only — not-yet-handled
+//     appliedActions: [{fc, result, at}],       // model turns only
+//     skippedActions: [{fc, at}],               // model turns only
+//     at: ISO timestamp }
+function getAskConversation(){return DB.get('ai_chat_session',[])||[];}
+function setAskConversation(c){DB.set('ai_chat_session',c);}
+
+function resetAskConversation(){
+  setAskConversation([]);
+  S.askError=null;
+  syncUp();render();
+}
+
+// Build the Gemini contents[] array from the conversation. The LAST user message
+// gets the full training context prepended; earlier messages stay lean to save
+// tokens but still preserve the back-and-forth.
+function _buildAskContents(conv){
+  const lastUserIdx=(()=>{
+    for(let i=conv.length-1;i>=0;i--)if(conv[i].role==='user')return i;
+    return -1;
+  })();
+  const contents=[];
+  for(let i=0;i<conv.length;i++){
+    const t=conv[i];
+    if(t.role==='user'){
+      const text=(i===lastUserIdx)?_buildAskUserContext(conv,t.rawText):t.rawText;
+      contents.push({role:'user',parts:[{text}]});
+    }else{
+      // model role
+      const parts=[];
+      if(t.rawText)parts.push({text:t.rawText});
+      for(const fc of(t.functionCalls||[]))parts.push({functionCall:fc});
+      contents.push({role:'model',parts});
+    }
+  }
+  return contents;
+}
+
+// Compose the full context-rich prompt for the latest user message. Includes
+// a summary of recent actions applied in this conversation so the model knows
+// what's already been done.
+function _buildAskUserContext(conv,question){
+  const ctx=buildAskPrompt(question);
+  // Summarise actions applied earlier in this conversation
+  const applied=[];
+  for(const t of conv){
+    if(t.role!=='model'||!t.appliedActions)continue;
+    for(const a of t.appliedActions)applied.push(`${a.fc.name}(${JSON.stringify(a.fc.args)}) → ${a.result.msg}`);
+  }
+  if(applied.length){
+    return ctx.replace('=== USER\'S QUESTION ===',`=== ACTIONS ALREADY APPLIED THIS CONVERSATION ===\n${applied.map(a=>'  '+a).join('\n')}\n\n=== USER'S QUESTION ===`);
+  }
+  return ctx;
+}
+
 async function sendAskCoach(){
   const inp=document.getElementById('ask-coach-input');
   if(!inp)return;
@@ -5143,35 +5205,45 @@ async function sendAskCoach(){
   if(cfg.quota===0){showToast('Ask Coach access by invitation only — contact the app owner','var(--t2)');return;}
   const used=getAskQuotaUsed();
   if(cfg.quota!==-1&&used>=cfg.quota){showToast(`Daily limit reached (${cfg.quota}). Resets at midnight.`,'var(--amb)');return;}
+  // Append user turn to the conversation immediately so UI updates
+  const conv=getAskConversation();
+  conv.push({role:'user',text:_esc(question),rawText:question,at:new Date().toISOString()});
+  setAskConversation(conv);
+  inp.value='';
   S.askLoading=true;S.askError=null;render();
   try{
-    const prompt=buildAskPrompt(question);
     const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({
-        contents:[{parts:[{text:prompt}]}],
+        contents:_buildAskContents(conv),
         tools:COACH_TOOLS,
         toolConfig:{functionCallingConfig:{mode:'AUTO'}},
-        generationConfig:{maxOutputTokens:600,temperature:0.6,thinkingConfig:{thinkingBudget:0}}
+        generationConfig:{maxOutputTokens:700,temperature:0.6,thinkingConfig:{thinkingBudget:0}}
       })});
     if(!r.ok)throw new Error('API '+r.status);
     const json=await r.json();
     const parts=json.candidates?.[0]?.content?.parts||[];
-    // Separate text and function calls from the response parts
     const textParts=parts.filter(p=>p.text).map(p=>p.text.trim()).filter(Boolean);
     const fnCalls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
     const text=textParts.join('\n\n');
     if(!text&&!fnCalls.length)throw new Error('empty response');
     incrementAskQuota();
     trackAICall?.('ask_coach',true);
-    S.askResponse={
-      question,
-      answer:text?_esc(text).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'):'',
-      pendingActions:fnCalls,
+    const conv2=getAskConversation();
+    conv2.push({
+      role:'model',
+      text:text?_esc(text).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'):'',
+      rawText:text,
+      functionCalls:fnCalls,
+      pendingActions:[...fnCalls],
       appliedActions:[],
+      skippedActions:[],
       at:new Date().toISOString()
-    };
+    });
+    setAskConversation(conv2);
     S.askLoading=false;
     syncUp();render();
+    // Scroll to bottom of the chat thread
+    setTimeout(()=>{const el=document.getElementById('ask-thread');if(el)el.scrollTop=el.scrollHeight;},50);
   }catch(e){
     console.warn('Ask Coach failed:',e);
     trackAICall?.('ask_coach',false);
@@ -5180,28 +5252,37 @@ async function sendAskCoach(){
   }
 }
 
-// Apply or skip a single pending action from the askResponse. After all
-// actions are resolved, the confirmation UI disappears.
-function applyCoachAction(idx){
-  if(!S.askResponse?.pendingActions)return;
-  const fc=S.askResponse.pendingActions[idx];
+// Find the model turn at index `ti` and resolve its pending action at `ai`.
+function applyCoachAction(ti,ai){
+  const conv=getAskConversation();
+  const turn=conv[ti];
+  if(!turn||turn.role!=='model'||!turn.pendingActions)return;
+  const fc=turn.pendingActions[ai];
   if(!fc)return;
   const handler=COACH_TOOL_HANDLERS[fc.name];
   if(!handler){showToast(`Unknown action: ${fc.name}`,'var(--red)');return;}
   const result=handler.execute(fc.args||{});
   if(result.ok){
-    S.askResponse.appliedActions=S.askResponse.appliedActions||[];
-    S.askResponse.appliedActions.push({fc,result,at:new Date().toISOString()});
-    S.askResponse.pendingActions.splice(idx,1);
+    turn.appliedActions=turn.appliedActions||[];
+    turn.appliedActions.push({fc,result,at:new Date().toISOString()});
+    turn.pendingActions.splice(ai,1);
+    setAskConversation(conv);
     showToast(`✓ ${result.msg}`,'var(--grn)');
   }else{
     showToast(`⚠️ ${result.msg}`,'var(--red)');
   }
   render();
 }
-function skipCoachAction(idx){
-  if(!S.askResponse?.pendingActions)return;
-  S.askResponse.pendingActions.splice(idx,1);
+function skipCoachAction(ti,ai){
+  const conv=getAskConversation();
+  const turn=conv[ti];
+  if(!turn||turn.role!=='model'||!turn.pendingActions)return;
+  const fc=turn.pendingActions[ai];
+  if(!fc)return;
+  turn.skippedActions=turn.skippedActions||[];
+  turn.skippedActions.push({fc,at:new Date().toISOString()});
+  turn.pendingActions.splice(ai,1);
+  setAskConversation(conv);
   render();
 }
 
@@ -5239,61 +5320,71 @@ function rAskCoach(){
   const counter=cfg.quota===-1
     ?`<span style="font-size:10px;color:var(--t2);font-weight:600">unlimited</span>`
     :`<span style="font-size:10px;color:${limitReached?'var(--red)':'var(--t2)'};font-weight:600">${remaining} of ${cfg.quota} left today</span>`;
-  // Response state — text answer + any pending tool-call confirmation cards
-  if(S.askResponse){
-    const pending=S.askResponse.pendingActions||[];
-    const applied=S.askResponse.appliedActions||[];
-    return`<div style="background:var(--s1);border:1px solid rgba(124,58,237,.3);border-radius:14px;padding:13px 15px;margin-bottom:12px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
-    <div style="display:flex;align-items:center;gap:6px">
-      <span style="font-size:13px;font-weight:700;color:var(--acc)">💬 Coach</span>
-      ${tierBadge}
-    </div>
-    <button onclick="clearAskResponse()" style="background:none;border:none;color:var(--t2);font-size:11px;font-weight:700;cursor:pointer;padding:2px 6px">✕ Clear</button>
-  </div>
-  <div style="font-size:11px;color:var(--t2);font-style:italic;margin-bottom:8px">"${_esc(S.askResponse.question)}"</div>
-  ${S.askResponse.answer?`<div style="font-size:13px;color:var(--t1);line-height:1.55;margin-bottom:${pending.length||applied.length?'10px':'0'}">${S.askResponse.answer}</div>`:''}
-  ${pending.map((fc,i)=>{
-    const handler=COACH_TOOL_HANDLERS[fc.name];
-    const summary=handler?handler.summarize(fc.args||{}):`${fc.name}(${JSON.stringify(fc.args)})`;
-    return`<div style="background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.35);border-radius:11px;padding:10px 12px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-        <span style="font-size:11px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:.5px">⚡ Proposed change</span>
-      </div>
-      <div style="font-size:12px;color:var(--al);font-weight:600;line-height:1.45;margin-bottom:9px">${_esc(summary)}</div>
-      <div style="display:flex;gap:6px">
-        <button onclick="applyCoachAction(${i})" style="flex:1;background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:8px;cursor:pointer">✓ Apply</button>
-        <button onclick="skipCoachAction(${i})" style="flex:0 0 auto;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer">Skip</button>
+  const conv=getAskConversation();
+  const hasThread=conv.length>0;
+  // Render the conversation thread as user/coach bubbles
+  const threadHtml=conv.map((t,ti)=>{
+    if(t.role==='user'){
+      return`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
+        <div style="max-width:85%;background:var(--acc);color:#fff;border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:12px;line-height:1.45">${t.text}</div>
+      </div>`;
+    }
+    // model turn
+    const pending=t.pendingActions||[];
+    const applied=t.appliedActions||[];
+    const skipped=t.skippedActions||[];
+    const cardsHtml=pending.map((fc,ai)=>{
+      const handler=COACH_TOOL_HANDLERS[fc.name];
+      const summary=handler?handler.summarize(fc.args||{}):`${fc.name}(${JSON.stringify(fc.args)})`;
+      return`<div style="background:rgba(124,58,237,.12);border:1px solid rgba(124,58,237,.4);border-radius:10px;padding:9px 11px;margin-top:8px">
+        <div style="font-size:10px;font-weight:800;color:var(--acc);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">⚡ Proposed change</div>
+        <div style="font-size:12px;color:var(--al);font-weight:600;line-height:1.4;margin-bottom:8px">${_esc(summary)}</div>
+        <div style="display:flex;gap:6px">
+          <button onclick="applyCoachAction(${ti},${ai})" style="flex:1;background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:7px;cursor:pointer">✓ Apply</button>
+          <button onclick="skipCoachAction(${ti},${ai})" style="flex:0 0 auto;background:var(--s1);border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:700;padding:7px 12px;cursor:pointer">Skip</button>
+        </div>
+      </div>`;
+    }).join('');
+    const appliedHtml=applied.map(a=>`<div style="font-size:10px;color:var(--grn);background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:8px;padding:5px 9px;margin-top:6px;font-weight:600">✓ ${_esc(a.result.msg)}</div>`).join('');
+    const skippedHtml=skipped.map(s=>`<div style="font-size:10px;color:var(--t2);font-style:italic;margin-top:6px">↷ Skipped: ${_esc(s.fc.name)}</div>`).join('');
+    return`<div style="display:flex;justify-content:flex-start;margin-bottom:8px">
+      <div style="max-width:90%;background:var(--s2);border:1px solid var(--bord);border-radius:14px 14px 14px 4px;padding:10px 12px">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:5px">
+          <span style="font-size:10px;font-weight:800;color:var(--acc);letter-spacing:.5px">💬 COACH</span>
+        </div>
+        ${t.text?`<div style="font-size:12px;color:var(--t1);line-height:1.5">${t.text}</div>`:''}
+        ${cardsHtml}${appliedHtml}${skippedHtml}
       </div>
     </div>`;
-  }).join('')}
-  ${applied.map(a=>`<div style="font-size:11px;color:var(--grn);background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.25);border-radius:9px;padding:7px 10px;margin-bottom:6px;font-weight:600">✓ ${_esc(a.result.msg)}</div>`).join('')}
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-top:9px;padding-top:8px;border-top:1px solid var(--bord)">
-    ${counter}
-    <button onclick="clearAskResponse()" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 12px;cursor:pointer">Ask another</button>
-  </div>
-</div>`;
-  }
-  // Input state
+  }).join('');
+  // Loading indicator: show typing dots while waiting
+  const loadingHtml=S.askLoading?`<div style="display:flex;justify-content:flex-start;margin-bottom:8px">
+    <div style="background:var(--s2);border:1px solid var(--bord);border-radius:14px 14px 14px 4px;padding:10px 14px;font-size:18px;line-height:1;color:var(--t2)">···</div>
+  </div>`:'';
+  // Header + thread + input combined panel
   return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${hasThread?'10px':'8px'}">
     <div style="display:flex;align-items:center;gap:6px">
       <span style="font-size:13px;font-weight:700;color:var(--al)">💬 Ask the Coach</span>
       ${tierBadge}
     </div>
-    ${counter}
+    <div style="display:flex;align-items:center;gap:8px">
+      ${counter}
+      ${hasThread?`<button onclick="resetAskConversation()" style="background:none;border:1px solid var(--bord);border-radius:7px;color:var(--t2);font-size:10px;font-weight:700;cursor:pointer;padding:3px 8px">🗑 Reset</button>`:''}
+    </div>
   </div>
+  ${hasThread?`<div id="ask-thread" style="max-height:420px;overflow-y:auto;padding:8px 4px 12px;margin-bottom:10px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord)">${threadHtml}${loadingHtml}</div>`:''}
   ${S.askError?`<div style="font-size:11px;color:var(--red);margin-bottom:8px">⚠️ ${_esc(S.askError)}</div>`:''}
   <div style="display:flex;gap:6px;margin-bottom:8px">
-    <input id="ask-coach-input" type="text" placeholder="${limitReached?'Daily limit reached':'Ask anything about your training…'}" ${limitReached?'disabled':''}
+    <input id="ask-coach-input" type="text" placeholder="${limitReached?'Daily limit reached':hasThread?'Continue the conversation…':'Ask anything about your training…'}" ${limitReached?'disabled':''}
       onkeydown="if(event.key==='Enter')sendAskCoach()"
       style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:9px 12px;outline:none;font-family:inherit;${limitReached?'opacity:.5':''}">
     <button onclick="sendAskCoach()" ${limitReached||S.askLoading?'disabled':''}
-      style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer;${(limitReached||S.askLoading)?'opacity:.5;cursor:not-allowed':''}">${S.askLoading?'…':'Ask'}</button>
+      style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer;${(limitReached||S.askLoading)?'opacity:.5;cursor:not-allowed':''}">${S.askLoading?'…':hasThread?'Send':'Ask'}</button>
   </div>
-  ${!limitReached?`<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
+  ${!limitReached&&!hasThread?`<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
     ${_ASK_SUGGESTIONS.map(q=>`<button onclick="document.getElementById('ask-coach-input').value=this.textContent.trim();sendAskCoach()" style="flex:0 0 auto;padding:6px 11px;border-radius:100px;border:1px solid var(--bord);background:var(--s2);color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">${q}</button>`).join('')}
-  </div>`:`<div style="font-size:11px;color:var(--t2);text-align:center;padding:4px 0">Resets at midnight. ${isAdmin?'':'Contact the app owner for higher access.'}</div>`}
+  </div>`:limitReached?`<div style="font-size:11px;color:var(--t2);text-align:center;padding:4px 0">Resets at midnight. ${isAdmin?'':'Contact the app owner for higher access.'}</div>`:''}
 </div>`;
 }
 
