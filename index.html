@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.46';
+const APP_VERSION='2.47';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.47',d:'Ask Coach gains four more tools: mark_day_complete, set_lock_day, log_gym_sets, regenerate_remaining_week',det:'Builds on v2.46\'s tool-calling. Four new tools the AI can call (still gated by confirmation cards before any change applies): (1) mark_day_complete(date, completed?) — flip the completion flag for a gym day. Use when user says "I finished my workout today" without dictating sets. (2) set_lock_day(date, locked?) — lock/unlock a day so future regens preserve or don\'t preserve it. (3) log_gym_sets(date, exercises[]) — log structured gym data. Each exercise has a name (fuzzy-matched against the library — "bench" → Barbell Bench Press) and an array of {weight, reps} sets. Updates PRs automatically. User can say "log my Push: bench 100 lb 3x8, OHP 65 lb 3x10" and the AI structures it. Returns a note about any names that couldn\'t be matched. (4) regenerate_remaining_week(from_date) — regenerates the plan from a date forward. Days before from_date are temp-locked so buildWeek preserves them; original lock state is restored after. Used when user wants a fresh plan for the rest of the week without losing what they\'ve already done.'},
   {v:'2.46',d:'Ask Coach can now actually modify your plan via Gemini function calling — confirmation card before every change',det:'The chatbot is no longer read-only. Four new tools the AI can call when you ask for a plan change: (1) swap_workout_days(date1, date2) — swaps types and exercises between two days; (2) change_day_type(date, new_type) — change a day to REST or any other type, with auto-cascade when a gym day becomes REST; (3) add_workout_to_ride_day(date, gym_type) — stack a gym session on top of a ride day with cascade; (4) replace_gym_with_ride(date) — convert a planned gym day to a ride day (requires a Strava ride on that date). Safety pattern: when the AI calls a tool, the response shows your normal coach text answer PLUS a purple "⚡ Proposed change" confirmation card describing exactly what will happen (e.g. "Swap Tue 26 (Pull) ↔ Wed 27 (Legs)"). You tap ✓ Apply or Skip — nothing changes until you confirm. After applying, a green "✓ done" line replaces the card so you can see what was executed. Multiple tools can be returned in one response and confirmed independently. The AI is instructed to only call tools when you explicitly ask for changes (questions like "am I overtraining?" still get pure text answers).'},
   {v:'2.45',d:'Ask Coach sees full week plan + knows its capabilities (read-only for now, points users to UI buttons for changes)',det:'Two small but important upgrades to the v2.44 Ask Coach prompt. (1) The AI now receives the FULL current week plan (all 7 days, with type, lock state, completion status, and any extraGym additions) — not just today\'s plan. So if you ask "swap my Tuesday Pull to Wednesday," the AI can actually see what\'s on Wednesday and reason about whether the swap makes sense. (2) The prompt now explicitly tells the AI what it CAN do (analyse, suggest, recommend) vs CANNOT do (directly modify plan, log workouts, swap days). When the AI recommends a change, it now points the user to the specific UI button to tap — "Swap ↕" on the week row, "+ Add workout" on a ride day, or "🔄 Replace gym with ride" prompt when Strava logs a ride on a gym day. No more false promises like "I\'ll swap them for you." Full plan-modification via Gemini function calling is the bigger v2.46 work — that\'ll let the AI actually execute the change (with a confirmation card before applying).'},
   {v:'2.44',d:'Ask the Coach — interactive AI Q&A on the Week view, with tiered access (admin/pro/basic) to cap API costs',det:'New 💬 Ask the Coach panel at the top of the Week view. Tap a suggested chip ("Should I ride today or rest?", "Am I overtraining?", "How is my week going?", "Should I take a recovery day?", "What should I focus on this week?", "Why is my form negative?") or type your own question. The AI receives FULL context: today\'s plan + weather, what you\'ve already logged today, yesterday\'s training, your CTL/ATL/TSB fitness curve, body weight trend, last 7 days of gym + Strava rides with TSS, FTP, W/kg, and your goals/level/activities. Response is short (2-3 sentences, ~80 words max) and specifically cites your actual numbers — not generic advice. ACCESS TIERS to control API costs: admin (unlimited, you — ht9323@gmail.com), pro (20/day, trusted users — edit _PRO_EMAILS array to grant), basic (0/day, default — sees a locked teaser). The tier badge appears next to the panel header so you always know your level. Daily counter shown ("3 of 20 left today"). Quota tracked locally and synced via Firebase per signed-in user, resets at midnight local time. Limit-reached state disables the input and shows when access resets. Errors fall back gracefully with the error message inline.'},
@@ -4758,6 +4759,10 @@ CAPABILITIES — what you can do:
   · change_day_type(date, new_type) — set a day to REST or change to another workout type. Setting a gym day to REST auto-cascades displaced gym work forward.
   · add_workout_to_ride_day(date, gym_type) — stack a gym workout on a ride day; cascades remaining gym days forward.
   · replace_gym_with_ride(date) — convert a planned gym day to a ride day (only when Strava has a ride logged on that date). Cascades displaced gym work forward.
+  · mark_day_complete(date, completed) — flip the completion flag for a gym day. Use when user says "I did my workout today" without dictating specifics.
+  · set_lock_day(date, locked) — lock or unlock a day so future regens preserve/don't preserve it.
+  · log_gym_sets(date, exercises[]) — log structured gym sets. Each exercise has a name (fuzzy-matched against the library) and an array of {weight, reps} sets. Use when user dictates a workout like "bench 100 lb 3x8, OHP 65 lb 3x10". Weight is in the user's preferred unit. Updates PRs automatically.
+  · regenerate_remaining_week(from_date) — regenerate plan from a date forward, preserving prior days and locked days.
 - ONLY call a tool when the user clearly asks for a plan change. For pure questions ("am I overtraining?", "how is my week?"), just answer in text — don't call tools.
 - When you DO call a tool, also include a brief text response (1 sentence) explaining what you're proposing. The user will see your text PLUS a confirmation card before the change applies.
 
@@ -4841,6 +4846,75 @@ const COACH_TOOLS=[{
         },
         required:['date']
       }
+    },
+    {
+      name:'mark_day_complete',
+      description:"Mark a gym day's workout as completed (or undo). Sets the log.completed flag. Use when user says 'I finished my workout today' or 'mark today as done'. Does not log specific sets — use log_gym_sets for that.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date in YYYY-MM-DD'},
+          completed:{type:'BOOLEAN',description:'true to mark complete, false to un-mark. Defaults to true.'}
+        },
+        required:['date']
+      }
+    },
+    {
+      name:'set_lock_day',
+      description:"Lock or unlock a day in the plan. Locked days are preserved when the rest of the week is regenerated. Use when user says 'don't change my Friday' or 'lock in today's plan'.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date in YYYY-MM-DD'},
+          locked:{type:'BOOLEAN',description:'true to lock, false to unlock. Defaults to true.'}
+        },
+        required:['date']
+      }
+    },
+    {
+      name:'log_gym_sets',
+      description:"Log structured gym workout data for a day. Each exercise has a name (matched fuzzily against the exercise library) and an array of sets with weight and reps. Use when user dictates a workout: 'log today's push: bench 100 lb 3x8, OHP 65 lb 3x10'. Weight unit is the user's preferred unit (lbs or kg — currently "+(DB.get?DB.get('unit','lbs'):'lbs')+"). Sets log.completed = true automatically.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date in YYYY-MM-DD'},
+          exercises:{
+            type:'ARRAY',
+            description:'List of exercises with their sets',
+            items:{
+              type:'OBJECT',
+              properties:{
+                name:{type:'STRING',description:'Exercise name (e.g. "bench press", "barbell row"). Will be fuzzy-matched against the library.'},
+                sets:{
+                  type:'ARRAY',
+                  description:'Array of completed sets',
+                  items:{
+                    type:'OBJECT',
+                    properties:{
+                      weight:{type:'NUMBER',description:'Weight lifted (in user\'s preferred unit)'},
+                      reps:{type:'INTEGER',description:'Number of reps completed'}
+                    },
+                    required:['weight','reps']
+                  }
+                }
+              },
+              required:['name','sets']
+            }
+          }
+        },
+        required:['date','exercises']
+      }
+    },
+    {
+      name:'regenerate_remaining_week',
+      description:"Regenerate the plan from a specific date forward. Days before from_date are preserved exactly as-is (temporarily locked). Already-locked days and already-completed days are also preserved. Useful when the user wants a fresh plan for the rest of the week without losing what they've already done.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          from_date:{type:'STRING',description:'Start of regeneration in YYYY-MM-DD. Days before this date are preserved.'}
+        },
+        required:['from_date']
+      }
     }
   ]
 }];
@@ -4914,6 +4988,137 @@ const COACH_TOOL_HANDLERS={
       if(!stravaRideOnDate(date))return{ok:false,msg:'No Strava ride on that date'};
       replaceGymWithRide(date);
       return{ok:true,msg:`Replaced ${date} gym with the ride`};
+    }
+  },
+  mark_day_complete:{
+    summarize:({date,completed=true})=>`${completed===false?'Un-mark':'Mark'} ${_dayLbl(date)} as ${completed===false?'incomplete':'complete'}`,
+    execute:({date,completed=true})=>{
+      const lk='log_'+date;
+      let log=DB.get(lk,null);
+      if(!log){
+        // Create a minimal log so completion can be marked even if no sets logged
+        const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+        const plan=DB.get(pk,null);
+        const dp=plan?.find(d=>d.date===date);
+        if(!dp)return{ok:false,msg:'Day not in plan'};
+        log={date,type:dp.type,exercises:dp.exercises?.map(id=>({id,sets:[]}))||[],completed:false};
+      }
+      log.completed=completed!==false;
+      DB.set(lk,log);
+      syncUp();
+      return{ok:true,msg:`${date} marked ${log.completed?'complete':'incomplete'}`};
+    }
+  },
+  set_lock_day:{
+    summarize:({date,locked=true})=>`${locked===false?'Unlock':'Lock'} ${_dayLbl(date)} ${locked===false?'(future regen can change it)':'(future regen will preserve it)'}`,
+    execute:({date,locked=true})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      if(!plan)return{ok:false,msg:'No plan'};
+      const i=plan.findIndex(d=>d.date===date);
+      if(i<0)return{ok:false,msg:'Date not in plan'};
+      plan[i].locked=locked!==false;
+      DB.set(pk,plan);
+      syncUp();
+      return{ok:true,msg:`${date} ${plan[i].locked?'locked':'unlocked'}`};
+    }
+  },
+  log_gym_sets:{
+    summarize:({date,exercises})=>{
+      const exCount=exercises?.length||0;
+      const setCount=(exercises||[]).reduce((s,e)=>s+(e.sets?.length||0),0);
+      const names=(exercises||[]).slice(0,3).map(e=>e.name).join(', ');
+      return`Log ${exCount} exercise${exCount!==1?'s':''} · ${setCount} set${setCount!==1?'s':''} for ${_dayLbl(date)} (${names}${exCount>3?', …':''})`;
+    },
+    execute:({date,exercises})=>{
+      if(!exercises||!exercises.length)return{ok:false,msg:'No exercises to log'};
+      // Fuzzy match each input name against the EX library
+      const matchExercise=name=>{
+        const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+        const target=norm(name);
+        if(!target)return null;
+        const words=target.split(/\s+/);
+        let best=null,bestScore=0;
+        for(const [id,ex] of Object.entries(EX)){
+          const exName=norm(ex.n);
+          let score=0;
+          if(exName===target)score=1000; // exact
+          else{
+            // Score = portion of input words found in exercise name
+            const matched=words.filter(w=>exName.includes(w)).length;
+            score=(matched/words.length)*100;
+            // Bonus if all words match and exName is short (more specific match)
+            if(matched===words.length)score+=50-Math.min(exName.length,50);
+          }
+          if(score>bestScore){bestScore=score;best={id,ex};}
+        }
+        return bestScore>=50?best:null;
+      };
+      const lk='log_'+date;
+      let log=DB.get(lk,null);
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      const dp=plan?.find(d=>d.date===date);
+      if(!log){
+        log={date,type:dp?.type||'PUSH',exercises:[],completed:false};
+      }
+      const unmatched=[];
+      for(const item of exercises){
+        const m=matchExercise(item.name);
+        if(!m){unmatched.push(item.name);continue;}
+        const sets=(item.sets||[]).map(s=>({w:String(s.weight),r:String(s.reps),done:true}));
+        if(!sets.length)continue;
+        // Replace existing entry for this exercise if present, else append
+        const existingIdx=log.exercises.findIndex(le=>le.id===m.id);
+        if(existingIdx>=0){
+          log.exercises[existingIdx].sets=sets;
+        }else{
+          log.exercises.push({id:m.id,sets});
+        }
+        // Update PRs if applicable
+        const prs=DB.get('prs',{})||{};
+        for(const s of sets){
+          const w=parseFloat(s.w),r=parseInt(s.r);
+          if(!w||!r)continue;
+          const cur=prs[m.id];
+          if(!cur||w>cur.w||(w===cur.w&&r>cur.r)){
+            prs[m.id]={w,r,date};
+          }
+        }
+        DB.set('prs',prs);
+      }
+      log.completed=true;
+      DB.set(lk,log);
+      syncUp();
+      const ok=log.exercises.length;
+      const note=unmatched.length?` (couldn't match: ${unmatched.join(', ')})`:'';
+      return{ok:true,msg:`Logged ${ok} exercise${ok!==1?'s':''} on ${date}${note}`};
+    }
+  },
+  regenerate_remaining_week:{
+    summarize:({from_date})=>`Regenerate plan from ${_dayLbl(from_date)} forward (days before are preserved)`,
+    execute:({from_date})=>{
+      const pk=DB.pk(getMon(new Date(from_date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      if(!plan)return{ok:false,msg:'No plan for that week'};
+      // Snapshot original lock state so we can restore after
+      const origLocks={};
+      plan.forEach(d=>{origLocks[d.date]=!!d.locked;});
+      // Temporarily lock days before from_date so buildWeek preserves them
+      plan.forEach(d=>{if(d.date<from_date)d.locked=true;});
+      DB.set(pk,plan);
+      // Rebuild using cached weather from the existing plan
+      const wdays=plan.map(d=>({date:d.date,...(d.weather||{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0})}));
+      try{
+        const newPlan=buildWeek(wdays);
+        // Restore original lock state on the regenerated week
+        newPlan.forEach(d=>{d.locked=origLocks[d.date]||false;});
+        DB.set(pk,newPlan);
+        syncUp();
+        return{ok:true,msg:`Regenerated from ${from_date} forward`};
+      }catch(e){
+        return{ok:false,msg:'Regeneration failed: '+(e?.message||e)};
+      }
     }
   }
 };
