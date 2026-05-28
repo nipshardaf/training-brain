@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.59';
+const APP_VERSION='2.60';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.60',d:'Collapsible Ask Coach panel + auto-scroll to bottom of chat after each response',det:'Two small UX improvements. (1) Collapse — the Ask Coach panel can now be collapsed to a single-row header bar when you\'re not actively chatting. Tap the ▲ button in the header to collapse, or tap the collapsed bar to expand again. Collapsed state shows "💬 Ask the Coach · N messages" with a "▼ Expand" hint. Preference persists across reloads via localStorage (not synced — it\'s a personal UI choice). Reclaims ~400px of vertical space on the Plan view when you don\'t need the chat. (2) Auto-scroll on response — after the coach replies, the page now scrolls so the input box is brought into view at the bottom of the viewport. This means the latest message is always visible without having to manually scroll back up. The chat thread\'s internal scroll also jumps to the latest message. Combined: you can scroll anywhere on the page, send a question, and when the response arrives you\'re back at the chat reading the answer.'},
   {v:'2.59',d:'Goal-driven plan generation — workouts shaped by your actual goals (with priority ranking) instead of random picks',det:'Foundational redesign of how plans get generated. Each goal in your profile now has a structured profile defining how it should shape your week: gym/cardio ratio, rep range, RPE range, target sets per muscle group per week, exercise bias (compound/functional/balanced), and cardio focus (easy/mixed/periodised). Muscle: 70% gym, 6-12 reps, RPE 7-9, compound-first, easy cardio for recovery. Lose weight: 50/50, 8-12 reps, compounds to preserve muscle, mixed cardio, weights held in deficit. Fitness: balanced. Endurance: 30% gym/70% cardio, 5-8 reps for strength maintenance. Performance: periodised. The week generator now uses these profiles instead of looking at only your first goal: cardio_ratio determines ride count, exercise_bias determines which slot candidates get preferred (compound vs balanced). Multi-goal users get a BLENDED profile (equal weights by default — e.g. muscle + endurance averages to ~50/50 gym/cardio, 5-10 reps). NEW priority ranking: in goals setup, if you select 2+ goals, a "Priority" section appears with an EQUAL/RANKED toggle. RANKED lets you reorder with ↑↓ arrows — top = highest priority, weighted more in the blend. Default stays EQUAL. The "My Training" tab\'s Your Goals card now shows your actual training mix derived from your goals ("70% gym · 30% cardio · 6-12 reps · RPE 7-9 · ~14 sets/muscle/wk") so you can see exactly what your goals translate to. v2.60 will add progressive overload targets (weight × reps prescribed per set based on PRs).'},
   {v:'2.58',d:'Coach uses feeling-words instead of raw Form numbers — "carrying fatigue" not "Form of -17"',det:'v2.49/v2.54 fixed the acronym problem ("Form" not "TSB") but the raw number itself is still abstract for non-cycling users. "Form of -17" tells you nothing if you don\'t already know the scale. Updated the prompt to add explicit DESCRIPTIVE LANGUAGE rules: the AI must translate Form numbers into feeling-words using the interpretation bands ("fully fresh", "well-rested and recovered", "productive training zone", "carrying noticeable fatigue", "deep fatigue"). The raw Form/Fitness/Fatigue numbers are now forbidden unless the user explicitly asks for them. Per-ride numbers (load, intensity, power, HR) are still allowed since they\'re concrete. Examples: ✓ "You\'re carrying noticeable fatigue from two ride days in a row" / ✗ "Your Form is -17, so…"'},
   {v:'2.57',d:'Admin tier bypasses the 4-second client throttle — truly unlimited Ask Coach usage',det:'Admin is now exempt from the 4-second client-side throttle introduced in v2.56. Non-admin users (pro, basic) still get the 4-second cooldown between sends to avoid tripping Gemini\'s 15 RPM limit. Admin is still bounded by Gemini\'s API-side limits (15 RPM, 1500 RPD on free tier) and will see a friendly 429 message if they hit them — but the app no longer pre-throttles admin requests. Suitable for solo use where no one else is sharing the API key.'},
@@ -5554,6 +5555,21 @@ function resetAskConversation(){
   syncUp();render();
 }
 
+// Toggle collapsed state of the Ask Coach panel. Stored in localStorage so the
+// preference persists across reloads. Not synced — purely a UI preference.
+function toggleAskCollapse(){
+  const cur=DB.get('ask_collapsed',false);
+  DB.set('ask_collapsed',!cur);
+  render();
+  // After expanding, scroll the chat into view so the user lands on it
+  if(cur){
+    setTimeout(()=>{
+      const el=document.getElementById('ask-coach-input');
+      if(el)el.scrollIntoView({behavior:'smooth',block:'end'});
+    },100);
+  }
+}
+
 // Build the Gemini contents[] array from the conversation. The LAST user message
 // gets the full training context prepended; earlier messages stay lean to save
 // tokens but still preserve the back-and-forth.
@@ -5664,7 +5680,15 @@ async function sendAskCoach(){
     S.askLoading=false;
     syncUp();render();
     // Scroll to bottom of the chat thread
-    setTimeout(()=>{const el=document.getElementById('ask-thread');if(el)el.scrollTop=el.scrollHeight;},50);
+    setTimeout(()=>{
+      // Scroll the chat thread internal container to its bottom (latest message visible)
+      const el=document.getElementById('ask-thread');
+      if(el)el.scrollTop=el.scrollHeight;
+      // Also scroll the page so the chat panel's bottom is in view — user may have
+      // scrolled down to look at other sections while the coach was thinking.
+      const inp=document.getElementById('ask-coach-input');
+      if(inp)inp.scrollIntoView({behavior:'smooth',block:'end'});
+    },100);
   }catch(e){
     console.warn('Ask Coach failed:',e);
     trackAICall?.('ask_coach',false);
@@ -5756,6 +5780,21 @@ function rAskCoach(){
     ?`<span style="font-size:10px;color:var(--t2);font-weight:600">unlimited</span>`
     :`<span style="font-size:10px;color:${limitReached?'var(--red)':'var(--t2)'};font-weight:600">${remaining} of ${cfg.quota} left today</span>`;
   const conv=getAskConversation();
+  // Collapsed view (v2.60) — when the user isn't actively chatting, show only the
+  // header bar to reclaim vertical space. State persists across reloads via DB.
+  const collapsed=DB.get('ask_collapsed',false);
+  if(collapsed){
+    const msgCount=conv.length;
+    const summary=msgCount>0?`${msgCount} message${msgCount!==1?'s':''}`:'Tap to ask';
+    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 15px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleAskCollapse()">
+  <div style="display:flex;align-items:center;gap:7px;min-width:0;flex:1">
+    <span style="font-size:13px;font-weight:700;color:var(--al)">💬 Ask the Coach</span>
+    ${tierBadge}
+    <span style="font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">· ${summary}</span>
+  </div>
+  <span style="font-size:11px;color:var(--t2);font-weight:700;flex-shrink:0">▼ Expand</span>
+</div>`;
+  }
   const hasThread=conv.length>0;
   // Render the conversation thread as user/coach bubbles
   const threadHtml=conv.map((t,ti)=>{
@@ -5806,6 +5845,7 @@ function rAskCoach(){
     <div style="display:flex;align-items:center;gap:8px">
       ${counter}
       ${hasThread?`<button onclick="resetAskConversation()" style="background:none;border:1px solid var(--bord);border-radius:7px;color:var(--t2);font-size:10px;font-weight:700;cursor:pointer;padding:3px 8px">🗑 Reset</button>`:''}
+      <button onclick="toggleAskCollapse()" style="background:none;border:1px solid var(--bord);border-radius:7px;color:var(--t2);font-size:10px;font-weight:700;cursor:pointer;padding:3px 8px" title="Collapse">▲</button>
     </div>
   </div>
   ${hasThread?`<div id="ask-thread" style="max-height:420px;overflow-y:auto;padding:8px 4px 12px;margin-bottom:10px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord)">${threadHtml}${loadingHtml}</div>`:''}
