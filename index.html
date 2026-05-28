@@ -911,10 +911,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.69';
+const APP_VERSION='2.70';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.70',d:'Placeholder exercises (no GIF) are now tappable "▶ Watch demo" cards opening a video tutorial',det:'For the handful of exercises with no demo GIF in the free databases (burpee, pike push-up, wall sit, foot-mobility moves), the placeholder card now shows a "▶ Watch demo" pill and is tappable — opening the YouTube tutorial search directly. Previously the placeholder looked static even though a demo was available via the separate 📺 Tutorial button. Same treatment applied to the onerror fallback, so if ANY GIF link ever breaks in future, the user still gets a clear tappable path to a video demo instead of a dead-looking card. Context: I exhausted the free hotlinkable GIF sources (free-exercise-db, wger, Wikimedia, everkinetic) — none carry these specific exercises. The only way to embed real animated GIFs for them is ExerciseDB via RapidAPI (needs an API key + a worker proxy endpoint + caching), which is a worthwhile future project when scaling but adds an external dependency. For now every exercise has either a real GIF or a tappable video demo — nobody is left without guidance.'},
   {v:'2.69',d:'Full GIF audit — every exercise checked, 7 placeholder exercises now have real demo GIFs',det:'Audited all ~90 exercises in the library against the image CDNs. Every existing free-exercise-db path resolves (200), every wger.de image URL resolves (200) — no broken links. Filled in real GIFs for 7 exercises that previously showed only a coloured placeholder: Assisted Dip (→ dip machine), Assisted Pull-Up (→ band-assisted pull-up), Adductor Machine, Abductor Machine, Single-Leg Calf Raise, Side Plank (→ side bridge), and Nordic Curl (→ natural glute-ham raise). 8 exercises remain as styled placeholders because no demo image exists in any free database: Burpee, Pike Push-Up, Wall Sit, and 5 foot-mobility physio exercises (short foot, towel scrunches, arch raise, toe spread, heel raise). These show a clean labelled card (exercise name + muscle group + icon) rather than a blank box. Note: the image loader already has an onerror fallback — if any GIF link ever breaks in future, it auto-swaps to the styled placeholder, so no exercise ever shows an empty image.'},
   {v:'2.68',d:'Single-leg exercise variants + AI "make my legs single-leg" tool. Verified all leg GIFs work.',det:'GIF AUDIT: checked every leg exercise image against the free-exercise-db CDN — all resolve (200). The few with no image (Nordic curl, single-leg calf, wall sit) intentionally show styled placeholders. YouTube tutorial links are dynamic search queries (exercise name + channel), so they can\'t break. NEW SINGLE-LEG VARIANTS added to the library: Single-Leg Squat, Reverse Lunge, Single-Leg Leg Extension, Single-Leg Deadlift, Cable Glute Kickback, Single-Leg Seated Calf — all with working GIFs, joining the existing Bulgarian Split Squat, walking lunge, step-up, single-leg glute bridge, single-leg calf, and donkey kick. They appear automatically in the manual "🔄 Swap exercise" menu under "Same muscle group" — but are NOT forced into the default rotation (no preference toggle, as requested). NEW AI TOOL: ask the coach "change my leg day to single-leg" (or "make my legs unilateral") and it calls make_legs_unilateral(date), which swaps each bilateral leg exercise to its single-leg equivalent — squat→single-leg squat, leg press→reverse lunge, RDL/curl→single-leg deadlift, hip thrust→cable kickback, leg extension→single-leg extension, calf→single-leg calf. Shows a confirmation card before applying like all plan changes.'},
   {v:'2.67',d:'Fix: chat ↑Top / ↓Latest buttons were the same purple as sent messages — now high-contrast dark',det:'The floating scroll buttons in the Ask Coach thread used the accent purple (rgba(124,58,237,.92)), identical to the user\'s sent-message bubbles. When a button overlapped a sent bubble it was nearly invisible. Changed to a high-contrast dark pill (near-black rgba(17,24,39,.92)) with a subtle white border and stronger shadow — stands out clearly against both the purple user bubbles and the grey coach bubbles.'},
@@ -3093,19 +3094,20 @@ function loadExImg(img){
   const wrap=img.closest('.ex-gif-wrap');
   const ph=wrap?.querySelector('.gif-ph');
   if(!entry){
-    // No image path — show styled placeholder immediately
+    // No image path — show styled placeholder. Make it tappable to open a
+    // video demo (no GIF exists for this exercise in the free databases).
     const ex=EX[xid];
     const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:'💪'};
-    if(ph)ph.innerHTML=`<div style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:40px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div></div>`;
+    if(ph)ph.innerHTML=`<div onclick="event.stopPropagation();openVid('${xid}')" style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer"><div style="font-size:38px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.85);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div><div style="margin-top:6px;font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:5px 13px">▶ Watch demo</div></div>`;
     return;
   }
   const t=new Image();
   t.onload=()=>{img.src=t.src;img.classList.add('on');if(ph)ph.classList.add('off');};
   t.onerror=()=>{
-    // Path wrong — fall back to styled placeholder
+    // Path wrong/broken — fall back to the same tappable styled placeholder
     const ex=EX[xid];
     const style=G_PH[ex?.g]||{bg:'linear-gradient(135deg,#374151,#6b7280)',i:'💪'};
-    if(ph)ph.innerHTML=`<div style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px"><div style="font-size:40px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.8);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div></div>`;
+    if(ph)ph.innerHTML=`<div onclick="event.stopPropagation();openVid('${xid}')" style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer"><div style="font-size:38px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.85);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div><div style="margin-top:6px;font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:5px 13px">▶ Watch demo</div></div>`;
   };
   t.src=entry.f0;
 }
