@@ -35,6 +35,7 @@
   --grn:#10b981;--amb:#f59e0b;--red:#ef4444;--blu:#3b82f6;
   --txt:#f1f5f9;--t2:#8892a4;
   --st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px);
+  --sl:env(safe-area-inset-left,0px);--sr:env(safe-area-inset-right,0px);
 }
 @media(prefers-color-scheme:light){
   :root{
@@ -50,7 +51,7 @@
 }
 html{height:-webkit-fill-available}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:100vh;min-height:-webkit-fill-available;overflow-x:hidden;-webkit-font-smoothing:antialiased}
-.screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) 16px calc(var(--sb) + 88px);background:var(--bg)}
+.screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) calc(16px + var(--sr)) calc(var(--sb) + 88px) calc(16px + var(--sl));background:var(--bg)}
 
 /* header */
 .hdr{text-align:center;margin-bottom:18px}
@@ -99,7 +100,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .btn-s{background:var(--s1);color:var(--t2);border:1px solid var(--bord);font-size:14px}
 
 /* bottom nav */
-.bnav{position:fixed;bottom:0;left:0;right:0;background:rgba(9,9,15,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--bord);display:flex;justify-content:center;padding:8px 0 calc(var(--sb) + 4px)}
+.bnav{position:fixed;bottom:0;left:0;right:0;background:rgba(9,9,15,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--bord);display:flex;justify-content:center;padding:8px calc(var(--sr)) calc(var(--sb) + 4px) calc(var(--sl))}
 .bnav-btn{flex:1;max-width:160px;background:transparent;border:none;padding:7px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;-webkit-appearance:none;opacity:.45;transition:opacity .15s}
 .bnav-btn.on{opacity:1}
 .bnav-btn span:first-child{font-size:22px}
@@ -265,7 +266,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .unit-toggle:active{background:var(--s3)}
 
 /* lock screen */
-.lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center;background:var(--bg)}
+.lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:safe center;padding:calc(20px + var(--st)) calc(20px + var(--sr)) calc(20px + var(--sb)) calc(20px + var(--sl));text-align:center;background:var(--bg);overflow-y:auto}
 .lock-logo{font-size:64px;margin-bottom:12px}
 .lock-title{font-size:24px;font-weight:800;letter-spacing:-.5px;background:linear-gradient(135deg,#a78bfa,#f472b6 55%,#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:4px}
 .lock-sub{font-size:13px;color:var(--t2);margin-bottom:28px}
@@ -911,10 +912,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.73';
+const APP_VERSION='2.74';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.74',d:'Landscape mode fixes — login/onboarding no longer clips, content clears the notch, safe-area handling on all edges',det:'The app is portrait-first, but landscape was genuinely broken in places. Fixes: (1) The lock/login/onboarding screen used centered flex layout with no scroll — in landscape\'s short viewport, content taller than the screen got clipped at top and bottom with no way to reach it. Added overflow-y:auto and justify-content:safe center so it centers when it fits and scrolls from the top when it doesn\'t. (2) Added left/right safe-area insets (--sl/--sr) — previously only top/bottom were handled, so in landscape on notched phones content could hide under the notch. Now the main screen, the bottom nav, and the lock screen all pad away from the notch on whichever side it\'s on. The main content already centered in a 430px column so it reads fine in landscape — just now without clipping or notch intrusion. Note: this app is designed for portrait (one-handed logging at the gym); landscape is now usable but not a dedicated wide layout.'},
   {v:'2.73',d:'Ask Coach can now control individual exercises, reps, and weights — not just whole days',det:'Two new tools give the AI coach full control over the contents of a gym day. (1) swap_exercise(date, from, to) — replace a specific exercise with another, e.g. "swap my barbell bench for dumbbell press on Tuesday" or "change leg extensions to hack squats today." Both names are fuzzy-matched against the library, the slot position is preserved, and any in-progress log is updated. (2) set_exercise_targets(date, exercise, sets, reps, weight) — prescribe the loading for a specific lift, e.g. "set my squat to 5 sets of 5 at 100kg on Friday" or "make today\'s bench 4x8." Omitted fields keep their current value; the targets pre-fill in your log so you just confirm your actual sets. To support this, the AI now sees the full exercise list (with prescribed sets×reps) for every gym day in its context — so it can reference and modify exercises by name. Both tools show a confirmation card before applying, like every other plan change. Combined with the existing day-level tools (swap days, rest, cascade) and make_legs_unilateral, the coach can now reshape your week from the calendar down to the individual set.'},
   {v:'2.72',d:'"Busy?" button renamed to "Swap" — covers any reason for switching an exercise, not just a busy machine',det:'The exercise-swap button said "🔁 Busy?", implying the only reason to switch was a taken machine. But you might want a different exercise for any reason — injury, equipment missing, preference, or just variety. Renamed to "🔄 Swap" (English) / "更換動作" (Chinese). Also updated the hardcoded "Machine busy? Swap exercise" button in the set-logging view to just "🔄 Swap exercise". Same swap menu behind it — just clearer, more universal wording.'},
   {v:'2.71',d:'In-app video player — exercise demos now play inside the app (YouTube embed), no need to leave for another app',det:'Tapping 📺 Tutorial (or a placeholder card) now opens an in-app sheet that plays the demo video right there in an embedded YouTube player — no app switching. How it works: the app asks the worker to find the best embeddable tutorial video for the exercise (via the YouTube Data API), caches the video ID per exercise (searched once, then free forever), and plays it inline in an iframe (works in the installed PWA, including inline playback on iOS). If the video ID isn\'t cached and the worker/key isn\'t available yet, it gracefully falls back to the old YouTube search links — so nothing breaks during setup. A "Browse more" button under the player drops to the search links if the auto-picked video isn\'t the right one. REQUIRES a one-time setup: a free YouTube Data API key added to the Cloudflare worker (the worker.js change is included). Until that key is live, the player falls back to search links. New yt_cache storage key (synced) holds the resolved video IDs.'},
