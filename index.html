@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.56';
+const APP_VERSION='2.57';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.57',d:'Admin tier bypasses the 4-second client throttle — truly unlimited Ask Coach usage',det:'Admin is now exempt from the 4-second client-side throttle introduced in v2.56. Non-admin users (pro, basic) still get the 4-second cooldown between sends to avoid tripping Gemini\'s 15 RPM limit. Admin is still bounded by Gemini\'s API-side limits (15 RPM, 1500 RPD on free tier) and will see a friendly 429 message if they hit them — but the app no longer pre-throttles admin requests. Suitable for solo use where no one else is sharing the API key.'},
   {v:'2.56',d:'Friendlier rate-limit error message + client-side throttle to avoid tripping Gemini\'s 15 RPM limit',det:'When you sent a few back-to-back coach messages, Gemini returned HTTP 429 (Too Many Requests) and the app just showed "API 429" — opaque. Now: (1) Status code 429 shows "Too many requests in a short time. Wait ~30 seconds and try again — the free Gemini tier allows 15 requests per minute." Other known status codes also get friendly messages (403 = "API access denied", 5xx = "Gemini service is having a moment"). (2) Added a 4-second client-side throttle between Ask Coach sends. If you hit Send within 4 seconds of the last one, you get a toast "Hold on 3s — pacing requests" and the request is dropped instead of being sent. 4s = ~15/min ceiling matches the free tier so you can\'t accidentally trip the limit through rapid use. The throttle resets after the cooldown so genuine multi-turn conversation still flows fine.'},
   {v:'2.55',d:'Cascade no longer silently drops a workout when changing a gym day to REST + AI prefers swap over destructive change',det:'Two bugs cascaded in v2.54 user-reported scenario: AI said "move Pull to Friday" but called change_day_type(Wed, REST) instead of swap_workout_days(Wed, Fri); then doSwap\'s cascade shifted Pull→Thu, Push→Sun, and dropped Legs off the end. Result: a week with no Push day, AI\'s words didn\'t match the action. FIX 1: doSwap is now smart. When changing a gym day to REST, it first looks for any future REST day in the week and places the displaced workout there (non-destructive — no other workouts move or get dropped). Only if NO future REST day exists does it fall back to the cascade-and-drop behavior, and the toast now explicitly warns which workout type was dropped ("Cascaded forward — Push dropped"). FIX 2: tool-selection guidance in the prompt is much more explicit — when the user wants to MOVE a workout to a specific day, the AI must use swap_workout_days (non-destructive). change_day_type(X, REST) is reserved for "just take this day off" without a target. The prompt also requires the AI\'s text to match the tool — saying "moving to Friday" must call swap_workout_days, not change_day_type.'},
   {v:'2.54',d:'Coach stops writing "(TSB)" alongside "Form" + becomes proactive with tool calls (no more 3-turn back-and-forth)',det:'TWO fixes. (1) ACRONYM STRIPPING — the v2.49 prompt had said "use plain term first + acronym in parens" but the model interpreted that as "always write Form (TSB)". Tightened the rule: NEVER write the acronym at all. Only "Form is -17", never "Form (TSB) is -17" or "TSB -17". Added a post-processor safety net that strips parenthetical acronyms and replaces any remaining standalone TSB/CTL/ATL/TSS/IF tokens with their plain-English equivalents — even if the model slips up, the user never sees a raw acronym. (2) PROACTIVE TOOL CALLS — when you said "I\'m tired, will resting today impact my week?" the model gave advice without calling change_day_type, then "Ok adjust my plan" still didn\'t call it (just described intent), and only "Ok" triggered the actual tool call. Three turns for one decision. Updated prompt: explicit examples that tool calls are PROPOSALS (the confirmation card is where consent happens, not a separate turn). The model should call the tool in the same response as the question, not describe what it would do and wait. Forbidden phrases like "I can adjust your plan to…" or "I will move your workout…" are flagged in the rules.'},
@@ -5457,15 +5458,18 @@ async function sendAskCoach(){
   if(cfg.quota===0){showToast('Ask Coach access by invitation only — contact the app owner','var(--t2)');return;}
   const used=getAskQuotaUsed();
   if(cfg.quota!==-1&&used>=cfg.quota){showToast(`Daily limit reached (${cfg.quota}). Resets at midnight.`,'var(--amb)');return;}
-  // Client-side throttle: avoid tripping Gemini's 15-RPM limit when the user
-  // sends questions quickly back-to-back. 4 seconds between sends = max ~15/min.
-  const now=Date.now();
-  if(S._lastAskAt&&now-S._lastAskAt<4000){
-    const waitMs=4000-(now-S._lastAskAt);
-    showToast(`Hold on ${Math.ceil(waitMs/1000)}s — pacing requests`,'var(--amb)');
-    return;
+  // Client-side throttle: avoid tripping Gemini's 15-RPM limit. 4-second
+  // cooldown for non-admin users. Admin bypasses (still subject to Gemini's
+  // own 429 on excessive use, but the app doesn't pre-throttle them).
+  if(tier!=='admin'){
+    const now=Date.now();
+    if(S._lastAskAt&&now-S._lastAskAt<4000){
+      const waitMs=4000-(now-S._lastAskAt);
+      showToast(`Hold on ${Math.ceil(waitMs/1000)}s — pacing requests`,'var(--amb)');
+      return;
+    }
+    S._lastAskAt=now;
   }
-  S._lastAskAt=now;
   // Append user turn to the conversation immediately so UI updates
   const conv=getAskConversation();
   conv.push({role:'user',text:_esc(question),rawText:question,at:new Date().toISOString()});
