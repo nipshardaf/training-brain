@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.57';
+const APP_VERSION='2.58';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.58',d:'Coach uses feeling-words instead of raw Form numbers — "carrying fatigue" not "Form of -17"',det:'v2.49/v2.54 fixed the acronym problem ("Form" not "TSB") but the raw number itself is still abstract for non-cycling users. "Form of -17" tells you nothing if you don\'t already know the scale. Updated the prompt to add explicit DESCRIPTIVE LANGUAGE rules: the AI must translate Form numbers into feeling-words using the interpretation bands ("fully fresh", "well-rested and recovered", "productive training zone", "carrying noticeable fatigue", "deep fatigue"). The raw Form/Fitness/Fatigue numbers are now forbidden unless the user explicitly asks for them. Per-ride numbers (load, intensity, power, HR) are still allowed since they\'re concrete. Examples: ✓ "You\'re carrying noticeable fatigue from two ride days in a row" / ✗ "Your Form is -17, so…"'},
   {v:'2.57',d:'Admin tier bypasses the 4-second client throttle — truly unlimited Ask Coach usage',det:'Admin is now exempt from the 4-second client-side throttle introduced in v2.56. Non-admin users (pro, basic) still get the 4-second cooldown between sends to avoid tripping Gemini\'s 15 RPM limit. Admin is still bounded by Gemini\'s API-side limits (15 RPM, 1500 RPD on free tier) and will see a friendly 429 message if they hit them — but the app no longer pre-throttles admin requests. Suitable for solo use where no one else is sharing the API key.'},
   {v:'2.56',d:'Friendlier rate-limit error message + client-side throttle to avoid tripping Gemini\'s 15 RPM limit',det:'When you sent a few back-to-back coach messages, Gemini returned HTTP 429 (Too Many Requests) and the app just showed "API 429" — opaque. Now: (1) Status code 429 shows "Too many requests in a short time. Wait ~30 seconds and try again — the free Gemini tier allows 15 requests per minute." Other known status codes also get friendly messages (403 = "API access denied", 5xx = "Gemini service is having a moment"). (2) Added a 4-second client-side throttle between Ask Coach sends. If you hit Send within 4 seconds of the last one, you get a toast "Hold on 3s — pacing requests" and the request is dropped instead of being sent. 4s = ~15/min ceiling matches the free tier so you can\'t accidentally trip the limit through rapid use. The throttle resets after the cooldown so genuine multi-turn conversation still flows fine.'},
   {v:'2.55',d:'Cascade no longer silently drops a workout when changing a gym day to REST + AI prefers swap over destructive change',det:'Two bugs cascaded in v2.54 user-reported scenario: AI said "move Pull to Friday" but called change_day_type(Wed, REST) instead of swap_workout_days(Wed, Fri); then doSwap\'s cascade shifted Pull→Thu, Push→Sun, and dropped Legs off the end. Result: a week with no Push day, AI\'s words didn\'t match the action. FIX 1: doSwap is now smart. When changing a gym day to REST, it first looks for any future REST day in the week and places the displaced workout there (non-destructive — no other workouts move or get dropped). Only if NO future REST day exists does it fall back to the cascade-and-drop behavior, and the toast now explicitly warns which workout type was dropped ("Cascaded forward — Push dropped"). FIX 2: tool-selection guidance in the prompt is much more explicit — when the user wants to MOVE a workout to a specific day, the AI must use swap_workout_days (non-destructive). change_day_type(X, REST) is reserved for "just take this day off" without a target. The prompt also requires the AI\'s text to match the tool — saying "moving to Friday" must call swap_workout_days, not change_day_type.'},
@@ -4952,21 +4953,32 @@ function buildAskPrompt(question){
   return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${langNote}
 
 VOCABULARY — NEVER write these acronyms in your response. Use plain English ONLY:
-- "CTL" / "ATL" / "TSB" — write "Fitness" / "Fatigue" / "Form". NEVER add the acronym in parentheses.
+- "CTL" / "ATL" / "TSB" — concepts called "Fitness" / "Fatigue" / "Form". NEVER write the acronym at all.
 - "TSS" — write "load" or "training load"
 - "NP" — write "normalized power"
 - "IF" — write "intensity"
 - "EF" — write "aerobic efficiency"
-Examples of CORRECT output:
-  ✓ "Your Form is -17 (carrying fatigue)"
-  ✓ "Today's ride had a load of 95"
-  ✓ "Normalized power was 220W"
-Examples of FORBIDDEN output — do not write these:
-  ✗ "Your Form (TSB) is -17"
-  ✗ "TSB -17"
-  ✗ "TSS 95"
-  ✗ "IF 0.85"
-The acronyms are confusing to the user. Use only the plain English term, with the number. Never both.
+
+DESCRIPTIVE LANGUAGE — the raw Form/Fitness/Fatigue numbers (like "-17" or "8") are meaningless to a beginner. NEVER cite the raw number when explaining how the user is doing. Translate it to a feeling-word using these bands:
+
+Form (the user's freshness right now):
+  > +15  → "fully fresh / peak performance window"
+  +5 to +15 → "well-rested and recovered"
+  -10 to +5 → "productive training zone / good to train"
+  -10 to -25 → "carrying noticeable fatigue / monitor recovery"
+  < -25 → "deep fatigue / needs real rest"
+
+When discussing the user's current state, describe HOW IT FEELS, not the number:
+  ✓ "You're carrying noticeable fatigue from two ride days in a row…"
+  ✓ "You're well-rested — go hit it hard today."
+  ✓ "You're in the productive training zone, push through."
+  ✗ "Your Form is -17, so…"   ← forbidden, the number means nothing to the user
+  ✗ "Form of -17"              ← forbidden
+  ✗ "Given your Form is -17"   ← forbidden
+
+Only cite the raw Form number if the user explicitly asks "what's my Form number?". Same rule applies to Fitness and Fatigue.
+
+Per-ride numbers (load, intensity, power, HR) ARE okay to cite directly since they're concrete and self-explanatory ("the ride was 95 load", "you held 220W average").
 
 CAPABILITIES — what you can do:
 - ANALYSE: their plan, training history, fitness curve, and body weight. Give specific data-driven advice.
