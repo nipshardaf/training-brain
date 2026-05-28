@@ -911,10 +911,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.71';
+const APP_VERSION='2.72';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.72',d:'"Busy?" button renamed to "Swap" — covers any reason for switching an exercise, not just a busy machine',det:'The exercise-swap button said "🔁 Busy?", implying the only reason to switch was a taken machine. But you might want a different exercise for any reason — injury, equipment missing, preference, or just variety. Renamed to "🔄 Swap" (English) / "更換動作" (Chinese). Also updated the hardcoded "Machine busy? Swap exercise" button in the set-logging view to just "🔄 Swap exercise". Same swap menu behind it — just clearer, more universal wording.'},
   {v:'2.71',d:'In-app video player — exercise demos now play inside the app (YouTube embed), no need to leave for another app',det:'Tapping 📺 Tutorial (or a placeholder card) now opens an in-app sheet that plays the demo video right there in an embedded YouTube player — no app switching. How it works: the app asks the worker to find the best embeddable tutorial video for the exercise (via the YouTube Data API), caches the video ID per exercise (searched once, then free forever), and plays it inline in an iframe (works in the installed PWA, including inline playback on iOS). If the video ID isn\'t cached and the worker/key isn\'t available yet, it gracefully falls back to the old YouTube search links — so nothing breaks during setup. A "Browse more" button under the player drops to the search links if the auto-picked video isn\'t the right one. REQUIRES a one-time setup: a free YouTube Data API key added to the Cloudflare worker (the worker.js change is included). Until that key is live, the player falls back to search links. New yt_cache storage key (synced) holds the resolved video IDs.'},
   {v:'2.70',d:'Placeholder exercises (no GIF) are now tappable "▶ Watch demo" cards opening a video tutorial',det:'For the handful of exercises with no demo GIF in the free databases (burpee, pike push-up, wall sit, foot-mobility moves), the placeholder card now shows a "▶ Watch demo" pill and is tappable — opening the YouTube tutorial search directly. Previously the placeholder looked static even though a demo was available via the separate 📺 Tutorial button. Same treatment applied to the onerror fallback, so if ANY GIF link ever breaks in future, the user still gets a clear tappable path to a video demo instead of a dead-looking card. Context: I exhausted the free hotlinkable GIF sources (free-exercise-db, wger, Wikimedia, everkinetic) — none carry these specific exercises. The only way to embed real animated GIFs for them is ExerciseDB via RapidAPI (needs an API key + a worker proxy endpoint + caching), which is a worthwhile future project when scaling but adds an external dependency. For now every exercise has either a real GIF or a tappable video demo — nobody is left without guidance.'},
   {v:'2.69',d:'Full GIF audit — every exercise checked, 7 placeholder exercises now have real demo GIFs',det:'Audited all ~90 exercises in the library against the image CDNs. Every existing free-exercise-db path resolves (200), every wger.de image URL resolves (200) — no broken links. Filled in real GIFs for 7 exercises that previously showed only a coloured placeholder: Assisted Dip (→ dip machine), Assisted Pull-Up (→ band-assisted pull-up), Adductor Machine, Abductor Machine, Single-Leg Calf Raise, Side Plank (→ side bridge), and Nordic Curl (→ natural glute-ham raise). 8 exercises remain as styled placeholders because no demo image exists in any free database: Burpee, Pike Push-Up, Wall Sit, and 5 foot-mobility physio exercises (short foot, towel scrunches, arch raise, toe spread, heel raise). These show a clean labelled card (exercise name + muscle group + icon) rather than a blank box. Note: the image loader already has an onerror fallback — if any GIF link ever breaks in future, it auto-swaps to the styled placeholder, so no exercise ever shows an empty image.'},
@@ -1122,7 +1123,7 @@ const TRANS={
     g_fitness:'General fitness',g_endurance:'Endurance / event prep',g_perf:'Sport performance',
     days:['Mon','Tue','Wed','Thu','Fri','Sat','Sun'],
     today:'Today',done:'✓ Done',great_ride:'Great day to ride',
-    swap:'Swap',log_sets:'Log sets',coach_btn:'Tips',busy:'Busy?',
+    swap:'Swap',log_sets:'Log sets',coach_btn:'Tips',busy:'Swap',
     animate:'Animate',tutorial:'Tutorial',
     back_up_now:'Back up now',backed_now:'Backed up just now',
     backed_ago:'Backed up',sign_out:'Sign out',
@@ -1200,7 +1201,7 @@ const TRANS={
     g_fitness:'一般健康',g_endurance:'耐力 / 賽事準備',g_perf:'運動表現',
     days:['一','二','三','四','五','六','日'],
     today:'今天',done:'✓ 完成',great_ride:'適合騎車',
-    swap:'更換',log_sets:'記錄組數',coach_btn:'提示',busy:'器材被佔？',
+    swap:'更換',log_sets:'記錄組數',coach_btn:'提示',busy:'更換動作',
     animate:'動畫',tutorial:'教學',
     back_up_now:'立即備份',backed_now:'剛剛已備份',
     backed_ago:'已備份',sign_out:'登出',
@@ -6494,7 +6495,7 @@ function rLogEx(le,ei){
     <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`).join('')}
   <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
-  <button class="ex-busy-btn" style="margin-top:10px;width:100%;text-align:center" onclick="openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄 Machine busy? Swap exercise</button>
+  <button class="ex-busy-btn" style="margin-top:10px;width:100%;text-align:center" onclick="openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄 Swap exercise</button>
 </div>
 </div>`;
 }
