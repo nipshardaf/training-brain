@@ -912,10 +912,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.74';
+const APP_VERSION='2.75';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.75',d:'Fix sync PERMISSION_DENIED — cloud save now uses update() instead of set(), respecting the new security rules',det:'After locking down the Firebase security rules, auto-sync started failing with PERMISSION_DENIED. Root cause: saveToCloud did .set({data,updated}) on the whole users/{uid} node, which requires write permission on the entire node — but the new rules (correctly) only grant write on the data and updated CHILD paths, not the parent (so friends can write a friend-request to your sub-node without being able to overwrite your whole record). Changed .set() to .update() — it writes only the data and updated children, which the rules allow. Bonus: this also fixes a latent bug where the full set() would have wiped your profile/friends/friendRequests/advisor sub-nodes on every sync (those siblings are now preserved). No Firebase rule change needed — the rules you already pasted support this.'},
   {v:'2.74',d:'Landscape mode fixes — login/onboarding no longer clips, content clears the notch, safe-area handling on all edges',det:'The app is portrait-first, but landscape was genuinely broken in places. Fixes: (1) The lock/login/onboarding screen used centered flex layout with no scroll — in landscape\'s short viewport, content taller than the screen got clipped at top and bottom with no way to reach it. Added overflow-y:auto and justify-content:safe center so it centers when it fits and scrolls from the top when it doesn\'t. (2) Added left/right safe-area insets (--sl/--sr) — previously only top/bottom were handled, so in landscape on notched phones content could hide under the notch. Now the main screen, the bottom nav, and the lock screen all pad away from the notch on whichever side it\'s on. The main content already centered in a 430px column so it reads fine in landscape — just now without clipping or notch intrusion. Note: this app is designed for portrait (one-handed logging at the gym); landscape is now usable but not a dedicated wide layout.'},
   {v:'2.73',d:'Ask Coach can now control individual exercises, reps, and weights — not just whole days',det:'Two new tools give the AI coach full control over the contents of a gym day. (1) swap_exercise(date, from, to) — replace a specific exercise with another, e.g. "swap my barbell bench for dumbbell press on Tuesday" or "change leg extensions to hack squats today." Both names are fuzzy-matched against the library, the slot position is preserved, and any in-progress log is updated. (2) set_exercise_targets(date, exercise, sets, reps, weight) — prescribe the loading for a specific lift, e.g. "set my squat to 5 sets of 5 at 100kg on Friday" or "make today\'s bench 4x8." Omitted fields keep their current value; the targets pre-fill in your log so you just confirm your actual sets. To support this, the AI now sees the full exercise list (with prescribed sets×reps) for every gym day in its context — so it can reference and modify exercises by name. Both tools show a confirmation card before applying, like every other plan change. Combined with the existing day-level tools (swap days, rest, cascade) and make_legs_unilateral, the coach can now reshape your week from the calendar down to the individual set.'},
   {v:'2.72',d:'"Busy?" button renamed to "Swap" — covers any reason for switching an exercise, not just a busy machine',det:'The exercise-swap button said "🔁 Busy?", implying the only reason to switch was a taken machine. But you might want a different exercise for any reason — injury, equipment missing, preference, or just variety. Renamed to "🔄 Swap" (English) / "更換動作" (Chinese). Also updated the hardcoded "Machine busy? Swap exercise" button in the set-logging view to just "🔄 Swap exercise". Same swap menu behind it — just clearer, more universal wording.'},
@@ -3799,7 +3800,11 @@ async function saveToCloud(manual=false){
   try{
     const _ts=new Date().toISOString();
     _myLastSaveTs=_ts; // stamp before the write so the listener can recognise our own echo
-    await _fbDb.ref('users/'+S.fbUser.uid).set({data,updated:_ts});
+    // update() (not set()) so we only write the data+updated children — this
+    // respects the security rules (write granted on those children, not the
+    // whole node) AND preserves siblings like profile/friends/advisor that a
+    // full set() would wipe. v2.75.
+    await _fbDb.ref('users/'+S.fbUser.uid).update({data,updated:_ts});
     DB.set('fb_last_sync',_ts);
     DB.set('fb_last_sync_err',null);
     // Write public week summary so friends can see this user's weekly stats
