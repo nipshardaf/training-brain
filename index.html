@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.65';
+const APP_VERSION='2.66';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.66',d:'Progressive overload targets — each exercise now prescribes a weight × reps to chase, derived from your last session + goal',det:'The generator was prefilling each set by simply copying your last session\'s numbers — no progression. Now it computes a real target using standard double-progression: (1) finds your heaviest top set from the last completed session of that exercise; (2) if every set hit the top of your goal\'s rep range, it bumps the weight by your goal\'s progression step (2.5kg/5lb for muscle/fitness/endurance, 0 for lose_weight = hold weights in a deficit) and resets to the bottom of the rep range; (3) otherwise it holds the weight and asks for one more rep. The set inputs pre-fill with the target, and a "🎯 Target: 100lb × 8" banner appears on each exercise with a coloured pill showing the move (↑ +5lb / +1 rep / hold) and a one-line reason ("hit top of 6-12 rep range — progressing weight"). No history yet? It anchors to your PR, or asks you to enter a starting weight. The rep range comes from your blended goal profile (v2.59), so muscle goals target 6-12, endurance targets 5-8, etc.'},
   {v:'2.65',d:'Removed the v2.64 "Legs skipped" banner — catch-up logic stays, the noise goes',det:'The v2.64 banner used Legs as the explicit example in the wording, which made it sound like the app was hardcoded to prioritise Legs specifically. That wasn\'t the intent — Legs was just the example case in the original request. The catch-up LOGIC (getMostNeededGymType anchors the next week\'s rotation from whichever muscle group has the longest gap) is correct and stays exactly as shipped in v2.64. Just removed the visible banner that was overcommunicating. The plan quietly does the right thing without explaining itself every week. Also removed the now-unused getGymBalanceHint() helper. If you want to see why the plan looks the way it does, the Ask Coach can explain on demand.'},
   {v:'2.64',d:'Skipped muscle groups now prioritised in next week\'s plan — catch-up logic + visible hint banner',det:'BEFORE: the planner continued the PPL rotation from whatever you last completed. If you did Pull Wed then Push Fri, next week would start at Pull again (since Push was most recent), repeating Pull while Legs got skipped for a second week. AFTER: planner now calls getMostNeededGymType() which tracks each gym type\'s last-completed date over a 14-day window and starts the next week\'s rotation from whichever type has the LONGEST gap. If Legs was skipped, Legs now leads off the next week regardless of what you did most recently. Ties (e.g. both Legs and Upper untouched) break in canonical PPL order. When all four types are hit recently, falls back to the previous behavior (oldest-first). A new 💡 hint banner appears on the Week view explaining the catch-up: "Legs skipped recently — your plan this week starts with legs so you don\'t fall further behind (quads, hamstrings, glutes)." Auto-hides when the plan is balanced.'},
   {v:'2.63',d:'Chat thread auto-scrolls to latest on expand + new floating ↑Top / ↓Latest navigation buttons',det:'Three improvements to the Ask Coach thread. (1) AUTO-SCROLL ON EXPAND — when you tap to expand the collapsed chat panel, the thread now jumps to the very bottom so the latest message is visible immediately (in addition to the existing page-scroll that brings the panel into view). No more "where did the response go?" moments. (2) ↑ TOP BUTTON — a small floating purple pill in the top-right corner of the chat thread. Tap to smooth-scroll the thread to the very first message. Auto-hides when you\'re already at the top. (3) ↓ LATEST BUTTON — same pill in the bottom-right corner. Tap to smooth-scroll back to the most recent message. Auto-hides when you\'re at the bottom. Both buttons appear only when the thread is tall enough to scroll. Behavior follows the user\'s explicit request: at the top, only ↓ Latest is shown; at the bottom (default), only ↑ Top is shown; in the middle, both are visible.'},
@@ -6181,23 +6182,84 @@ function _saveLog(){
   DB.set(S.activeLogKey||DB.lk(S.viewDate),S.activeLog);
 }
 
+// v2.66: Computes the progressive-overload target for an exercise based on
+// the user's last completed session and their active goal profile.
+//
+// Algorithm (standard "double progression"):
+//   1. Find the heaviest top set from the last completed session.
+//   2. If all completed sets hit the top of the goal's rep range → bump
+//      weight by progression_step, reset to bottom of rep range.
+//   3. Otherwise → hold weight, add 1 rep (capped at top of range).
+//   4. If goal is "maintain" (lose_weight, step=0) → hold both indefinitely.
+//   5. No history → fall back to PR if available, else empty (user enters).
+//
+// Returns {w, r, change, reason} or null. `change` is a short pill label
+// ("↑ +2.5kg", "→ +1 rep", "hold"). `reason` is human-readable context.
+function computeProgressionTarget(exId,lastSets){
+  const goalProfile=getActiveGoalProfile();
+  if(!EX[exId])return null;
+  const u=unit();
+  const step=u==='lbs'?goalProfile.progression_step_lb:goalProfile.progression_step_kg;
+  const repLow=goalProfile.rep_low;
+  const repHigh=goalProfile.rep_high;
+  // No usable history → use PR or empty starter
+  const done=(lastSets||[]).filter(s=>s.done&&s.w&&s.r);
+  if(!done.length){
+    const pr=(DB.get('prs',{})||{})[exId];
+    if(pr)return{w:pr.w,r:Math.max(repLow,Math.min(repHigh,pr.r)),change:'starting at your PR',reason:'no recent session — use PR as anchor'};
+    return{w:'',r:repLow,change:'first time',reason:'no history yet — enter your starting weight'};
+  }
+  // Heaviest completed set: rank by weight desc, then reps desc
+  const topSet=done.reduce((a,b)=>{
+    const aw=parseFloat(a.w),bw=parseFloat(b.w);
+    if(bw>aw)return b;
+    if(bw<aw)return a;
+    return parseInt(b.r)>parseInt(a.r)?b:a;
+  });
+  const lastW=parseFloat(topSet.w);
+  const lastR=parseInt(topSet.r);
+  // Maintain mode (cutting / lose_weight goal) → hold weight, hold reps
+  if(step===0)return{w:lastW,r:lastR,change:'hold',reason:'cutting phase — preserve strength, don\'t push'};
+  // Did ALL completed sets hit the top of the rep range? → progress weight
+  const allHitTop=done.every(s=>parseInt(s.r)>=repHigh);
+  if(allHitTop){
+    return{
+      w:+(lastW+step).toFixed(1),
+      r:repLow,
+      change:`↑ +${step}${u==='lbs'?'lb':'kg'}`,
+      reason:`hit top of ${repLow}-${repHigh} rep range — progressing weight`
+    };
+  }
+  // Not at top of range → hold weight, try for one more rep
+  const newR=Math.min(repHigh,lastR+1);
+  if(newR>lastR){
+    return{w:lastW,r:newR,change:'+1 rep',reason:`aim for ${repHigh} reps to unlock weight progression`};
+  }
+  // Already at top reps for top set but other sets short → hold and try again
+  return{w:lastW,r:lastR,change:'match last',reason:'one more session at this load before bumping'};
+}
+
 function makeSets(exId,energy,last){
   const ex=EX[exId];if(!ex)return[];
   const n=energyTargets(exId,energy).sets;
-  // Use AI suggestions for this week if no last log data available
+  // v2.66: Use progression target as primary prefill source (replaces the
+  // previous "copy last session's values" behavior). AI suggestion still used
+  // as a fallback when no last-session data exists.
+  const tgt=computeProgressionTarget(exId,last);
+  const hasTgt=tgt&&tgt.w!==''&&tgt.w!=null;
   const hasLastData=last&&last.some(s=>s.w);
   const aiSugg=hasLastData?null:(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[exId]||null;
+  const prefillW=hasTgt?String(tgt.w):(aiSugg?.w||'');
+  const prefillR=hasTgt?String(tgt.r):(aiSugg?.r||'');
+  const isAi=!hasTgt&&!!aiSugg;
+  const isTgt=!!hasTgt;
   if(ex.uni){
     return Array.from({length:n*2},(_,i)=>{
       const side=i%2===0?'L':'R';
-      const pw=last?.[i]?.w||(aiSugg?.w||'');
-      return{w:pw,r:last?.[i]?.r||(aiSugg?.r||''),done:false,side,_edited:!!pw,_ai:!!(aiSugg&&!last?.[i]?.w)};
+      return{w:prefillW,r:prefillR,done:false,side,_edited:!!prefillW,_ai:isAi,_tgt:isTgt};
     });
   }
-  return Array.from({length:n},(_,si)=>{
-    const pw=last?.[si]?.w||(aiSugg?.w||'');
-    return{w:pw,r:last?.[si]?.r||(aiSugg?.r||''),done:false,_edited:!!pw,_ai:!!(aiSugg&&!last?.[si]?.w)};
-  });
+  return Array.from({length:n},(_,si)=>({w:prefillW,r:prefillR,done:false,_edited:!!prefillW,_ai:isAi,_tgt:isTgt}));
 }
 
 function getLastLog(exId){
@@ -6289,6 +6351,8 @@ function rLogEx(le,ei){
   const _wSwap=findWeekSwap(ex.n,_advData?.swaps||[]);
   // AI next-week weight suggestion
   const _aiSugg=(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[le.id]||null;
+  // v2.66: progressive-overload target computed from last session + goal profile
+  const _prog=computeProgressionTarget(le.id,getLastLog(le.id));
   // compact summary for when collapsed and done
   const bestSet=allDone?le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0]:null;
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
@@ -6301,7 +6365,12 @@ function rLogEx(le,ei){
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar()}
-  ${_aiSugg&&!allDone?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-bottom:8px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:5px 9px">✨ AI suggestion: ${_aiSugg.w}${unit()} × ${_aiSugg.r} reps</div>`:''}
+  ${_prog&&_prog.w!==''&&!allDone?`<div style="font-size:11px;margin-bottom:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px">
+    <span style="color:var(--acc);font-weight:800">🎯 Target: ${_prog.w}${unit()} × ${_prog.r}</span>
+    ${_prog.change&&_prog.change!=='hold'&&_prog.change!=='match last'?`<span style="font-size:10px;font-weight:800;color:${_prog.change.startsWith('↑')?'var(--grn)':'var(--acc)'};background:${_prog.change.startsWith('↑')?'rgba(16,185,129,.15)':'rgba(124,58,237,.12)'};padding:2px 7px;border-radius:6px">${_prog.change}</span>`:_prog.change==='hold'?`<span style="font-size:10px;font-weight:700;color:var(--t2)">hold</span>`:''}
+    <span style="flex:1"></span>
+  </div>${_prog.reason?`<div style="font-size:10px;color:var(--t2);margin:-4px 2px 8px;line-height:1.4">${_prog.reason}</div>`:''}`:''}
+  ${_aiSugg&&!_prog?.w&&!allDone?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-bottom:8px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:5px 9px">✨ AI suggestion: ${_aiSugg.w}${unit()} × ${_aiSugg.r} reps</div>`:''}
   ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
   ${_wSwap?`<div style="font-size:11px;font-weight:600;margin-bottom:8px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:8px"><span style="color:var(--amb);flex:1">💡 Try <strong>${EX[_wSwap.toId]?.n||_wSwap.suggested}</strong> — ${_wSwap.reason}</span><button onclick="event.stopPropagation();doExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}','${_wSwap.toId}')" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);border-radius:6px;color:var(--amb);font-size:10px;font-weight:700;padding:4px 9px;cursor:pointer;white-space:nowrap;-webkit-appearance:none">Swap →</button></div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
