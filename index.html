@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.60';
+const APP_VERSION='2.61';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.61',d:'Fix: "Set goal" weight now uses the same bottom-sheet modal as Log weight (was a leftover browser prompt)',det:'There were two definitions of editWeightGoal() in the file: a clean wrapper that called openWeightSheet(\'goal\') at line 6852, and an old browser-prompt version at line 7387 that was overriding it (later definition wins in JavaScript). When you tapped 🎯 Set goal you got the old prompt() dialog instead of the new modal. Removed the duplicate. The goal flow now uses the same bottom-sheet design as logging a weigh-in: numeric input, lb/kg toggle, live conversion, Save/Cancel/Clear buttons. Consistent with the rest of the weight UI.'},
   {v:'2.60',d:'Collapsible Ask Coach panel + auto-scroll to bottom of chat after each response',det:'Two small UX improvements. (1) Collapse — the Ask Coach panel can now be collapsed to a single-row header bar when you\'re not actively chatting. Tap the ▲ button in the header to collapse, or tap the collapsed bar to expand again. Collapsed state shows "💬 Ask the Coach · N messages" with a "▼ Expand" hint. Preference persists across reloads via localStorage (not synced — it\'s a personal UI choice). Reclaims ~400px of vertical space on the Plan view when you don\'t need the chat. (2) Auto-scroll on response — after the coach replies, the page now scrolls so the input box is brought into view at the bottom of the viewport. This means the latest message is always visible without having to manually scroll back up. The chat thread\'s internal scroll also jumps to the latest message. Combined: you can scroll anywhere on the page, send a question, and when the response arrives you\'re back at the chat reading the answer.'},
   {v:'2.59',d:'Goal-driven plan generation — workouts shaped by your actual goals (with priority ranking) instead of random picks',det:'Foundational redesign of how plans get generated. Each goal in your profile now has a structured profile defining how it should shape your week: gym/cardio ratio, rep range, RPE range, target sets per muscle group per week, exercise bias (compound/functional/balanced), and cardio focus (easy/mixed/periodised). Muscle: 70% gym, 6-12 reps, RPE 7-9, compound-first, easy cardio for recovery. Lose weight: 50/50, 8-12 reps, compounds to preserve muscle, mixed cardio, weights held in deficit. Fitness: balanced. Endurance: 30% gym/70% cardio, 5-8 reps for strength maintenance. Performance: periodised. The week generator now uses these profiles instead of looking at only your first goal: cardio_ratio determines ride count, exercise_bias determines which slot candidates get preferred (compound vs balanced). Multi-goal users get a BLENDED profile (equal weights by default — e.g. muscle + endurance averages to ~50/50 gym/cardio, 5-10 reps). NEW priority ranking: in goals setup, if you select 2+ goals, a "Priority" section appears with an EQUAL/RANKED toggle. RANKED lets you reorder with ↑↓ arrows — top = highest priority, weighted more in the blend. Default stays EQUAL. The "My Training" tab\'s Your Goals card now shows your actual training mix derived from your goals ("70% gym · 30% cardio · 6-12 reps · RPE 7-9 · ~14 sets/muscle/wk") so you can see exactly what your goals translate to. v2.60 will add progressive overload targets (weight × reps prescribed per set based on PRs).'},
   {v:'2.58',d:'Coach uses feeling-words instead of raw Form numbers — "carrying fatigue" not "Form of -17"',det:'v2.49/v2.54 fixed the acronym problem ("Form" not "TSB") but the raw number itself is still abstract for non-cycling users. "Form of -17" tells you nothing if you don\'t already know the scale. Updated the prompt to add explicit DESCRIPTIVE LANGUAGE rules: the AI must translate Form numbers into feeling-words using the interpretation bands ("fully fresh", "well-rested and recovered", "productive training zone", "carrying noticeable fatigue", "deep fatigue"). The raw Form/Fitness/Fatigue numbers are now forbidden unless the user explicitly asks for them. Per-ride numbers (load, intensity, power, HR) are still allowed since they\'re concrete. Examples: ✓ "You\'re carrying noticeable fatigue from two ride days in a row" / ✗ "Your Form is -17, so…"'},
@@ -7382,21 +7383,6 @@ function rWeightChart(){
   <div style="font-size:10px;color:var(--t2);margin-top:6px;text-align:center">${pts.length} weigh-in${pts.length!==1?'s':''} · purple = 7-day rolling avg</div>
 </div>
 </div>`;
-}
-
-function editWeightGoal(){
-  const profile=DB.get('user_profile',{})||{};
-  const u=bodyUnit();
-  const curDisplay=profile.weight_goal?(u==='lb'?_kgToLb(profile.weight_goal).toFixed(1):profile.weight_goal.toFixed(1)):'';
-  const v=prompt(`Goal weight in ${u}.\n\nThe chart will show a dashed line at this value and estimate weeks to reach it.\n\nEnter a number or include a unit ("82 kg" / "180 lb"). Leave blank to clear.`,curDisplay);
-  if(v===null)return;
-  if(!v.trim()){delete profile.weight_goal;DB.set('user_profile',profile);syncUp();render();showToast('Goal cleared','var(--t2)');return;}
-  const kg=_parseBodyWeight(v);
-  if(kg==null||kg<30||kg>200){showToast('Goal must be 30-200 kg (66-440 lb)','var(--red)');return;}
-  profile.weight_goal=+kg.toFixed(1);
-  DB.set('user_profile',profile);
-  syncUp();render();
-  showToast(`Goal set to ${fmtBodyWtBoth(profile.weight_goal)}`,'var(--grn)');
 }
 
 /* ── CYCLING PROGRESS CHART ── */
