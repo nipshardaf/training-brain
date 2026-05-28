@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.62';
+const APP_VERSION='2.63';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.63',d:'Chat thread auto-scrolls to latest on expand + new floating ↑Top / ↓Latest navigation buttons',det:'Three improvements to the Ask Coach thread. (1) AUTO-SCROLL ON EXPAND — when you tap to expand the collapsed chat panel, the thread now jumps to the very bottom so the latest message is visible immediately (in addition to the existing page-scroll that brings the panel into view). No more "where did the response go?" moments. (2) ↑ TOP BUTTON — a small floating purple pill in the top-right corner of the chat thread. Tap to smooth-scroll the thread to the very first message. Auto-hides when you\'re already at the top. (3) ↓ LATEST BUTTON — same pill in the bottom-right corner. Tap to smooth-scroll back to the most recent message. Auto-hides when you\'re at the bottom. Both buttons appear only when the thread is tall enough to scroll. Behavior follows the user\'s explicit request: at the top, only ↓ Latest is shown; at the bottom (default), only ↑ Top is shown; in the middle, both are visible.'},
   {v:'2.62',d:'Ask Coach collapse: tap anywhere on the header to toggle (matches exercise-card pattern)',det:'v2.60 added a small ▲ button as the only way to collapse the Ask Coach panel — inconsistent with the rest of the app where exercise cards toggle on the whole header click. Updated to match: the title + tier badge + chevron on the LEFT side of the expanded header is one large click target that toggles. Right-side controls (quota counter, 🗑 Reset) stay non-collapsing. Collapsed view already had the whole-row click pattern from v2.60 — kept that, just changed the chevron from "▼ Expand" to a simpler ▶ that mirrors how collapsed exercise cards work.'},
   {v:'2.61',d:'Fix: "Set goal" weight now uses the same bottom-sheet modal as Log weight (was a leftover browser prompt)',det:'There were two definitions of editWeightGoal() in the file: a clean wrapper that called openWeightSheet(\'goal\') at line 6852, and an old browser-prompt version at line 7387 that was overriding it (later definition wins in JavaScript). When you tapped 🎯 Set goal you got the old prompt() dialog instead of the new modal. Removed the duplicate. The goal flow now uses the same bottom-sheet design as logging a weigh-in: numeric input, lb/kg toggle, live conversion, Save/Cancel/Clear buttons. Consistent with the rest of the weight UI.'},
   {v:'2.60',d:'Collapsible Ask Coach panel + auto-scroll to bottom of chat after each response',det:'Two small UX improvements. (1) Collapse — the Ask Coach panel can now be collapsed to a single-row header bar when you\'re not actively chatting. Tap the ▲ button in the header to collapse, or tap the collapsed bar to expand again. Collapsed state shows "💬 Ask the Coach · N messages" with a "▼ Expand" hint. Preference persists across reloads via localStorage (not synced — it\'s a personal UI choice). Reclaims ~400px of vertical space on the Plan view when you don\'t need the chat. (2) Auto-scroll on response — after the coach replies, the page now scrolls so the input box is brought into view at the bottom of the viewport. This means the latest message is always visible without having to manually scroll back up. The chat thread\'s internal scroll also jumps to the latest message. Combined: you can scroll anywhere on the page, send a question, and when the response arrives you\'re back at the chat reading the answer.'},
@@ -4061,6 +4062,9 @@ function render(){
   else if(S.screen==='settings')el.innerHTML=rSettings();
   bindEnergy();
   loadAllGifs();
+  // Bind scroll observers on dynamic regions that may have just been rendered.
+  // Each binder is no-op when its target isn't present or is already bound.
+  if(typeof _bindAskScrollObserver==='function')_bindAskScrollObserver();
 }
 
 /* ── WEEK SCREEN ── */
@@ -5563,13 +5567,55 @@ function toggleAskCollapse(){
   const cur=DB.get('ask_collapsed',false);
   DB.set('ask_collapsed',!cur);
   render();
-  // After expanding, scroll the chat into view so the user lands on it
+  // After expanding: scroll the chat into view, jump the thread to its latest
+  // message (so the user sees the most recent exchange), and refresh the
+  // top/bottom navigation buttons.
   if(cur){
     setTimeout(()=>{
-      const el=document.getElementById('ask-coach-input');
-      if(el)el.scrollIntoView({behavior:'smooth',block:'end'});
+      const inp=document.getElementById('ask-coach-input');
+      if(inp)inp.scrollIntoView({behavior:'smooth',block:'end'});
+      const thread=document.getElementById('ask-thread');
+      if(thread){
+        thread.scrollTop=thread.scrollHeight;
+        _updateAskScrollBtns();
+      }
     },100);
   }
+}
+
+// Smooth-scroll the chat thread to the top or bottom. Called by the two
+// floating navigation buttons that overlay the thread.
+function scrollAskThread(where){
+  const el=document.getElementById('ask-thread');
+  if(!el)return;
+  if(where==='top')el.scrollTo({top:0,behavior:'smooth'});
+  else el.scrollTo({top:el.scrollHeight,behavior:'smooth'});
+}
+
+// Show/hide the ↑Top and ↓Latest buttons based on scroll position. Called on
+// every scroll event and on render. Within 40px of either edge counts as "at"
+// that edge — the button for that edge hides, the other shows.
+function _updateAskScrollBtns(){
+  const el=document.getElementById('ask-thread');
+  if(!el)return;
+  const top=document.getElementById('ask-scroll-top');
+  const bot=document.getElementById('ask-scroll-bottom');
+  const atTop=el.scrollTop<40;
+  const atBottom=el.scrollTop+el.clientHeight>=el.scrollHeight-40;
+  // Also hide both if the thread isn't tall enough to scroll
+  const isScrollable=el.scrollHeight>el.clientHeight+10;
+  if(top)top.style.display=(!isScrollable||atTop)?'none':'block';
+  if(bot)bot.style.display=(!isScrollable||atBottom)?'none':'block';
+}
+
+// Attach scroll listener to the (freshly rendered) chat thread. The DOM
+// element is new on every render so dedup-checking via data attribute isn't
+// needed — old listeners are dropped with the old element.
+function _bindAskScrollObserver(){
+  const el=document.getElementById('ask-thread');
+  if(!el)return;
+  el.addEventListener('scroll',_updateAskScrollBtns,{passive:true});
+  _updateAskScrollBtns();
 }
 
 // Build the Gemini contents[] array from the conversation. The LAST user message
@@ -5852,7 +5898,11 @@ function rAskCoach(){
       ${hasThread?`<button onclick="resetAskConversation()" style="background:none;border:1px solid var(--bord);border-radius:7px;color:var(--t2);font-size:10px;font-weight:700;cursor:pointer;padding:3px 8px">🗑 Reset</button>`:''}
     </div>
   </div>
-  ${hasThread?`<div id="ask-thread" style="max-height:420px;overflow-y:auto;padding:8px 4px 12px;margin-bottom:10px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord)">${threadHtml}${loadingHtml}</div>`:''}
+  ${hasThread?`<div style="position:relative;margin-bottom:10px;border-top:1px solid var(--bord);border-bottom:1px solid var(--bord)">
+    <div id="ask-thread" style="max-height:420px;overflow-y:auto;padding:8px 4px 12px">${threadHtml}${loadingHtml}</div>
+    <button id="ask-scroll-top" onclick="scrollAskThread('top')" style="position:absolute;top:8px;right:8px;background:rgba(124,58,237,.92);backdrop-filter:blur(4px);border:none;border-radius:100px;color:#fff;font-size:11px;font-weight:700;padding:6px 11px;cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:2">↑ Top</button>
+    <button id="ask-scroll-bottom" onclick="scrollAskThread('bottom')" style="position:absolute;bottom:8px;right:8px;background:rgba(124,58,237,.92);backdrop-filter:blur(4px);border:none;border-radius:100px;color:#fff;font-size:11px;font-weight:700;padding:6px 11px;cursor:pointer;display:none;box-shadow:0 2px 8px rgba(0,0,0,.3);z-index:2">↓ Latest</button>
+  </div>`:''}
   ${S.askError?`<div style="font-size:11px;color:var(--red);margin-bottom:8px">⚠️ ${_esc(S.askError)}</div>`:''}
   <div style="display:flex;gap:6px;margin-bottom:8px">
     <input id="ask-coach-input" type="text" placeholder="${limitReached?'Daily limit reached':hasThread?'Continue the conversation…':'Ask anything about your training…'}" ${limitReached?'disabled':''}
