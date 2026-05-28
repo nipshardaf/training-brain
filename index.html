@@ -386,6 +386,14 @@ const EX = {
   sl_glute_bridge:{n:'Single-Leg Glute Bridge',g:'ham',  t:'C',sets:3,reps:'12/leg',rpe:'6', m:'Glutes · Hamstrings',     p:'Single_Leg_Glute_Bridge', bw:true, uni:true},
   donkey_kick:  {n:'Donkey Kick',          g:'ham',      t:'I',sets:3,reps:'15/leg',rpe:'5', m:'Glutes',                  p:['https://wger.de/media/exercise-images/990/de20457c-914a-45c9-8cf9-0ad9739759a1.png'], bw:true, uni:true},
   wall_sit:     {n:'Wall Sit',             g:'quad',     t:'I',sets:3,reps:'45s',   rpe:'6', m:'Quads',                   p:null, bw:true},
+  // ── Single-leg (unilateral) variants (v2.68) — discoverable via manual swap
+  // and the AI "make legs unilateral" tool. Not in default SLOTS rotation. ──
+  sl_squat:     {n:'Single-Leg Squat',     g:'quad',     t:'C',sets:3,reps:'8/leg', rpe:'8',  m:'Quads · Glutes',          p:'One_Leg_Barbell_Squat',                   uni:true},
+  reverse_lunge:{n:'Reverse Lunge',        g:'quad',     t:'C',sets:3,reps:'10/leg',rpe:'7',  m:'Quads · Glutes',          p:'Dumbbell_Rear_Lunge',                     uni:true},
+  sl_legext:    {n:'Single-Leg Leg Extension',g:'quad',  t:'I',sets:3,reps:'12/leg',rpe:'7',  m:'Quads',                   p:'Single-Leg_Leg_Extension',                uni:true},
+  sl_rdl:       {n:'Single-Leg Deadlift',  g:'ham',      t:'C',sets:3,reps:'8/leg', rpe:'8',  m:'Hamstrings · Glutes',     p:'Kettlebell_One-Legged_Deadlift',          uni:true},
+  cable_kickback:{n:'Cable Glute Kickback',g:'glute',    t:'I',sets:3,reps:'12/leg',rpe:'7',  m:'Glutes',                  p:'One-Legged_Cable_Kickback',               uni:true},
+  sl_seated_calf:{n:'Single-Leg Seated Calf',g:'calf',   t:'I',sets:3,reps:'15/leg',rpe:'7',  m:'Calves · Soleus',         p:'Dumbbell_Seated_One-Leg_Calf_Raise',      uni:true},
   mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:'Mountain_Climbers', bw:true},
   bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:['https://wger.de/media/exercise-images/176/Cross-body-crunch-1.png','https://wger.de/media/exercise-images/176/Cross-body-crunch-2.png'], bw:true},
   side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:null, bw:true, uni:true},
@@ -903,10 +911,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.67';
+const APP_VERSION='2.68';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.68',d:'Single-leg exercise variants + AI "make my legs single-leg" tool. Verified all leg GIFs work.',det:'GIF AUDIT: checked every leg exercise image against the free-exercise-db CDN — all resolve (200). The few with no image (Nordic curl, single-leg calf, wall sit) intentionally show styled placeholders. YouTube tutorial links are dynamic search queries (exercise name + channel), so they can\'t break. NEW SINGLE-LEG VARIANTS added to the library: Single-Leg Squat, Reverse Lunge, Single-Leg Leg Extension, Single-Leg Deadlift, Cable Glute Kickback, Single-Leg Seated Calf — all with working GIFs, joining the existing Bulgarian Split Squat, walking lunge, step-up, single-leg glute bridge, single-leg calf, and donkey kick. They appear automatically in the manual "🔄 Swap exercise" menu under "Same muscle group" — but are NOT forced into the default rotation (no preference toggle, as requested). NEW AI TOOL: ask the coach "change my leg day to single-leg" (or "make my legs unilateral") and it calls make_legs_unilateral(date), which swaps each bilateral leg exercise to its single-leg equivalent — squat→single-leg squat, leg press→reverse lunge, RDL/curl→single-leg deadlift, hip thrust→cable kickback, leg extension→single-leg extension, calf→single-leg calf. Shows a confirmation card before applying like all plan changes.'},
   {v:'2.67',d:'Fix: chat ↑Top / ↓Latest buttons were the same purple as sent messages — now high-contrast dark',det:'The floating scroll buttons in the Ask Coach thread used the accent purple (rgba(124,58,237,.92)), identical to the user\'s sent-message bubbles. When a button overlapped a sent bubble it was nearly invisible. Changed to a high-contrast dark pill (near-black rgba(17,24,39,.92)) with a subtle white border and stronger shadow — stands out clearly against both the purple user bubbles and the grey coach bubbles.'},
   {v:'2.66',d:'Progressive overload targets — each exercise now prescribes a weight × reps to chase, derived from your last session + goal',det:'The generator was prefilling each set by simply copying your last session\'s numbers — no progression. Now it computes a real target using standard double-progression: (1) finds your heaviest top set from the last completed session of that exercise; (2) if every set hit the top of your goal\'s rep range, it bumps the weight by your goal\'s progression step (2.5kg/5lb for muscle/fitness/endurance, 0 for lose_weight = hold weights in a deficit) and resets to the bottom of the rep range; (3) otherwise it holds the weight and asks for one more rep. The set inputs pre-fill with the target, and a "🎯 Target: 100lb × 8" banner appears on each exercise with a coloured pill showing the move (↑ +5lb / +1 rep / hold) and a one-line reason ("hit top of 6-12 rep range — progressing weight"). No history yet? It anchors to your PR, or asks you to enter a starting weight. The rep range comes from your blended goal profile (v2.59), so muscle goals target 6-12, endurance targets 5-8, etc.'},
   {v:'2.65',d:'Removed the v2.64 "Legs skipped" banner — catch-up logic stays, the noise goes',det:'The v2.64 banner used Legs as the explicit example in the wording, which made it sound like the app was hardcoded to prioritise Legs specifically. That wasn\'t the intent — Legs was just the example case in the original request. The catch-up LOGIC (getMostNeededGymType anchors the next week\'s rotation from whichever muscle group has the longest gap) is correct and stays exactly as shipped in v2.64. Just removed the visible banner that was overcommunicating. The plan quietly does the right thing without explaining itself every week. Also removed the now-unused getGymBalanceHint() helper. If you want to see why the plan looks the way it does, the Ask Coach can explain on demand.'},
@@ -5181,6 +5190,7 @@ CAPABILITIES — what you can do:
   · set_lock_day(date, locked) — lock or unlock a day so future regens preserve/don't preserve it.
   · log_gym_sets(date, exercises[]) — log structured gym sets. Each exercise has a name (fuzzy-matched against the library) and an array of {weight, reps} sets. Use when user dictates a workout like "bench 100 lb 3x8, OHP 65 lb 3x10". Weight is in the user's preferred unit. Updates PRs automatically.
   · regenerate_remaining_week(from_date) — regenerate plan from a date forward, preserving prior days and locked days.
+  · make_legs_unilateral(date) — convert a leg day's exercises to single-leg variants (squat→single-leg squat, RDL→single-leg deadlift, etc.). Use when the user wants to train legs one side at a time.
 - BE PROACTIVE with tool calls. If the user's question implies they want a plan change, CALL THE TOOL in this same response. Don't describe what you would do or ask for permission — just call the tool. The app shows a confirmation card automatically before any change applies, so the user always has the final say. Calling the tool isn't an action — it's a proposal that the user can Apply or Skip.
 - TOOL SELECTION — pick the right tool:
   - If the user wants to MOVE a workout to a SPECIFIC day, use swap_workout_days(date1, date2). This is non-destructive. Example: "move my Pull to Friday" → swap_workout_days(<pull's date>, <friday's date>). Never use change_day_type to "move" something — that's destructive.
@@ -5346,9 +5356,33 @@ const COACH_TOOLS=[{
         },
         required:['from_date']
       }
+    },
+    {
+      name:'make_legs_unilateral',
+      description:"Convert the leg exercises on a given day to single-leg (unilateral) variants — e.g. squat → single-leg squat, leg press → reverse lunge, RDL → single-leg deadlift, leg extension → single-leg leg extension. Use when the user wants to train legs one side at a time. Only works on a LEGS day. Exercises that are already unilateral (lunges, Bulgarian split squats, step-ups) are left as-is.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the leg day in YYYY-MM-DD'}
+        },
+        required:['date']
+      }
     }
   ]
 }];
+
+// Maps bilateral leg exercises to their single-leg (unilateral) equivalents.
+// Used by the make_legs_unilateral tool. Exercises already unilateral aren't
+// listed (left unchanged). No single-leg machine hamstring curl exists in the
+// image library, so curls map to single-leg RDL (a unilateral hamstring move).
+const UNILATERAL_MAP={
+  bb_squat:'sl_squat',front_squat:'sl_squat',goblet_squat:'sl_squat',bw_squat:'sl_squat',jump_squat:'sl_squat',
+  hack_squat:'reverse_lunge',leg_press:'reverse_lunge',
+  rdl:'sl_rdl',deadlift:'sl_rdl',nordic_curl:'sl_rdl',leg_curl:'sl_rdl',seated_leg_curl:'sl_rdl',
+  hip_thrust:'cable_kickback',glute_bridge:'sl_glute_bridge',
+  leg_ext:'sl_legext',
+  calf_raise:'single_calf',seated_calf:'sl_seated_calf'
+};
 
 // Maps a function name + args to a human-readable summary for the confirmation
 // card, plus the actual mutation handler. Each handler returns a short result
@@ -5550,6 +5584,35 @@ const COACH_TOOL_HANDLERS={
       }catch(e){
         return{ok:false,msg:'Regeneration failed: '+(e?.message||e)};
       }
+    }
+  },
+  make_legs_unilateral:{
+    summarize:({date})=>`Convert ${_dayLbl(date)} leg exercises to single-leg variants`,
+    execute:({date})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      const dp=plan?.find(d=>d.date===date);
+      if(!dp)return{ok:false,msg:'Date not in plan'};
+      if(dp.type!=='LEGS')return{ok:false,msg:'Not a leg day'};
+      if(!dp.exercises||!dp.exercises.length)return{ok:false,msg:'No exercises to convert'};
+      let changed=0;
+      const newEx=dp.exercises.map(id=>{
+        const u=UNILATERAL_MAP[id];
+        if(u&&u!==id&&EX[u]){changed++;return u;}
+        return id;
+      });
+      if(!changed)return{ok:false,msg:'Already all single-leg'};
+      dp.exercises=newEx;
+      DB.set(pk,plan);
+      // Update an existing incomplete log for that day so the swap is reflected
+      const lk='log_'+date;
+      const log=DB.get(lk,null);
+      if(log&&!log.completed){
+        log.exercises=newEx.map(id=>({id,sets:makeSets(id,S.energy||'okay',getLastLog(id))}));
+        DB.set(lk,log);
+      }
+      syncUp();
+      return{ok:true,msg:`Converted ${changed} exercise${changed!==1?'s':''} to single-leg`};
     }
   }
 };
