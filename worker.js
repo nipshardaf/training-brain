@@ -36,6 +36,34 @@ export default {
       });
     }
 
+    // ── YouTube video search — resolve an exercise name to an EMBEDDABLE video ──
+    // The app caches the returned videoId per exercise, so each one is searched
+    // at most once. videoEmbeddable=true guarantees it can play in the in-app
+    // iframe (some videos disable embedding). Returns {videoId, title}.
+    if (url.pathname === '/yt-search') {
+      const q = url.searchParams.get('q') || '';
+      if (!env.YOUTUBE_KEY || !q) {
+        return new Response(JSON.stringify({ videoId: null, error: 'missing key or query' }),
+          { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } });
+      }
+      try {
+        const yt = await fetch(
+          'https://www.googleapis.com/youtube/v3/search?part=snippet&type=video' +
+          '&videoEmbeddable=true&safeSearch=strict&maxResults=1&q=' +
+          encodeURIComponent(q) + '&key=' + env.YOUTUBE_KEY
+        );
+        const data = await yt.json();
+        const item = data && data.items && data.items[0];
+        return new Response(JSON.stringify({
+          videoId: (item && item.id && item.id.videoId) || null,
+          title: (item && item.snippet && item.snippet.title) || '',
+        }), { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } });
+      } catch (e) {
+        return new Response(JSON.stringify({ videoId: null, error: String(e) }),
+          { status: 200, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) } });
+      }
+    }
+
     // ── AI proxy with fallback chain: Gemini → Perplexity → OpenAI ───────────
     const body = await request.text();
     const cors = corsHeaders(origin);
@@ -128,7 +156,7 @@ export default {
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type',
   };
 }

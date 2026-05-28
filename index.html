@@ -911,10 +911,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.70';
+const APP_VERSION='2.71';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.71',d:'In-app video player — exercise demos now play inside the app (YouTube embed), no need to leave for another app',det:'Tapping 📺 Tutorial (or a placeholder card) now opens an in-app sheet that plays the demo video right there in an embedded YouTube player — no app switching. How it works: the app asks the worker to find the best embeddable tutorial video for the exercise (via the YouTube Data API), caches the video ID per exercise (searched once, then free forever), and plays it inline in an iframe (works in the installed PWA, including inline playback on iOS). If the video ID isn\'t cached and the worker/key isn\'t available yet, it gracefully falls back to the old YouTube search links — so nothing breaks during setup. A "Browse more" button under the player drops to the search links if the auto-picked video isn\'t the right one. REQUIRES a one-time setup: a free YouTube Data API key added to the Cloudflare worker (the worker.js change is included). Until that key is live, the player falls back to search links. New yt_cache storage key (synced) holds the resolved video IDs.'},
   {v:'2.70',d:'Placeholder exercises (no GIF) are now tappable "▶ Watch demo" cards opening a video tutorial',det:'For the handful of exercises with no demo GIF in the free databases (burpee, pike push-up, wall sit, foot-mobility moves), the placeholder card now shows a "▶ Watch demo" pill and is tappable — opening the YouTube tutorial search directly. Previously the placeholder looked static even though a demo was available via the separate 📺 Tutorial button. Same treatment applied to the onerror fallback, so if ANY GIF link ever breaks in future, the user still gets a clear tappable path to a video demo instead of a dead-looking card. Context: I exhausted the free hotlinkable GIF sources (free-exercise-db, wger, Wikimedia, everkinetic) — none carry these specific exercises. The only way to embed real animated GIFs for them is ExerciseDB via RapidAPI (needs an API key + a worker proxy endpoint + caching), which is a worthwhile future project when scaling but adds an external dependency. For now every exercise has either a real GIF or a tappable video demo — nobody is left without guidance.'},
   {v:'2.69',d:'Full GIF audit — every exercise checked, 7 placeholder exercises now have real demo GIFs',det:'Audited all ~90 exercises in the library against the image CDNs. Every existing free-exercise-db path resolves (200), every wger.de image URL resolves (200) — no broken links. Filled in real GIFs for 7 exercises that previously showed only a coloured placeholder: Assisted Dip (→ dip machine), Assisted Pull-Up (→ band-assisted pull-up), Adductor Machine, Abductor Machine, Single-Leg Calf Raise, Side Plank (→ side bridge), and Nordic Curl (→ natural glute-ham raise). 8 exercises remain as styled placeholders because no demo image exists in any free database: Burpee, Pike Push-Up, Wall Sit, and 5 foot-mobility physio exercises (short foot, towel scrunches, arch raise, toe spread, heel raise). These show a clean labelled card (exercise name + muscle group + icon) rather than a blank box. Note: the image loader already has an onerror fallback — if any GIF link ever breaks in future, it auto-swaps to the styled placeholder, so no exercise ever shows an empty image.'},
   {v:'2.68',d:'Single-leg exercise variants + AI "make my legs single-leg" tool. Verified all leg GIFs work.',det:'GIF AUDIT: checked every leg exercise image against the free-exercise-db CDN — all resolve (200). The few with no image (Nordic curl, single-leg calf, wall sit) intentionally show styled placeholders. YouTube tutorial links are dynamic search queries (exercise name + channel), so they can\'t break. NEW SINGLE-LEG VARIANTS added to the library: Single-Leg Squat, Reverse Lunge, Single-Leg Leg Extension, Single-Leg Deadlift, Cable Glute Kickback, Single-Leg Seated Calf — all with working GIFs, joining the existing Bulgarian Split Squat, walking lunge, step-up, single-leg glute bridge, single-leg calf, and donkey kick. They appear automatically in the manual "🔄 Swap exercise" menu under "Same muscle group" — but are NOT forced into the default rotation (no preference toggle, as requested). NEW AI TOOL: ask the coach "change my leg day to single-leg" (or "make my legs unilateral") and it calls make_legs_unilateral(date), which swaps each bilateral leg exercise to its single-leg equivalent — squat→single-leg squat, leg press→reverse lunge, RDL/curl→single-leg deadlift, hip thrust→cable kickback, leg extension→single-leg extension, calf→single-leg calf. Shows a confirmation card before applying like all plan changes.'},
@@ -3130,37 +3131,77 @@ function toggleAnim(xid,btn){
   btn.textContent='⏹';
 }
 
+// Opens the demo-video sheet. Resolves a real embeddable YouTube video ID
+// (cached per exercise, or fetched once via the worker) and plays it inline in
+// an iframe. Falls back to YouTube search links if no video / worker / key.
 function openVid(xid){
   const ex=EX[xid];if(!ex)return;
-  const q=encodeURIComponent(ex.n+' exercise proper form tutorial');
-  const ytSearch='https://www.youtube.com/results?search_query='+q;
-  // Build search suggestions for different channels
-  const searches=[
-    {label:'🔍 YouTube Search',url:ytSearch},
-    {label:'📺 Jeff Nippard',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Jeff Nippard '+ex.n)},
-    {label:'📺 Alan Thrall',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Alan Thrall '+ex.n)},
-    {label:'📺 AthleanX',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('AthleanX '+ex.n)},
-  ];
   const modal=document.createElement('div');
   modal.id='vid-modal';
   modal.style.cssText='position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:flex-end';
   modal.innerHTML=`
-<div onclick="closeVid()" style="position:absolute;inset:0;background:rgba(0,0,0,.65);backdrop-filter:blur(6px)"></div>
-<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:430px;padding:20px 16px calc(var(--sb,0px) + 20px);z-index:1">
-  <div style="width:36px;height:4px;background:var(--bord);border-radius:4px;margin:0 auto 16px"></div>
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+<div onclick="closeVid()" style="position:absolute;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px)"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:430px;padding:18px 16px calc(var(--sb,0px) + 18px);z-index:1">
+  <div style="width:36px;height:4px;background:var(--bord);border-radius:4px;margin:0 auto 14px"></div>
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div style="font-size:16px;font-weight:800">${ex.n}</div>
     <button onclick="closeVid()" style="background:var(--s2);border:none;border-radius:8px;color:var(--t2);font-size:18px;line-height:1;padding:6px 10px;cursor:pointer;-webkit-appearance:none">✕</button>
   </div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:16px">${ex.m} · Tutorial videos open in YouTube</div>
-  ${searches.map(s=>`
-  <a href="${s.url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:14px 16px;background:var(--s2);border:1px solid var(--bord);border-radius:14px;margin-bottom:10px;text-decoration:none;color:var(--txt)">
+  <div style="font-size:12px;color:var(--t2);margin-bottom:14px">${ex.m}</div>
+  <div id="vid-body"><div style="text-align:center;padding:48px 0;color:var(--t2);font-size:13px">⏳ Finding demo video…</div></div>
+</div>`;
+  document.body.appendChild(modal);
+  _resolveAndPlayVid(xid);
+}
+
+async function _resolveAndPlayVid(xid){
+  const ex=EX[xid];if(!ex)return;
+  // 1. Cached video ID for this exercise?
+  const cache=DB.get('yt_cache',{})||{};
+  if(cache[xid]&&cache[xid].videoId){_renderVidPlayer(xid,cache[xid].videoId);return;}
+  // 2. Ask the worker to resolve it (one search, then cached forever)
+  try{
+    const q=ex.n+' exercise proper form tutorial';
+    const r=await fetch(GEMINI_PROXY+'/yt-search?q='+encodeURIComponent(q));
+    if(r.ok){
+      const data=await r.json();
+      if(data&&data.videoId){
+        cache[xid]={videoId:data.videoId,title:data.title||'',at:Date.now()};
+        DB.set('yt_cache',cache);
+        debouncedSync&&debouncedSync();
+        _renderVidPlayer(xid,data.videoId);
+        return;
+      }
+    }
+  }catch(e){console.warn('yt-search failed:',e);}
+  // 3. Fallback — search links (in-app player not available yet)
+  _renderVidSearchLinks(xid);
+}
+
+function _renderVidPlayer(xid,videoId){
+  const body=document.getElementById('vid-body');if(!body)return;
+  body.innerHTML=`
+  <div style="position:relative;width:100%;aspect-ratio:16/9;background:#000;border-radius:14px;overflow:hidden;margin-bottom:10px">
+    <iframe src="https://www.youtube.com/embed/${videoId}?playsinline=1&rel=0&modestbranding=1" style="position:absolute;inset:0;width:100%;height:100%;border:0" allow="accelerometer;autoplay;encrypted-media;gyroscope;picture-in-picture" allowfullscreen></iframe>
+  </div>
+  <button onclick="_renderVidSearchLinks('${xid}')" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--t2);font-size:12px;font-weight:600;padding:9px;cursor:pointer">🔍 Not the right one? Browse more</button>`;
+}
+
+function _renderVidSearchLinks(xid){
+  const body=document.getElementById('vid-body');if(!body)return;
+  const ex=EX[xid];
+  const searches=[
+    {label:'🔍 YouTube Search',url:'https://www.youtube.com/results?search_query='+encodeURIComponent(ex.n+' exercise proper form tutorial')},
+    {label:'📺 Jeff Nippard',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Jeff Nippard '+ex.n)},
+    {label:'📺 Alan Thrall',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Alan Thrall '+ex.n)},
+    {label:'📺 AthleanX',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('AthleanX '+ex.n)},
+  ];
+  body.innerHTML=`<div style="font-size:11px;color:var(--t2);margin-bottom:10px">Opens in YouTube:</div>`+searches.map(s=>`
+  <a href="${s.url}" target="_blank" style="display:flex;align-items:center;gap:12px;padding:13px 16px;background:var(--s2);border:1px solid var(--bord);border-radius:14px;margin-bottom:10px;text-decoration:none;color:var(--txt)">
     <span style="font-size:20px">${s.label.split(' ')[0]}</span>
     <span style="font-size:14px;font-weight:600">${s.label.split(' ').slice(1).join(' ')}</span>
     <span style="margin-left:auto;color:var(--t2);font-size:16px">›</span>
-  </a>`).join('')}
-</div>`;
-  document.body.appendChild(modal);
+  </a>`).join('');
 }
 function closeVid(){
   document.getElementById('vid-modal')?.remove();
@@ -3744,7 +3785,7 @@ async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
   const data={};
   const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen'];
+    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache'];
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
     if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
