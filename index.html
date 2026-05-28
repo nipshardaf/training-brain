@@ -325,9 +325,9 @@ const EX = {
   skull:       {n:'Skull Crushers',         g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Triceps',                 p:'EZ-Bar_Skullcrusher'},
   tri_oh:      {n:'Overhead Tricep Ext.',   g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Cable_Rope_Overhead_Triceps_Extension'},
   dips:        {n:'Tricep Dips',            g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:'Dips_-_Triceps_Version'},
-  assisted_dip:{n:'Assisted Dip',          g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'6',  m:'Triceps · Chest',         p:null},
+  assisted_dip:{n:'Assisted Dip',          g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'6',  m:'Triceps · Chest',         p:'Dip_Machine'},
   pullup:      {n:'Pull-Ups',              g:'vback',    t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Lats · Biceps',           p:'Pullups'},
-  assisted_pullup:{n:'Assisted Pull-Up',   g:'vback',    t:'C',sets:3,reps:'8–12', rpe:'6',  m:'Lats · Biceps',           p:null},
+  assisted_pullup:{n:'Assisted Pull-Up',   g:'vback',    t:'C',sets:3,reps:'8–12', rpe:'6',  m:'Lats · Biceps',           p:'Band_Assisted_Pull-Up'},
   lat_pull:    {n:'Lat Pulldown',          g:'vback',    t:'C',sets:4,reps:'8–10', rpe:'7',  m:'Lats · Biceps',           p:'Wide-Grip_Lat_Pulldown'},
   bb_row:      {n:'Barbell Row',           g:'hback_h',  t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Back · Biceps',           p:'Bent_Over_Barbell_Row'},
   tbar_row:    {n:'T-Bar Row',             g:'hback_h',  t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Back',                   p:'T-Bar_Row_with_Handle'},
@@ -350,19 +350,19 @@ const EX = {
   goblet_squat:{n:'Goblet Squat',         g:'quad',     t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Quads · Glutes',          p:'Goblet_Squat'},
   hack_squat:  {n:'Hack Squat',           g:'quad',     t:'C',sets:4,reps:'8–10', rpe:'8',  m:'Quads',                   p:'Hack_Squat'},
   leg_ext:     {n:'Leg Extension',        g:'quad',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Quads',                   p:'Leg_Extensions'},
-  adductor_mach:{n:'Adductor Machine',    g:'quad',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Inner Thighs',            p:null},
-  abductor_mach:{n:'Abductor Machine',    g:'quad',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Outer Hips · Glutes',     p:null},
+  adductor_mach:{n:'Adductor Machine',    g:'quad',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Inner Thighs',            p:'Thigh_Adductor'},
+  abductor_mach:{n:'Abductor Machine',    g:'quad',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Outer Hips · Glutes',     p:'Thigh_Abductor'},
   rdl:         {n:'Romanian Deadlift',    g:'ham',      t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Hamstrings · Glutes',     p:'Romanian_Deadlift'},
   deadlift:    {n:'Conventional Deadlift',g:'ham',      t:'C',sets:4,reps:'5–6',  rpe:'8–9',m:'Full Posterior Chain',    p:'Barbell_Deadlift'},
   hip_thrust:  {n:'Barbell Hip Thrust',   g:'ham',      t:'C',sets:4,reps:'10–12',rpe:'8',  m:'Glutes · Hamstrings',     p:'Barbell_Hip_Thrust'},
   glute_bridge:{n:'Glute Bridge',         g:'ham',      t:'C',sets:3,reps:'12–15',rpe:'6',  m:'Glutes · Hamstrings',     p:'Barbell_Glute_Bridge'},
   glute_kick:  {n:'Cable Glute Kickback', g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Glutes',                  p:'Glute_Kickback',                          uni:true},
-  nordic_curl: {n:'Nordic Curl',          g:'ham',      t:'C',sets:3,reps:'5–8',  rpe:'9',  m:'Hamstrings',              p:null},
+  nordic_curl: {n:'Nordic Curl',          g:'ham',      t:'C',sets:3,reps:'5–8',  rpe:'9',  m:'Hamstrings',              p:'Natural_Glute_Ham_Raise'},
   leg_curl:    {n:'Lying Leg Curl',       g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Lying_Leg_Curls'},
   seated_leg_curl:{n:'Seated Leg Curl',   g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Seated_Leg_Curl'},
   calf_raise:  {n:'Standing Calf Raise',  g:'calf',     t:'I',sets:4,reps:'15–20',rpe:'7',  m:'Calves',                  p:'Standing_Calf_Raises'},
   seated_calf: {n:'Seated Calf Raise',    g:'calf',     t:'I',sets:4,reps:'15–20',rpe:'7',  m:'Calves · Soleus',         p:'Seated_Calf_Raise'},
-  single_calf: {n:'Single-Leg Calf Raise',g:'calf',     t:'I',sets:3,reps:'15–20',rpe:'7',  m:'Calves',                  p:null,                                      uni:true},
+  single_calf: {n:'Single-Leg Calf Raise',g:'calf',     t:'I',sets:3,reps:'15–20',rpe:'7',  m:'Calves',                  p:'Calf_Raise_On_A_Dumbbell',                uni:true},
   plank:       {n:'Plank',               g:'core',     t:'I',sets:3,reps:'45s',  rpe:'6',  m:'Core',                    p:'Plank'},
   hang_raise:  {n:'Hanging Leg Raise',   g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Abs',               p:'Hanging_Leg_Raise'},
   ab_wheel:    {n:'Ab Wheel Rollout',    g:'core',     t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Core',                    p:'Ab_Roller'},
@@ -396,7 +396,7 @@ const EX = {
   sl_seated_calf:{n:'Single-Leg Seated Calf',g:'calf',   t:'I',sets:3,reps:'15/leg',rpe:'7',  m:'Calves · Soleus',         p:'Dumbbell_Seated_One-Leg_Calf_Raise',      uni:true},
   mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:'Mountain_Climbers', bw:true},
   bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:['https://wger.de/media/exercise-images/176/Cross-body-crunch-1.png','https://wger.de/media/exercise-images/176/Cross-body-crunch-2.png'], bw:true},
-  side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:null, bw:true, uni:true},
+  side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:'Side_Bridge', bw:true, uni:true},
   leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:['https://wger.de/media/exercise-images/125/Leg-raises-1.png','https://wger.de/media/exercise-images/125/Leg-raises-2.png'], bw:true},
   crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:'Crunches', bw:true},
   burpee:       {n:'Burpee',               g:'core',     t:'C',sets:3,reps:'10–15', rpe:'8', m:'Full Body',               p:null, bw:true},
@@ -911,10 +911,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.68';
+const APP_VERSION='2.69';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.69',d:'Full GIF audit — every exercise checked, 7 placeholder exercises now have real demo GIFs',det:'Audited all ~90 exercises in the library against the image CDNs. Every existing free-exercise-db path resolves (200), every wger.de image URL resolves (200) — no broken links. Filled in real GIFs for 7 exercises that previously showed only a coloured placeholder: Assisted Dip (→ dip machine), Assisted Pull-Up (→ band-assisted pull-up), Adductor Machine, Abductor Machine, Single-Leg Calf Raise, Side Plank (→ side bridge), and Nordic Curl (→ natural glute-ham raise). 8 exercises remain as styled placeholders because no demo image exists in any free database: Burpee, Pike Push-Up, Wall Sit, and 5 foot-mobility physio exercises (short foot, towel scrunches, arch raise, toe spread, heel raise). These show a clean labelled card (exercise name + muscle group + icon) rather than a blank box. Note: the image loader already has an onerror fallback — if any GIF link ever breaks in future, it auto-swaps to the styled placeholder, so no exercise ever shows an empty image.'},
   {v:'2.68',d:'Single-leg exercise variants + AI "make my legs single-leg" tool. Verified all leg GIFs work.',det:'GIF AUDIT: checked every leg exercise image against the free-exercise-db CDN — all resolve (200). The few with no image (Nordic curl, single-leg calf, wall sit) intentionally show styled placeholders. YouTube tutorial links are dynamic search queries (exercise name + channel), so they can\'t break. NEW SINGLE-LEG VARIANTS added to the library: Single-Leg Squat, Reverse Lunge, Single-Leg Leg Extension, Single-Leg Deadlift, Cable Glute Kickback, Single-Leg Seated Calf — all with working GIFs, joining the existing Bulgarian Split Squat, walking lunge, step-up, single-leg glute bridge, single-leg calf, and donkey kick. They appear automatically in the manual "🔄 Swap exercise" menu under "Same muscle group" — but are NOT forced into the default rotation (no preference toggle, as requested). NEW AI TOOL: ask the coach "change my leg day to single-leg" (or "make my legs unilateral") and it calls make_legs_unilateral(date), which swaps each bilateral leg exercise to its single-leg equivalent — squat→single-leg squat, leg press→reverse lunge, RDL/curl→single-leg deadlift, hip thrust→cable kickback, leg extension→single-leg extension, calf→single-leg calf. Shows a confirmation card before applying like all plan changes.'},
   {v:'2.67',d:'Fix: chat ↑Top / ↓Latest buttons were the same purple as sent messages — now high-contrast dark',det:'The floating scroll buttons in the Ask Coach thread used the accent purple (rgba(124,58,237,.92)), identical to the user\'s sent-message bubbles. When a button overlapped a sent bubble it was nearly invisible. Changed to a high-contrast dark pill (near-black rgba(17,24,39,.92)) with a subtle white border and stronger shadow — stands out clearly against both the purple user bubbles and the grey coach bubbles.'},
   {v:'2.66',d:'Progressive overload targets — each exercise now prescribes a weight × reps to chase, derived from your last session + goal',det:'The generator was prefilling each set by simply copying your last session\'s numbers — no progression. Now it computes a real target using standard double-progression: (1) finds your heaviest top set from the last completed session of that exercise; (2) if every set hit the top of your goal\'s rep range, it bumps the weight by your goal\'s progression step (2.5kg/5lb for muscle/fitness/endurance, 0 for lose_weight = hold weights in a deficit) and resets to the bottom of the rep range; (3) otherwise it holds the weight and asks for one more rep. The set inputs pre-fill with the target, and a "🎯 Target: 100lb × 8" banner appears on each exercise with a coloured pill showing the move (↑ +5lb / +1 rep / hold) and a one-line reason ("hit top of 6-12 rep range — progressing weight"). No history yet? It anchors to your PR, or asks you to enter a starting weight. The rep range comes from your blended goal profile (v2.59), so muscle goals target 6-12, endurance targets 5-8, etc.'},
