@@ -911,10 +911,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.72';
+const APP_VERSION='2.73';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.73',d:'Ask Coach can now control individual exercises, reps, and weights — not just whole days',det:'Two new tools give the AI coach full control over the contents of a gym day. (1) swap_exercise(date, from, to) — replace a specific exercise with another, e.g. "swap my barbell bench for dumbbell press on Tuesday" or "change leg extensions to hack squats today." Both names are fuzzy-matched against the library, the slot position is preserved, and any in-progress log is updated. (2) set_exercise_targets(date, exercise, sets, reps, weight) — prescribe the loading for a specific lift, e.g. "set my squat to 5 sets of 5 at 100kg on Friday" or "make today\'s bench 4x8." Omitted fields keep their current value; the targets pre-fill in your log so you just confirm your actual sets. To support this, the AI now sees the full exercise list (with prescribed sets×reps) for every gym day in its context — so it can reference and modify exercises by name. Both tools show a confirmation card before applying, like every other plan change. Combined with the existing day-level tools (swap days, rest, cascade) and make_legs_unilateral, the coach can now reshape your week from the calendar down to the individual set.'},
   {v:'2.72',d:'"Busy?" button renamed to "Swap" — covers any reason for switching an exercise, not just a busy machine',det:'The exercise-swap button said "🔁 Busy?", implying the only reason to switch was a taken machine. But you might want a different exercise for any reason — injury, equipment missing, preference, or just variety. Renamed to "🔄 Swap" (English) / "更換動作" (Chinese). Also updated the hardcoded "Machine busy? Swap exercise" button in the set-logging view to just "🔄 Swap exercise". Same swap menu behind it — just clearer, more universal wording.'},
   {v:'2.71',d:'In-app video player — exercise demos now play inside the app (YouTube embed), no need to leave for another app',det:'Tapping 📺 Tutorial (or a placeholder card) now opens an in-app sheet that plays the demo video right there in an embedded YouTube player — no app switching. How it works: the app asks the worker to find the best embeddable tutorial video for the exercise (via the YouTube Data API), caches the video ID per exercise (searched once, then free forever), and plays it inline in an iframe (works in the installed PWA, including inline playback on iOS). If the video ID isn\'t cached and the worker/key isn\'t available yet, it gracefully falls back to the old YouTube search links — so nothing breaks during setup. A "Browse more" button under the player drops to the search links if the auto-picked video isn\'t the right one. REQUIRES a one-time setup: a free YouTube Data API key added to the Cloudflare worker (the worker.js change is included). Until that key is live, the player falls back to search links. New yt_cache storage key (synced) holds the resolved video IDs.'},
   {v:'2.70',d:'Placeholder exercises (no GIF) are now tappable "▶ Watch demo" cards opening a video tutorial',det:'For the handful of exercises with no demo GIF in the free databases (burpee, pike push-up, wall sit, foot-mobility moves), the placeholder card now shows a "▶ Watch demo" pill and is tappable — opening the YouTube tutorial search directly. Previously the placeholder looked static even though a demo was available via the separate 📺 Tutorial button. Same treatment applied to the onerror fallback, so if ANY GIF link ever breaks in future, the user still gets a clear tappable path to a video demo instead of a dead-looking card. Context: I exhausted the free hotlinkable GIF sources (free-exercise-db, wger, Wikimedia, everkinetic) — none carry these specific exercises. The only way to embed real animated GIFs for them is ExerciseDB via RapidAPI (needs an API key + a worker proxy endpoint + caching), which is a worthwhile future project when scaling but adds an external dependency. For now every exercise has either a real GIF or a tappable video demo — nobody is left without guidance.'},
@@ -5166,7 +5167,9 @@ function buildAskPrompt(question){
   const fitTxt=d.fitness?`CTL ${d.fitness.ctl} (fitness) / ATL ${d.fitness.atl} (fatigue) / TSB ${d.fitness.tsb>0?'+':''}${d.fitness.tsb} (form). 7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'}.`:'No fitness curve available.';
   const wTxt=d.weight?`${d.weight.current} kg, ${d.weight.rate_kg_per_week>0?'+':''}${d.weight.rate_kg_per_week} kg/wk, 28d Δ ${d.weight.d28!=null?d.weight.d28+'kg':'n/a'}`:'no weight log';
   // Full current week plan — important for "swap day X" type questions so AI sees
-  // what's on each day, not just today
+  // what's on each day. v2.73: gym days also list their exercises (with prescribed
+  // sets×reps) so the AI can swap exercises and set targets by name.
+  const _gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
   const weekPlanLines=[];
   if(wPlan){
     for(const day of [...wPlan].sort((a,b)=>a.date.localeCompare(b.date))){
@@ -5176,6 +5179,13 @@ function buildAskPrompt(question){
       const extra=day.extraGym?` + extra ${_typeLabel[day.extraGym.type]||day.extraGym.type}`:'';
       const lock=day.locked?' [locked]':'';
       weekPlanLines.push(`  ${day.date} ${day.date===todayStr?'(TODAY)':''}: ${_typeLabel[day.type]||day.type}${extra}${lock}${status}`);
+      // For gym days, list the exercises so the AI can reference/modify them by name
+      if(_gymTypes.includes(day.type)&&day.exercises?.length){
+        for(const exId of day.exercises){
+          const ex=EX[exId];if(!ex)continue;
+          weekPlanLines.push(`      - ${ex.n} (${ex.sets}×${ex.reps}, RPE ${ex.rpe})`);
+        }
+      }
     }
   }
   // Recent training (last 7 days, compressed)
@@ -5236,6 +5246,8 @@ CAPABILITIES — what you can do:
   · log_gym_sets(date, exercises[]) — log structured gym sets. Each exercise has a name (fuzzy-matched against the library) and an array of {weight, reps} sets. Use when user dictates a workout like "bench 100 lb 3x8, OHP 65 lb 3x10". Weight is in the user's preferred unit. Updates PRs automatically.
   · regenerate_remaining_week(from_date) — regenerate plan from a date forward, preserving prior days and locked days.
   · make_legs_unilateral(date) — convert a leg day's exercises to single-leg variants (squat→single-leg squat, RDL→single-leg deadlift, etc.). Use when the user wants to train legs one side at a time.
+  · swap_exercise(date, from_exercise, to_exercise) — replace a specific exercise on a gym day with a different one (e.g. barbell bench → dumbbell press). Both names fuzzy-matched.
+  · set_exercise_targets(date, exercise, sets?, reps?, weight?) — prescribe the sets/reps/weight for a specific exercise (e.g. "set squat to 5x5 at 100kg"). Omitted fields keep their current value.
 - BE PROACTIVE with tool calls. If the user's question implies they want a plan change, CALL THE TOOL in this same response. Don't describe what you would do or ask for permission — just call the tool. The app shows a confirmation card automatically before any change applies, so the user always has the final say. Calling the tool isn't an action — it's a proposal that the user can Apply or Skip.
 - TOOL SELECTION — pick the right tool:
   - If the user wants to MOVE a workout to a SPECIFIC day, use swap_workout_days(date1, date2). This is non-destructive. Example: "move my Pull to Friday" → swap_workout_days(<pull's date>, <friday's date>). Never use change_day_type to "move" something — that's destructive.
@@ -5411,6 +5423,34 @@ const COACH_TOOLS=[{
           date:{type:'STRING',description:'Date of the leg day in YYYY-MM-DD'}
         },
         required:['date']
+      }
+    },
+    {
+      name:'swap_exercise',
+      description:"Replace one exercise on a gym day with a different one. Use when the user wants to change a specific lift — e.g. 'swap my barbell bench for dumbbell press on Tuesday' or 'replace leg extensions with hack squats today'. Both exercise names are fuzzy-matched against the library. The replacement keeps the same slot position.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the gym day in YYYY-MM-DD'},
+          from_exercise:{type:'STRING',description:'Name of the exercise to replace (e.g. "barbell bench press")'},
+          to_exercise:{type:'STRING',description:'Name of the new exercise (e.g. "dumbbell bench press")'}
+        },
+        required:['date','from_exercise','to_exercise']
+      }
+    },
+    {
+      name:'set_exercise_targets',
+      description:"Set the target sets, reps, and/or weight for a specific exercise on a gym day. Use when the user wants to prescribe loading — e.g. 'set my squat to 5 sets of 5 at 100kg on Friday' or 'make today's bench 4x8'. The exercise name is fuzzy-matched. Weight is in the user's preferred unit. Any omitted field keeps its current/default value. This pre-fills the targets in the log — the user still logs their actual sets.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the gym day in YYYY-MM-DD'},
+          exercise:{type:'STRING',description:'Name of the exercise to set targets for'},
+          sets:{type:'INTEGER',description:'Target number of sets (optional)'},
+          reps:{type:'INTEGER',description:'Target reps per set (optional)'},
+          weight:{type:'NUMBER',description:'Target weight per set in the user\'s preferred unit (optional)'}
+        },
+        required:['date','exercise']
       }
     }
   ]
@@ -5659,8 +5699,104 @@ const COACH_TOOL_HANDLERS={
       syncUp();
       return{ok:true,msg:`Converted ${changed} exercise${changed!==1?'s':''} to single-leg`};
     }
+  },
+  swap_exercise:{
+    summarize:({date,from_exercise,to_exercise})=>{
+      const f=_matchExerciseByName(from_exercise),t=_matchExerciseByName(to_exercise);
+      return`Swap ${f?EX[f].n:from_exercise} → ${t?EX[t].n:to_exercise} on ${_dayLbl(date)}`;
+    },
+    execute:({date,from_exercise,to_exercise})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      const dp=plan?.find(d=>d.date===date);
+      if(!dp)return{ok:false,msg:'Date not in plan'};
+      if(!dp.exercises||!dp.exercises.length)return{ok:false,msg:'No exercises on that day'};
+      const fromId=_matchExerciseByName(from_exercise);
+      const toId=_matchExerciseByName(to_exercise);
+      if(!fromId)return{ok:false,msg:`Couldn't find "${from_exercise}"`};
+      if(!toId)return{ok:false,msg:`Couldn't find "${to_exercise}"`};
+      const idx=dp.exercises.indexOf(fromId);
+      if(idx<0)return{ok:false,msg:`${EX[fromId].n} isn't in that day's plan`};
+      if(dp.exercises.includes(toId))return{ok:false,msg:`${EX[toId].n} is already in the plan`};
+      dp.exercises[idx]=toId;
+      DB.set(pk,plan);
+      // Reflect in an incomplete log
+      const lk='log_'+date;
+      const log=DB.get(lk,null);
+      if(log&&!log.completed){
+        const li=log.exercises.findIndex(e=>e.id===fromId);
+        if(li>=0)log.exercises[li]={id:toId,sets:makeSets(toId,S.energy||'okay',getLastLog(toId))};
+        DB.set(lk,log);
+      }
+      syncUp();
+      return{ok:true,msg:`Swapped ${EX[fromId].n} → ${EX[toId].n}`};
+    }
+  },
+  set_exercise_targets:{
+    summarize:({date,exercise,sets,reps,weight})=>{
+      const m=_matchExerciseByName(exercise);
+      const parts=[];
+      if(sets!=null)parts.push(`${sets} sets`);
+      if(reps!=null)parts.push(`${reps} reps`);
+      if(weight!=null)parts.push(`${weight}${unit()}`);
+      return`Set ${m?EX[m].n:exercise} to ${parts.join(' · ')||'targets'} on ${_dayLbl(date)}`;
+    },
+    execute:({date,exercise,sets,reps,weight})=>{
+      const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
+      const plan=DB.get(pk,null);
+      const dp=plan?.find(d=>d.date===date);
+      if(!dp)return{ok:false,msg:'Date not in plan'};
+      const exId=_matchExerciseByName(exercise);
+      if(!exId)return{ok:false,msg:`Couldn't find "${exercise}"`};
+      if(!dp.exercises||!dp.exercises.includes(exId))return{ok:false,msg:`${EX[exId].n} isn't in that day's plan`};
+      // Determine the set count: explicit, else existing log, else exercise default
+      const lk='log_'+date;
+      let log=DB.get(lk,null);
+      if(!log){
+        log={date,type:dp.type,exercises:dp.exercises.map(id=>({id,sets:makeSets(id,S.energy||'okay',getLastLog(id))})),completed:false};
+      }
+      let le=log.exercises.find(e=>e.id===exId);
+      if(!le){le={id:exId,sets:makeSets(exId,S.energy||'okay',getLastLog(exId))};log.exercises.push(le);}
+      const nSets=sets!=null?Math.max(1,Math.min(10,sets)):(le.sets.length||EX[exId].sets||3);
+      // Build the prescribed sets: each gets weight/reps if provided, else keep prior value
+      const prevW=le.sets[0]?.w||'';
+      const prevR=le.sets[0]?.r||'';
+      const w=weight!=null?String(weight):prevW;
+      const r=reps!=null?String(reps):prevR;
+      le.sets=Array.from({length:nSets},()=>({w,r,done:false,_edited:!!w,_tgt:true}));
+      DB.set(lk,log);
+      syncUp();
+      const parts=[];
+      if(sets!=null)parts.push(`${nSets} sets`);
+      if(reps!=null)parts.push(`${reps} reps`);
+      if(weight!=null)parts.push(`${weight}${unit()}`);
+      return{ok:true,msg:`${EX[exId].n}: ${parts.join(' · ')||'targets set'}`};
+    }
   }
 };
+
+// Fuzzy-match an exercise name against the EX library. Returns the exercise id
+// or null. Shared by the AI tools (swap_exercise, set_exercise_targets,
+// log_gym_sets). Scores by portion of input words found in the exercise name.
+function _matchExerciseByName(name){
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+  const target=norm(name);
+  if(!target)return null;
+  const words=target.split(/\s+/);
+  let best=null,bestScore=0;
+  for(const [id,ex] of Object.entries(EX)){
+    const exName=norm(ex.n);
+    let score;
+    if(exName===target)score=1000;
+    else{
+      const matched=words.filter(w=>exName.includes(w)).length;
+      score=(matched/words.length)*100;
+      if(matched===words.length)score+=50-Math.min(exName.length,50);
+    }
+    if(score>bestScore){bestScore=score;best=id;}
+  }
+  return bestScore>=50?best:null;
+}
 
 // Compact label helpers used in confirmation summaries
 function _dayLbl(dateStr){
