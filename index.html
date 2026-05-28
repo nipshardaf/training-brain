@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.63';
+const APP_VERSION='2.64';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.64',d:'Skipped muscle groups now prioritised in next week\'s plan — catch-up logic + visible hint banner',det:'BEFORE: the planner continued the PPL rotation from whatever you last completed. If you did Pull Wed then Push Fri, next week would start at Pull again (since Push was most recent), repeating Pull while Legs got skipped for a second week. AFTER: planner now calls getMostNeededGymType() which tracks each gym type\'s last-completed date over a 14-day window and starts the next week\'s rotation from whichever type has the LONGEST gap. If Legs was skipped, Legs now leads off the next week regardless of what you did most recently. Ties (e.g. both Legs and Upper untouched) break in canonical PPL order. When all four types are hit recently, falls back to the previous behavior (oldest-first). A new 💡 hint banner appears on the Week view explaining the catch-up: "Legs skipped recently — your plan this week starts with legs so you don\'t fall further behind (quads, hamstrings, glutes)." Auto-hides when the plan is balanced.'},
   {v:'2.63',d:'Chat thread auto-scrolls to latest on expand + new floating ↑Top / ↓Latest navigation buttons',det:'Three improvements to the Ask Coach thread. (1) AUTO-SCROLL ON EXPAND — when you tap to expand the collapsed chat panel, the thread now jumps to the very bottom so the latest message is visible immediately (in addition to the existing page-scroll that brings the panel into view). No more "where did the response go?" moments. (2) ↑ TOP BUTTON — a small floating purple pill in the top-right corner of the chat thread. Tap to smooth-scroll the thread to the very first message. Auto-hides when you\'re already at the top. (3) ↓ LATEST BUTTON — same pill in the bottom-right corner. Tap to smooth-scroll back to the most recent message. Auto-hides when you\'re at the bottom. Both buttons appear only when the thread is tall enough to scroll. Behavior follows the user\'s explicit request: at the top, only ↓ Latest is shown; at the bottom (default), only ↑ Top is shown; in the middle, both are visible.'},
   {v:'2.62',d:'Ask Coach collapse: tap anywhere on the header to toggle (matches exercise-card pattern)',det:'v2.60 added a small ▲ button as the only way to collapse the Ask Coach panel — inconsistent with the rest of the app where exercise cards toggle on the whole header click. Updated to match: the title + tier badge + chevron on the LEFT side of the expanded header is one large click target that toggles. Right-side controls (quota counter, 🗑 Reset) stay non-collapsing. Collapsed view already had the whole-row click pattern from v2.60 — kept that, just changed the chevron from "▼ Expand" to a simpler ▶ that mirrors how collapsed exercise cards work.'},
   {v:'2.61',d:'Fix: "Set goal" weight now uses the same bottom-sheet modal as Log weight (was a leftover browser prompt)',det:'There were two definitions of editWeightGoal() in the file: a clean wrapper that called openWeightSheet(\'goal\') at line 6852, and an old browser-prompt version at line 7387 that was overriding it (later definition wins in JavaScript). When you tapped 🎯 Set goal you got the old prompt() dialog instead of the new modal. Removed the duplicate. The goal flow now uses the same bottom-sheet design as logging a weigh-in: numeric input, lb/kg toggle, live conversion, Save/Cancel/Clear buttons. Consistent with the rest of the weight UI.'},
@@ -2782,6 +2783,35 @@ function getActiveGoalProfile(){
   return blendGoalProfile(goals,p.goalRanks);
 }
 
+// v2.64 — hint banner on the Week view when next week's plan is prioritising a
+// gym type that was skipped recently. Only shows on the current week (planning
+// horizon), only when the current week's plan actually contains the needed type.
+function rCatchUpHint(){
+  // Suppress for guests and unauthed users
+  if(S.guest||!S.fbUser)return'';
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(!plan)return'';
+  // Only show on the current week (not when reviewing past weeks)
+  const today=new Date();
+  const ws=fd(S.weekStart);
+  const we=fd(addDays(S.weekStart,6));
+  if(fd(today)<ws||fd(today)>we)return'';
+  const hint=getGymBalanceHint();
+  if(!hint)return'';
+  // Confirm the prioritised type actually appears in this week's plan
+  const inPlan=plan.some(d=>d.type===hint.type);
+  if(!inPlan)return'';
+  const niceLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper-body pump'}[hint.type]||hint.type;
+  const muscleHint={PUSH:'Chest, shoulders, triceps',PULL:'Back, biceps',LEGS:'Quads, hamstrings, glutes',UPPER_PUMP:'Full upper body'}[hint.type]||'';
+  return`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:12px;padding:11px 14px;margin-bottom:12px;display:flex;gap:10px;align-items:flex-start">
+  <span style="font-size:16px;line-height:1.2;flex-shrink:0">💡</span>
+  <div style="flex:1;font-size:12px;line-height:1.5">
+    <span style="color:var(--al);font-weight:700">${niceLabel} skipped recently</span> — your plan this week starts with ${niceLabel.toLowerCase()} so you don't fall further behind${muscleHint?` (${muscleHint.toLowerCase()})`:''}.
+  </div>
+</div>`;
+}
+
 function getLastGymType(){
   // Scan back up to 28 days for the last completed gym workout type
   for(let i=1;i<=28;i++){
@@ -2794,6 +2824,56 @@ function getLastGymType(){
     }
   }
   return'UPPER_PUMP'; // default so PUSH comes next
+}
+
+// Returns the gym type with the LONGEST gap since it was last completed.
+// Used to anchor next week's rotation so neglected muscle groups get priority.
+// v2.64: addresses the case where the rotation-continuation logic would
+// otherwise repeat a recently-done type ahead of a long-skipped one.
+// e.g. user did Pull (Wed) then Push (Fri) — old logic: next=Pull (repeats),
+//      new logic: next=Legs (longest gap, never done in 14 days).
+function getMostNeededGymType(){
+  // Track how many days ago each gym type was last completed.
+  // -Infinity means "not seen in the lookback window" (highest priority).
+  const lastSeen={PUSH:-Infinity,PULL:-Infinity,LEGS:-Infinity,UPPER_PUMP:-Infinity};
+  for(let i=1;i<=14;i++){
+    const d=addDays(new Date(),-i);
+    const log=DB.get(DB.lk(d),null);
+    if(log?.exercises?.some(e=>e.sets.some(s=>s.done))){
+      const plan=DB.get(DB.pk(getMon(d)),null);
+      const dp=plan?.find(x=>x.date===fd(d));
+      if(dp&&GYM_SEQ.includes(dp.type)){
+        // Record the FIRST time we encounter each type (scanning back = most recent)
+        if(lastSeen[dp.type]===-Infinity)lastSeen[dp.type]=i;
+      }
+    }
+  }
+  // If any type was never seen in the window, it's the highest-priority "skipped" type.
+  // When multiple are tied at -Infinity, pick the one earliest in canonical PPL order.
+  for(const t of GYM_SEQ){
+    if(lastSeen[t]===-Infinity)return t;
+  }
+  // All types have been done recently — return the one done longest ago.
+  return Object.entries(lastSeen).sort((a,b)=>b[1]-a[1])[0][0];
+}
+
+// Diagnostic: returns {type, daysSince} for the currently-most-needed type.
+// Used by the UI to show a "💡 X skipped last week — prioritised this week" hint.
+function getGymBalanceHint(){
+  const lastSeen={};
+  for(let i=1;i<=14;i++){
+    const d=addDays(new Date(),-i);
+    const log=DB.get(DB.lk(d),null);
+    if(log?.exercises?.some(e=>e.sets.some(s=>s.done))){
+      const plan=DB.get(DB.pk(getMon(d)),null);
+      const dp=plan?.find(x=>x.date===fd(d));
+      if(dp&&GYM_SEQ.includes(dp.type)&&lastSeen[dp.type]==null)lastSeen[dp.type]=i;
+    }
+  }
+  const missing=GYM_SEQ.filter(t=>lastSeen[t]==null);
+  if(missing.length===GYM_SEQ.length)return null; // no recent gym → no catch-up signal
+  if(missing.length===0)return null; // everything done recently → no hint needed
+  return{type:missing[0],daysSince:null,missingCount:missing.length};
 }
 
 function buildWeek(wdays){
@@ -2850,13 +2930,22 @@ function buildWeek(wdays){
     return{date:w.date,type,exercises:exs,weather:w};
   };
 
-  // Assign gym types in PPL sequence, respecting locked days
+  // Assign gym types, respecting locked days. v2.64: starts the rotation from
+  // the MOST-NEEDED type (longest gap) rather than just "next after last done".
+  // This catches skipped muscle groups proactively.
   function assignGym(gymDays,asgn){
     const sorted=[...gymDays].sort((a,b)=>a-b);
-    let lastType=null;
-    for(const i of sorted){const d=wdays[i]?.date;if(locked[d])lastType=locked[d].type;}
-    if(!lastType)lastType=getLastGymType();
-    let si=(GYM_SEQ.indexOf(lastType)+1)%GYM_SEQ.length;
+    // If there's a locked day in the future, its type anchors the rotation
+    // (continue PPL from after it). Otherwise, start at the most-needed type.
+    let lockedType=null;
+    for(const i of sorted){const d=wdays[i]?.date;if(locked[d]){lockedType=locked[d].type;break;}}
+    let si;
+    if(lockedType){
+      si=(GYM_SEQ.indexOf(lockedType)+1)%GYM_SEQ.length;
+    }else{
+      const needed=getMostNeededGymType();
+      si=GYM_SEQ.indexOf(needed);
+    }
     for(const i of sorted){
       const d=wdays[i]?.date;
       if(locked[d]){asgn[i]=locked[d].type;}
@@ -2907,8 +2996,11 @@ function buildWeek(wdays){
   const tentativeGymDays=tentativeNonRide.filter(i=>!tentativeRestSet.has(i)).sort((a,b)=>a-b);
   let legsIdx=-1;
   {
-    let lastType=getLastGymType();
-    let si=(GYM_SEQ.indexOf(lastType)+1)%GYM_SEQ.length;
+    // v2.64: pre-pass uses the same most-needed-first rotation as assignGym
+    // so the simulated walk matches what assignGym will produce, and legsIdx
+    // correctly identifies where LEGS will land.
+    const needed=getMostNeededGymType();
+    let si=GYM_SEQ.indexOf(needed);
     for(const i of tentativeGymDays){
       const ld=locked[wdays[i]?.date];
       if(ld){if(ld.type==='LEGS')legsIdx=i;}
@@ -4089,6 +4181,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rAskCoach()}
+${rCatchUpHint()}
 ${rReviewCard()}
 ${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');
