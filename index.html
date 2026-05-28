@@ -903,10 +903,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.58';
+const APP_VERSION='2.59';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.59',d:'Goal-driven plan generation — workouts shaped by your actual goals (with priority ranking) instead of random picks',det:'Foundational redesign of how plans get generated. Each goal in your profile now has a structured profile defining how it should shape your week: gym/cardio ratio, rep range, RPE range, target sets per muscle group per week, exercise bias (compound/functional/balanced), and cardio focus (easy/mixed/periodised). Muscle: 70% gym, 6-12 reps, RPE 7-9, compound-first, easy cardio for recovery. Lose weight: 50/50, 8-12 reps, compounds to preserve muscle, mixed cardio, weights held in deficit. Fitness: balanced. Endurance: 30% gym/70% cardio, 5-8 reps for strength maintenance. Performance: periodised. The week generator now uses these profiles instead of looking at only your first goal: cardio_ratio determines ride count, exercise_bias determines which slot candidates get preferred (compound vs balanced). Multi-goal users get a BLENDED profile (equal weights by default — e.g. muscle + endurance averages to ~50/50 gym/cardio, 5-10 reps). NEW priority ranking: in goals setup, if you select 2+ goals, a "Priority" section appears with an EQUAL/RANKED toggle. RANKED lets you reorder with ↑↓ arrows — top = highest priority, weighted more in the blend. Default stays EQUAL. The "My Training" tab\'s Your Goals card now shows your actual training mix derived from your goals ("70% gym · 30% cardio · 6-12 reps · RPE 7-9 · ~14 sets/muscle/wk") so you can see exactly what your goals translate to. v2.60 will add progressive overload targets (weight × reps prescribed per set based on PRs).'},
   {v:'2.58',d:'Coach uses feeling-words instead of raw Form numbers — "carrying fatigue" not "Form of -17"',det:'v2.49/v2.54 fixed the acronym problem ("Form" not "TSB") but the raw number itself is still abstract for non-cycling users. "Form of -17" tells you nothing if you don\'t already know the scale. Updated the prompt to add explicit DESCRIPTIVE LANGUAGE rules: the AI must translate Form numbers into feeling-words using the interpretation bands ("fully fresh", "well-rested and recovered", "productive training zone", "carrying noticeable fatigue", "deep fatigue"). The raw Form/Fitness/Fatigue numbers are now forbidden unless the user explicitly asks for them. Per-ride numbers (load, intensity, power, HR) are still allowed since they\'re concrete. Examples: ✓ "You\'re carrying noticeable fatigue from two ride days in a row" / ✗ "Your Form is -17, so…"'},
   {v:'2.57',d:'Admin tier bypasses the 4-second client throttle — truly unlimited Ask Coach usage',det:'Admin is now exempt from the 4-second client-side throttle introduced in v2.56. Non-admin users (pro, basic) still get the 4-second cooldown between sends to avoid tripping Gemini\'s 15 RPM limit. Admin is still bounded by Gemini\'s API-side limits (15 RPM, 1500 RPD on free tier) and will see a friendly 429 message if they hit them — but the app no longer pre-throttles admin requests. Suitable for solo use where no one else is sharing the API key.'},
   {v:'2.56',d:'Friendlier rate-limit error message + client-side throttle to avoid tripping Gemini\'s 15 RPM limit',det:'When you sent a few back-to-back coach messages, Gemini returned HTTP 429 (Too Many Requests) and the app just showed "API 429" — opaque. Now: (1) Status code 429 shows "Too many requests in a short time. Wait ~30 seconds and try again — the free Gemini tier allows 15 requests per minute." Other known status codes also get friendly messages (403 = "API access denied", 5xx = "Gemini service is having a moment"). (2) Added a 4-second client-side throttle between Ask Coach sends. If you hit Send within 4 seconds of the last one, you get a toast "Hold on 3s — pacing requests" and the request is dropped instead of being sent. 4s = ~15/min ceiling matches the free tier so you can\'t accidentally trip the limit through rapid use. The throttle resets after the cooldown so genuine multi-turn conversation still flows fine.'},
@@ -1657,6 +1658,8 @@ function openGoalsSetup(isEdit=false,startStep=1){
   const cur=DB.get('user_profile',{});
   let step=startStep;
   let selGoals=new Set(cur.goals||( cur.goal?[cur.goal]:[] ));
+  // Equal priority by default. Set to false when user explicitly ranks goals.
+  let selEqualPriority=!cur.goalRanks||Object.keys(cur.goalRanks||{}).length===0;
   let selActs=new Set(cur.activities||[]);
   let selDays=cur.days||4;
   let selLevel=cur.level||'intermediate';
@@ -1692,8 +1695,13 @@ function openGoalsSetup(isEdit=false,startStep=1){
   function gsSkipAll(){
     // Save with whatever's selected so far (even empty) and mark onboarded
     const goals_arr=[...selGoals];
+    // Goal ranks: only stored when user explicitly opted for ranked priority.
+    // Otherwise equal weight (blendGoalProfile defaults to equal when ranks absent).
+    const goalRanks=(!selEqualPriority&&goals_arr.length>=2)
+      ?Object.fromEntries(goals_arr.map((g,i)=>[g,i+1]))
+      :null;
     const profile={
-      goals:goals_arr,goal:goals_arr[0]||null,
+      goals:goals_arr,goal:goals_arr[0]||null,goalRanks,
       activities:[...selActs],days:selDays,level:selLevel,
       gender:selGender,onboarded:true,
       weight:selWeight?parseFloat(selWeight):null,weightUnit:selWeightUnit,
@@ -1724,19 +1732,43 @@ function openGoalsSetup(isEdit=false,startStep=1){
     ${[1,2,3].map(n=>`<div style="height:3px;width:48px;border-radius:2px;background:${n<=step?'var(--acc)':'var(--s3)'}"></div>`).join('')}
   </div>
 
-  ${s1?`
+  ${s1?(()=>{
+    const selectedArr=[...selGoals];
+    const multi=selGoals.size>=2;
+    const rankBlockLabel=GOAL_PROFILES?(()=>{
+      const blend=blendGoalProfile(selectedArr,selEqualPriority?null:Object.fromEntries(selectedArr.map((g,i)=>[g,i+1])));
+      return`<div style="font-size:11px;color:var(--t2);margin-top:6px;line-height:1.5">Your training mix: <strong style="color:var(--al)">${Math.round(blend.gym_ratio*100)}% gym · ${Math.round(blend.cardio_ratio*100)}% cardio · ${blend.rep_low}-${blend.rep_high} reps</strong></div>`;
+    })():'';
+    return`
   <div style="font-size:18px;font-weight:800;margin-bottom:4px">What are your goals?</div>
   <div style="font-size:12px;color:var(--t2);margin-bottom:18px">Pick as many as you like — your plan and coach will balance them</div>
-  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">
+  <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:${multi?'16':'24'}px">
     ${goals.map(g=>{const on=selGoals.has(g.v);return`<div onclick="gsGoal('${g.v}')" style="padding:13px 14px;border-radius:14px;border:2px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.12)':'var(--s2)'};cursor:pointer;display:flex;align-items:center;gap:12px">
       <span style="font-size:22px">${g.i}</span>
       <div style="flex:1"><div style="font-size:14px;font-weight:700;color:${on?'var(--al)':'var(--txt)'}">${g.l}</div><div style="font-size:11px;color:var(--t2);margin-top:1px">${g.d}</div></div>
       ${on?'<span style="color:var(--al);font-size:18px;flex-shrink:0">✓</span>':''}
     </div>`}).join('')}
   </div>
+  ${multi?`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:13px;padding:12px 13px;margin-bottom:18px">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--al)">🎯 Priority</div>
+      <button onclick="gsTogglePriority()" style="background:${selEqualPriority?'var(--s1)':'rgba(124,58,237,.18)'};border:1px solid ${selEqualPriority?'var(--bord)':'var(--acc)'};border-radius:9px;color:${selEqualPriority?'var(--t2)':'var(--acc)'};font-size:10px;font-weight:800;padding:5px 11px;cursor:pointer;letter-spacing:.4px">${selEqualPriority?'EQUAL':'RANKED'}</button>
+    </div>
+    ${selEqualPriority?`<div style="font-size:11px;color:var(--t2);line-height:1.45">All goals weighted equally. Tap <strong style="color:var(--al)">EQUAL</strong> to switch to ranked priority.</div>`:`<div style="font-size:10px;color:var(--t2);margin-bottom:8px;line-height:1.4">Top = highest priority. Use ↑↓ to reorder.</div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${selectedArr.map((g,i)=>{const meta=goals.find(x=>x.v===g);return`<div style="display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--s1);border:1px solid var(--bord);border-radius:9px">
+        <span style="font-size:10px;font-weight:800;color:var(--acc);width:18px">#${i+1}</span>
+        <span style="font-size:14px">${meta?.i||''}</span>
+        <span style="flex:1;font-size:12px;font-weight:600;color:var(--al)">${meta?.l||g}</span>
+        <button onclick="gsMoveGoal('${g}',-1)" ${i===0?'disabled':''} style="background:none;border:1px solid var(--bord);border-radius:6px;color:${i===0?'var(--t2)':'var(--al)'};font-size:11px;padding:3px 7px;cursor:${i===0?'not-allowed':'pointer'};opacity:${i===0?'.3':'1'}">↑</button>
+        <button onclick="gsMoveGoal('${g}',1)" ${i===selectedArr.length-1?'disabled':''} style="background:none;border:1px solid var(--bord);border-radius:6px;color:${i===selectedArr.length-1?'var(--t2)':'var(--al)'};font-size:11px;padding:3px 7px;cursor:${i===selectedArr.length-1?'not-allowed':'pointer'};opacity:${i===selectedArr.length-1?'.3':'1'}">↓</button>
+      </div>`}).join('')}
+    </div>`}
+    ${rankBlockLabel}
+  </div>`:''}
   <button onclick="gsNext()" style="width:100%;background:${selGoals.size>0?'var(--acc)':'var(--s3)'};border:none;border-radius:13px;color:${selGoals.size>0?'#fff':'var(--t2)'};font-size:15px;font-weight:800;padding:15px;cursor:pointer">Next →</button>
   ${skipRow}
-  `:''}
+  `;})():''}
 
   ${s2?`
   <div style="font-size:18px;font-weight:800;margin-bottom:4px">What do you do?</div>
@@ -1823,6 +1855,16 @@ function openGoalsSetup(isEdit=false,startStep=1){
 </div>`;
 
     window.gsGoal=v=>{selGoals.has(v)?selGoals.delete(v):selGoals.add(v);gsRender();};
+    window.gsTogglePriority=()=>{selEqualPriority=!selEqualPriority;gsRender();};
+    window.gsMoveGoal=(g,dir)=>{
+      const arr=[...selGoals];
+      const i=arr.indexOf(g);
+      const j=i+dir;
+      if(i<0||j<0||j>=arr.length)return;
+      [arr[i],arr[j]]=[arr[j],arr[i]];
+      selGoals=new Set(arr);
+      gsRender();
+    };
     window.gsAct=v=>{selActs.has(v)?selActs.delete(v):selActs.add(v);gsRender();};
     window.gsDays=n=>{selDays=n;gsRender();};
     window.gsLevel=v=>{selLevel=v;gsRender();};
@@ -2649,6 +2691,93 @@ function verdict(score){
 /* ── WEEK GENERATION ── */
 const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP'];
 
+/* ── GOAL PROFILES (v2.59) ──
+ * Each goal in profile.goals maps to a profile defining how the generator
+ * should shape the user's week and exercise selection. Multiple goals are
+ * blended — equal weights by default, or user-defined ranks via
+ * profile.goalRanks ({goal_id: rank, lower = higher priority}). */
+const GOAL_PROFILES={
+  muscle:{
+    id:'muscle',label:'💪 Build muscle & strength',
+    gym_ratio:0.7,cardio_ratio:0.3,
+    rep_low:6,rep_high:12,rpe_low:7,rpe_high:9,
+    sets_per_muscle_week:14,
+    exercise_bias:'compound',
+    cardio_focus:'easy',
+    progression_step_kg:2.5,progression_step_lb:5,
+    description:'High volume, moderate-high intensity. Compound-first. Cardio kept easy to preserve recovery.'
+  },
+  lose_weight:{
+    id:'lose_weight',label:'🔥 Lose weight',
+    gym_ratio:0.5,cardio_ratio:0.5,
+    rep_low:8,rep_high:12,rpe_low:7,rpe_high:8,
+    sets_per_muscle_week:12,
+    exercise_bias:'compound',
+    cardio_focus:'mixed',
+    progression_step_kg:0,progression_step_lb:0,
+    description:'Balanced gym + cardio. Compounds preserve muscle while you cut. Hold weights — push effort instead.'
+  },
+  fitness:{
+    id:'fitness',label:'⚡ General fitness',
+    gym_ratio:0.5,cardio_ratio:0.5,
+    rep_low:8,rep_high:12,rpe_low:7,rpe_high:8,
+    sets_per_muscle_week:10,
+    exercise_bias:'balanced',
+    cardio_focus:'easy',
+    progression_step_kg:2.5,progression_step_lb:5,
+    description:'Balanced strength + cardio. Modest progression. Sustainable long-term.'
+  },
+  endurance:{
+    id:'endurance',label:'🚴 Endurance / event prep',
+    gym_ratio:0.3,cardio_ratio:0.7,
+    rep_low:5,rep_high:8,rpe_low:7,rpe_high:8,
+    sets_per_muscle_week:8,
+    exercise_bias:'functional',
+    cardio_focus:'mixed',
+    progression_step_kg:2.5,progression_step_lb:5,
+    description:'Cardio-dominant. Strength maintenance in the gym (low volume, heavy). Aerobic base building.'
+  },
+  performance:{
+    id:'performance',label:'🏆 Sport performance',
+    gym_ratio:0.4,cardio_ratio:0.6,
+    rep_low:5,rep_high:10,rpe_low:7,rpe_high:9,
+    sets_per_muscle_week:10,
+    exercise_bias:'functional',
+    cardio_focus:'periodized',
+    progression_step_kg:2.5,progression_step_lb:5,
+    description:'Periodised — build/peak/recovery blocks. Sport-relevant strength. Cardio intensity tracks the calendar.'
+  }
+};
+
+// Resolve the user's effective goal profile by blending all selected goals.
+// Equal weights by default; weighted by profile.goalRanks if set.
+function blendGoalProfile(goalIds,ranks){
+  const ids=(goalIds||[]).filter(g=>GOAL_PROFILES[g]);
+  if(!ids.length)return GOAL_PROFILES.fitness;
+  if(ids.length===1)return GOAL_PROFILES[ids[0]];
+  const hasRanks=ranks&&typeof ranks==='object'&&Object.keys(ranks).length;
+  const rawWeights=ids.map(id=>hasRanks?(1/(ranks[id]||ids.length)):1);
+  const sumW=rawWeights.reduce((s,w)=>s+w,0);
+  const w=rawWeights.map(x=>x/sumW);
+  const numericFields=['gym_ratio','cardio_ratio','rep_low','rep_high','rpe_low','rpe_high','sets_per_muscle_week','progression_step_kg','progression_step_lb'];
+  const blend={id:'blended'};
+  for(const f of numericFields)blend[f]=ids.reduce((s,id,i)=>s+GOAL_PROFILES[id][f]*w[i],0);
+  blend.rep_low=Math.round(blend.rep_low);
+  blend.rep_high=Math.round(blend.rep_high);
+  blend.sets_per_muscle_week=Math.round(blend.sets_per_muscle_week);
+  const topIdx=w.indexOf(Math.max(...w));
+  blend.exercise_bias=GOAL_PROFILES[ids[topIdx]].exercise_bias;
+  blend.cardio_focus=GOAL_PROFILES[ids[topIdx]].cardio_focus;
+  blend.label=ids.map(id=>GOAL_PROFILES[id].label.replace(/^.\s*/,'')).join(' + ');
+  return blend;
+}
+
+function getActiveGoalProfile(){
+  const p=DB.get('user_profile',{})||{};
+  const goals=p.goals||(p.goal?[p.goal]:[]);
+  return blendGoalProfile(goals,p.goalRanks);
+}
+
 function getLastGymType(){
   // Scan back up to 28 days for the last completed gym workout type
   for(let i=1;i<=28;i++){
@@ -2747,14 +2876,14 @@ function buildWeek(wdays){
   const stravaRideIdx=new Set();
   wdays.forEach((w,i)=>{if(stravaRideOnDate(w.date))stravaRideIdx.add(i);});
 
-  // Goal-based target: how many ride days per week this user should have
-  // endurance/performance → more rides; muscle → mostly gym; fitness/default → balanced
+  // Goal-based target: how many ride days per week this user should have.
+  // v2.59: uses blended goal profile's cardio_ratio (all goals contribute, not just first).
+  // Ratio is clamped so the user always gets at least 1 ride day (if cycling/running active)
+  // and never more than (targetDays - 1) — must leave room for at least one gym day.
   const _goals=profile.goals||(profile.goal?[profile.goal]:[]);
-  const _pg=(_goals[0])||'fitness';
-  const ridesTarget=_pg==='endurance'||_pg==='performance'
-    ?Math.min(3,Math.ceil(targetDays*0.5))
-    :_pg==='muscle'?1
-    :Math.max(1,Math.min(2,Math.round(targetDays*0.4)));
+  const _gp=blendGoalProfile(_goals,profile.goalRanks);
+  const _rawRides=Math.round(targetDays*_gp.cardio_ratio);
+  const ridesTarget=Math.max(1,Math.min(targetDays-1,_rawRides,3));
 
   // New ride days still needed after subtracting Strava rides already done
   const numRides=Math.max(0,ridesTarget-stravaRideIdx.size);
@@ -2825,11 +2954,12 @@ function buildWeek(wdays){
 function genSession(type,energy='okay',bwOnly=false){
   const slots=SLOTS[type];
   const recent=DB.get('recent_ex',[]);
+  const goalProfile=getActiveGoalProfile();
   const picked=[];
   for(const candidates of slots){
     let avail=filterSlot(candidates,bwOnly).filter(id=>!picked.includes(id));
     if(!avail.length)continue;
-    // Filter by energy level — prefer compound when fresh, isolation when tired/sore
+    // Energy filter — prefer compound when fresh, isolation when tired/sore
     if(energy==='fresh'){
       const comp=avail.filter(id=>EX[id]?.t==='C');
       if(comp.length)avail=comp;
@@ -2837,11 +2967,17 @@ function genSession(type,energy='okay',bwOnly=false){
       const iso=avail.filter(id=>EX[id]?.t==='I');
       if(iso.length)avail=iso;
     }
+    // Goal-profile bias (v2.59) — applied on top of energy filter
+    if(goalProfile.exercise_bias==='compound'||goalProfile.exercise_bias==='functional'){
+      const comp=avail.filter(id=>EX[id]?.t==='C');
+      if(comp.length>=1)avail=comp;
+    }
+    // 'balanced' = no additional filtering
     const sorted=[...avail].sort((a,b)=>{
       const ai=recent.indexOf(a),bi=recent.indexOf(b);
       if(ai===-1&&bi===-1)return Math.random()<.5?-1:1;
       if(ai===-1)return -1;if(bi===-1)return 1;
-      return bi-ai; // higher index = used less recently = prefer (was ai-bi which picked the most recently used — wrong)
+      return bi-ai;
     });
     picked.push(sorted[0]);
   }
@@ -7595,13 +7731,23 @@ ${!prKeys.length
 }
 
 <div class="sec-hdr">${_T('your_goals')}</div>
-${profile?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
+${profile?(()=>{
+  const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);
+  const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};
+  // Blended training mix derived from goals — the generator uses these values
+  const blend=gs.length?blendGoalProfile(gs,profile.goalRanks):null;
+  const ranked=profile.goalRanks&&Object.keys(profile.goalRanks||{}).length>0;
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
   <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
-    ${(()=>{const gs=profile.goals&&profile.goals.length?profile.goals:(profile.goal?[profile.goal]:[]);const lm={muscle:'💪 Muscle & strength',lose_weight:'🔥 Lose weight',fitness:'⚡ General fitness',endurance:'🚴 Endurance',performance:'🏆 Sport performance'};return gs.length?gs.map(g=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>';})()}
+    ${gs.length?gs.map((g,i)=>`<span style="background:rgba(124,58,237,.12);color:var(--al);font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px">${ranked?'#'+(i+1)+' ':''}${lm[g]||g}</span>`).join(''):'<span style="font-size:12px;color:var(--t2)">No goals set</span>'}
   </div>
+  ${blend?`<div style="background:var(--s2);border-radius:10px;padding:9px 11px;margin-bottom:10px">
+    <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Your training mix ${ranked?'(ranked)':'(equal weight)'}</div>
+    <div style="font-size:12px;color:var(--al);line-height:1.5"><strong>${Math.round(blend.gym_ratio*100)}% gym</strong> · <strong>${Math.round(blend.cardio_ratio*100)}% cardio</strong> · ${blend.rep_low}-${blend.rep_high} reps · RPE ${blend.rpe_low.toFixed(1)}-${blend.rpe_high.toFixed(1)} · ~${blend.sets_per_muscle_week} sets/muscle/wk</div>
+  </div>`:''}
   <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🏊 Cardio & Classes'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
   <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
-</div>`:`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+</div>`;})():`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
   <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
 </div>`}
