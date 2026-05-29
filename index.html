@@ -915,10 +915,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.79';
+const APP_VERSION='2.80';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.80',d:'Gym-equipment preference now carries into the AI coach — it won\'t suggest or swap to exercises your gym lacks',det:'Completing the gym-equipment work: the Ask Coach now respects your selected gym. (1) The AI prompt has a new "GYM EQUIPMENT (hard constraint)" section listing your gym name and available equipment, with explicit instructions to only suggest/swap exercises that equipment supports and to offer the closest available alternative if you ask for something the gym can\'t do. (2) The swap_exercise tool now rejects swapping into an exercise your gym lacks ("Your gym doesn\'t have the equipment for X"). (3) make_legs_unilateral skips any single-leg conversion whose variant needs equipment your gym doesn\'t have (keeps the original, notes how many were kept). The plan-mutating tools that generate fresh exercises (change_day_type, add_workout_to_ride_day, swap_workout_days, regenerate) already route through genSession, which has always filtered by gym equipment. So the gym preference now governs the entire app: generation, manual swap, AND the AI coach.'},
   {v:'2.79',d:'Gym-equipment filtering completed — Swap menu now respects your gym, and all exercises are equipment-tagged',det:'The gym-equipment feature was already live for plan GENERATION (pick a gym → the generator only picks exercises that gym has equipment for, via filterSlot/exAvail/getActiveEquip). But two gaps remained: (1) The manual "🔄 Swap" menu showed ALL same-group alternatives regardless of your gym — so you could swap into an exercise your gym doesn\'t have. Now the swap suggestions (movement slot, muscle group, related) are filtered to only show exercises your selected gym supports, with a safety fallback to the full list if filtering would leave a section empty. (2) The 6 single-leg variants added in v2.68 had no equipment tags, so they bypassed the filter entirely (untagged = always shown). Tagged them now: single-leg squat/reverse lunge/single-leg deadlift/single-leg calf → dumbbell, single-leg leg extension → machine, cable kickback → cable. So picking a gym now correctly governs both generation AND swapping, across every exercise. (Note: the full-text search box in the swap sheet still searches all exercises, so you can always pick something manually if you know your gym has it.)'},
   {v:'2.78',d:'Assisted-machine logic verified across the whole app — every PR/progression/label path now respects "lower = stronger"',det:'Followed up on v2.76 to make sure the assisted-exercise inversion is applied EVERYWHERE, not just the two main spots. Audited all five PR-write paths: checkPR (manual logging) ✓ and the AI log_gym_sets tool ✓ were already inverted in v2.76; CSV import and manual edit/delete take values as-is (no comparison, correct). Fixed one remaining spot: the AI weekly-review data builder was picking the "best set" by highest weight×reps and labelling "[NEW PR]" by highest weight — backwards for assisted exercises. Now for assisted machines it picks the lowest-assist set as best and labels a PR when assist is at/below your record (with "assist" noted). The whole system is driven by the EX.assist flag, so it\'s centralized — the two assisted machines (Assisted Pull-Up, Assisted Dip) are the only ones in the library and both are flagged; any future assisted exercise just needs the flag and every path handles it automatically.'},
   {v:'2.77',d:'"Complete Workout" now returns you to the main week view (was landing on the day-detail screen — felt like a dead end)',det:'After logging a session, tapping "✓ Complete Workout" navigated to the day-detail screen instead of the main plan page, so it felt like the button didn\'t bounce you out. Now it returns straight to the week view with a back-slide animation, clears the active log session, and shows a "✓ Workout logged" confirmation toast. One tap = done and home.'},
@@ -5289,6 +5290,9 @@ CAPABILITIES — what you can do:
 Goal: ${goalStr} | Level: ${profile.level||'intermediate'} | Activities: ${(profile.activities||[]).join(', ')||'gym'}
 ${profile.ftp?`FTP: ${profile.ftp}W`:'No FTP set'}${profile.weight?` · Weight: ${profile.weight}kg`:''}${profile.ftp&&profile.weight?` (${(profile.ftp/profile.weight).toFixed(2)} W/kg)`:''}
 
+=== GYM EQUIPMENT (hard constraint) ===
+${(()=>{const gid=DB.get('gym_profile',null);if(!gid)return 'No gym selected — assume all standard gym equipment is available.';const eq=getActiveEquip();const name=gid==='home'?'Home gym':(GYMS_BUILTIN[gid]?GYMS_BUILTIN[gid].chain+' · '+GYMS_BUILTIN[gid].city:'gym');const labels=EQUIP_ALL.filter(e=>eq.has(e.id)).map(e=>e.label);return `${name}. Available equipment: ${labels.join(', ')||'bodyweight only'}.\nCRITICAL: when suggesting or swapping exercises, ONLY use ones this equipment supports. Never recommend an exercise that needs equipment not listed here. If the user asks for something the gym can't do, say so and offer the closest available alternative.`;})()}
+
 === CURRENT WEEK PLAN ===
 ${weekPlanLines.length?weekPlanLines.join('\n'):'  No plan generated for this week yet'}
 
@@ -5703,13 +5707,17 @@ const COACH_TOOL_HANDLERS={
       if(!dp)return{ok:false,msg:'Date not in plan'};
       if(dp.type!=='LEGS')return{ok:false,msg:'Not a leg day'};
       if(!dp.exercises||!dp.exercises.length)return{ok:false,msg:'No exercises to convert'};
-      let changed=0;
+      let changed=0,skipped=0;
       const newEx=dp.exercises.map(id=>{
         const u=UNILATERAL_MAP[id];
-        if(u&&u!==id&&EX[u]){changed++;return u;}
+        // Only convert if the single-leg variant exists AND the gym has its equipment
+        if(u&&u!==id&&EX[u]){
+          if(!exAvail(u)){skipped++;return id;} // gym lacks equipment — keep original
+          changed++;return u;
+        }
         return id;
       });
-      if(!changed)return{ok:false,msg:'Already all single-leg'};
+      if(!changed)return{ok:false,msg:skipped?'Single-leg variants need equipment your gym doesn\'t have':'Already all single-leg'};
       dp.exercises=newEx;
       DB.set(pk,plan);
       // Update an existing incomplete log for that day so the swap is reflected
@@ -5720,7 +5728,7 @@ const COACH_TOOL_HANDLERS={
         DB.set(lk,log);
       }
       syncUp();
-      return{ok:true,msg:`Converted ${changed} exercise${changed!==1?'s':''} to single-leg`};
+      return{ok:true,msg:`Converted ${changed} exercise${changed!==1?'s':''} to single-leg${skipped?` (${skipped} kept — gym lacks equipment)`:''}`};
     }
   },
   swap_exercise:{
@@ -5741,6 +5749,8 @@ const COACH_TOOL_HANDLERS={
       const idx=dp.exercises.indexOf(fromId);
       if(idx<0)return{ok:false,msg:`${EX[fromId].n} isn't in that day's plan`};
       if(dp.exercises.includes(toId))return{ok:false,msg:`${EX[toId].n} is already in the plan`};
+      // Respect the selected gym's equipment — don't swap into something it lacks
+      if(!exAvail(toId))return{ok:false,msg:`Your gym doesn't have the equipment for ${EX[toId].n}`};
       dp.exercises[idx]=toId;
       DB.set(pk,plan);
       // Reflect in an incomplete log
