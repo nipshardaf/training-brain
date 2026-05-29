@@ -326,9 +326,9 @@ const EX = {
   skull:       {n:'Skull Crushers',         g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Triceps',                 p:'EZ-Bar_Skullcrusher'},
   tri_oh:      {n:'Overhead Tricep Ext.',   g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Cable_Rope_Overhead_Triceps_Extension'},
   dips:        {n:'Tricep Dips',            g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Triceps · Chest',         p:'Dips_-_Triceps_Version'},
-  assisted_dip:{n:'Assisted Dip',          g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'6',  m:'Triceps · Chest',         p:'Dip_Machine'},
+  assisted_dip:{n:'Assisted Dip',          g:'tri',      t:'C',sets:3,reps:'10–15',rpe:'6',  m:'Triceps · Chest',         p:'Dip_Machine',                             assist:true},
   pullup:      {n:'Pull-Ups',              g:'vback',    t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Lats · Biceps',           p:'Pullups'},
-  assisted_pullup:{n:'Assisted Pull-Up',   g:'vback',    t:'C',sets:3,reps:'8–12', rpe:'6',  m:'Lats · Biceps',           p:'Band_Assisted_Pull-Up'},
+  assisted_pullup:{n:'Assisted Pull-Up',   g:'vback',    t:'C',sets:3,reps:'8–12', rpe:'6',  m:'Lats · Biceps',           p:'Band_Assisted_Pull-Up',                   assist:true},
   lat_pull:    {n:'Lat Pulldown',          g:'vback',    t:'C',sets:4,reps:'8–10', rpe:'7',  m:'Lats · Biceps',           p:'Wide-Grip_Lat_Pulldown'},
   bb_row:      {n:'Barbell Row',           g:'hback_h',  t:'C',sets:4,reps:'6–8',  rpe:'8',  m:'Back · Biceps',           p:'Bent_Over_Barbell_Row'},
   tbar_row:    {n:'T-Bar Row',             g:'hback_h',  t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Back',                   p:'T-Bar_Row_with_Handle'},
@@ -912,10 +912,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.75';
+const APP_VERSION='2.76';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.76',d:'Assisted exercises (pull-up/dip) now tracked correctly — weight is ASSISTANCE, so lower = stronger',det:'On an assisted pull-up/dip machine, the weight you set is how much the machine HELPS you (counterweight) — so MORE weight = MORE help = easier, and getting stronger means REDUCING it toward unassisted. The app was treating it like a normal exercise (higher = better), so it celebrated "70lb assist" as a PR (it\'s actually the most help = weakest) and the progression target told you to ADD assistance. Fixed: (1) assisted_pull-up and assisted_dip flagged with assist:true. (2) PR logic inverted for them — a personal best is now LOWER assist weight (at equal/more reps), or same assist with more reps. So as you reduce the help, you set real PRs. (3) Progression target inverted — when you hit the top of the rep range it now suggests LESS assistance ("↓ −5lb assist"), and at 0 it prompts "try it unassisted!". (4) A clear amber note appears on assisted exercises in the log: "⚖️ This is assistance weight — lower = stronger." The weight column header shows "assist lbs". (5) The AI coach is told these are assisted so its advice points the right way. Your existing 70lb PR will be replaced automatically the next time you log a lower-assist set (or edit it manually).'},
   {v:'2.75',d:'Fix sync PERMISSION_DENIED — cloud save now uses update() instead of set(), respecting the new security rules',det:'After locking down the Firebase security rules, auto-sync started failing with PERMISSION_DENIED. Root cause: saveToCloud did .set({data,updated}) on the whole users/{uid} node, which requires write permission on the entire node — but the new rules (correctly) only grant write on the data and updated CHILD paths, not the parent (so friends can write a friend-request to your sub-node without being able to overwrite your whole record). Changed .set() to .update() — it writes only the data and updated children, which the rules allow. Bonus: this also fixes a latent bug where the full set() would have wiped your profile/friends/friendRequests/advisor sub-nodes on every sync (those siblings are now preserved). No Firebase rule change needed — the rules you already pasted support this.'},
   {v:'2.74',d:'Landscape mode fixes — login/onboarding no longer clips, content clears the notch, safe-area handling on all edges',det:'The app is portrait-first, but landscape was genuinely broken in places. Fixes: (1) The lock/login/onboarding screen used centered flex layout with no scroll — in landscape\'s short viewport, content taller than the screen got clipped at top and bottom with no way to reach it. Added overflow-y:auto and justify-content:safe center so it centers when it fits and scrolls from the top when it doesn\'t. (2) Added left/right safe-area insets (--sl/--sr) — previously only top/bottom were handled, so in landscape on notched phones content could hide under the notch. Now the main screen, the bottom nav, and the lock screen all pad away from the notch on whichever side it\'s on. The main content already centered in a 430px column so it reads fine in landscape — just now without clipping or notch intrusion. Note: this app is designed for portrait (one-handed logging at the gym); landscape is now usable but not a dedicated wide layout.'},
   {v:'2.73',d:'Ask Coach can now control individual exercises, reps, and weights — not just whole days',det:'Two new tools give the AI coach full control over the contents of a gym day. (1) swap_exercise(date, from, to) — replace a specific exercise with another, e.g. "swap my barbell bench for dumbbell press on Tuesday" or "change leg extensions to hack squats today." Both names are fuzzy-matched against the library, the slot position is preserved, and any in-progress log is updated. (2) set_exercise_targets(date, exercise, sets, reps, weight) — prescribe the loading for a specific lift, e.g. "set my squat to 5 sets of 5 at 100kg on Friday" or "make today\'s bench 4x8." Omitted fields keep their current value; the targets pre-fill in your log so you just confirm your actual sets. To support this, the AI now sees the full exercise list (with prescribed sets×reps) for every gym day in its context — so it can reference and modify exercises by name. Both tools show a confirmation card before applying, like every other plan change. Combined with the existing day-level tools (swap days, rest, cascade) and make_legs_unilateral, the coach can now reshape your week from the calendar down to the individual set.'},
@@ -5190,7 +5191,8 @@ function buildAskPrompt(question){
       if(_gymTypes.includes(day.type)&&day.exercises?.length){
         for(const exId of day.exercises){
           const ex=EX[exId];if(!ex)continue;
-          weekPlanLines.push(`      - ${ex.n} (${ex.sets}×${ex.reps}, RPE ${ex.rpe})`);
+          const assistNote=ex.assist?' [ASSISTED — weight is assistance/help; LOWER weight = stronger, goal is to reduce it]':'';
+          weekPlanLines.push(`      - ${ex.n} (${ex.sets}×${ex.reps}, RPE ${ex.rpe})${assistNote}`);
         }
       }
     }
@@ -5632,13 +5634,15 @@ const COACH_TOOL_HANDLERS={
         }else{
           log.exercises.push({id:m.id,sets});
         }
-        // Update PRs if applicable
+        // Update PRs if applicable (assisted exercises: lower weight = better)
         const prs=DB.get('prs',{})||{};
+        const _assist=EX[m.id]?.assist;
         for(const s of sets){
           const w=parseFloat(s.w),r=parseInt(s.r);
           if(!w||!r)continue;
           const cur=prs[m.id];
-          if(!cur||w>cur.w||(w===cur.w&&r>cur.r)){
+          const better=!cur?true:_assist?(w<cur.w||(w===cur.w&&r>cur.r)):(w>cur.w||(w===cur.w&&r>cur.r));
+          if(better){
             prs[m.id]={w,r,date};
           }
         }
@@ -6461,23 +6465,33 @@ function computeProgressionTarget(exId,lastSets){
     if(pr)return{w:pr.w,r:Math.max(repLow,Math.min(repHigh,pr.r)),change:'starting at your PR',reason:'no recent session — use PR as anchor'};
     return{w:'',r:repLow,change:'first time',reason:'no history yet — enter your starting weight'};
   }
-  // Heaviest completed set: rank by weight desc, then reps desc
+  // Assisted exercises (assisted pull-up/dip): weight = ASSISTANCE, so progress
+  // means REDUCING it toward 0 (unassisted). "Best" set is the LOWEST weight.
+  const assist=EX[exId]?.assist;
+  // Reference set: heaviest for normal exercises, lightest (least assist) for assisted
   const topSet=done.reduce((a,b)=>{
     const aw=parseFloat(a.w),bw=parseFloat(b.w);
-    if(bw>aw)return b;
-    if(bw<aw)return a;
+    if(assist){if(bw<aw)return b;if(bw>aw)return a;}
+    else{if(bw>aw)return b;if(bw<aw)return a;}
     return parseInt(b.r)>parseInt(a.r)?b:a;
   });
   const lastW=parseFloat(topSet.w);
   const lastR=parseInt(topSet.r);
-  // Maintain mode (cutting / lose_weight goal) → hold weight, hold reps
+  // Maintain mode (cutting / lose_weight goal) → hold
   if(step===0)return{w:lastW,r:lastR,change:'hold',reason:'cutting phase — preserve strength, don\'t push'};
-  // Did ALL completed sets hit the top of the rep range? → progress weight
   const allHitTop=done.every(s=>parseInt(s.r)>=repHigh);
   if(allHitTop){
+    if(assist){
+      // Reduce assistance (down to 0 = bodyweight). Getting stronger.
+      const newW=Math.max(0,+(lastW-step).toFixed(1));
+      return{
+        w:newW,r:repLow,
+        change:`↓ −${step}${u==='lbs'?'lb':'kg'} assist`,
+        reason:newW===0?`hit top reps with minimal help — try it unassisted!`:`hit top of ${repLow}-${repHigh} reps — less assistance, you're getting stronger`
+      };
+    }
     return{
-      w:+(lastW+step).toFixed(1),
-      r:repLow,
+      w:+(lastW+step).toFixed(1),r:repLow,
       change:`↑ +${step}${u==='lbs'?'lb':'kg'}`,
       reason:`hit top of ${repLow}-${repHigh} rep range — progressing weight`
     };
@@ -6485,10 +6499,9 @@ function computeProgressionTarget(exId,lastSets){
   // Not at top of range → hold weight, try for one more rep
   const newR=Math.min(repHigh,lastR+1);
   if(newR>lastR){
-    return{w:lastW,r:newR,change:'+1 rep',reason:`aim for ${repHigh} reps to unlock weight progression`};
+    return{w:lastW,r:newR,change:'+1 rep',reason:assist?`aim for ${repHigh} reps before dropping assistance`:`aim for ${repHigh} reps to unlock weight progression`};
   }
-  // Already at top reps for top set but other sets short → hold and try again
-  return{w:lastW,r:lastR,change:'match last',reason:'one more session at this load before bumping'};
+  return{w:lastW,r:lastR,change:'match last',reason:assist?'one more session at this assist level':'one more session at this load before bumping'};
 }
 
 function makeSets(exId,energy,last){
@@ -6626,7 +6639,8 @@ function rLogEx(le,ei){
   ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
   ${_wSwap?`<div style="font-size:11px;font-weight:600;margin-bottom:8px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:8px"><span style="color:var(--amb);flex:1">💡 Try <strong>${EX[_wSwap.toId]?.n||_wSwap.suggested}</strong> — ${_wSwap.reason}</span><button onclick="event.stopPropagation();doExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}','${_wSwap.toId}')" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);border-radius:6px;color:var(--amb);font-size:10px;font-weight:700;padding:4px 9px;cursor:pointer;white-space:nowrap;-webkit-appearance:none">Swap →</button></div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
-  <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
+  ${ex.assist?`<div style="font-size:11px;color:var(--amb);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.45">⚖️ This is <strong>assistance weight</strong> — how much the machine helps. <strong>Lower = stronger.</strong> Your goal is to reduce it over time toward unassisted.</div>`:''}
+  <div class="sets-hdr"><span>#</span><span class="unit-lbl">${ex.assist?'assist '+unit():unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
     <span class="set-n">${setLabel(si,set)}</span>
     <div class="wt-wrap">
@@ -6735,7 +6749,16 @@ function checkPR(id,weight,reps){
   if(!weight||!reps)return;
   const prs=DB.get('prs',{});
   const cur=prs[id];
-  if(!cur||weight>cur.w||(weight===cur.w&&reps>cur.r)){
+  // Assisted exercises (assisted pull-up/dip): the weight is ASSISTANCE, so
+  // LESS weight = stronger. A PR is lower assist (at same/more reps) or same
+  // assist with more reps. Inverted from normal exercises.
+  const assist=EX[id]?.assist;
+  const isBetter=!cur
+    ?true
+    :assist
+      ?(weight<cur.w||(weight===cur.w&&reps>cur.r))
+      :(weight>cur.w||(weight===cur.w&&reps>cur.r));
+  if(isBetter){
     prs[id]={w:weight,r:reps,date:fd(new Date())};
     DB.set('prs',prs);
     prToast(EX[id]?.n||id);
