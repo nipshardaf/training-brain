@@ -912,10 +912,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.76';
+const APP_VERSION='2.77';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.77',d:'"Complete Workout" now returns you to the main week view (was landing on the day-detail screen — felt like a dead end)',det:'After logging a session, tapping "✓ Complete Workout" navigated to the day-detail screen instead of the main plan page, so it felt like the button didn\'t bounce you out. Now it returns straight to the week view with a back-slide animation, clears the active log session, and shows a "✓ Workout logged" confirmation toast. One tap = done and home.'},
   {v:'2.76',d:'Assisted exercises (pull-up/dip) now tracked correctly — weight is ASSISTANCE, so lower = stronger',det:'On an assisted pull-up/dip machine, the weight you set is how much the machine HELPS you (counterweight) — so MORE weight = MORE help = easier, and getting stronger means REDUCING it toward unassisted. The app was treating it like a normal exercise (higher = better), so it celebrated "70lb assist" as a PR (it\'s actually the most help = weakest) and the progression target told you to ADD assistance. Fixed: (1) assisted_pull-up and assisted_dip flagged with assist:true. (2) PR logic inverted for them — a personal best is now LOWER assist weight (at equal/more reps), or same assist with more reps. So as you reduce the help, you set real PRs. (3) Progression target inverted — when you hit the top of the rep range it now suggests LESS assistance ("↓ −5lb assist"), and at 0 it prompts "try it unassisted!". (4) A clear amber note appears on assisted exercises in the log: "⚖️ This is assistance weight — lower = stronger." The weight column header shows "assist lbs". (5) The AI coach is told these are assisted so its advice points the right way. Your existing 70lb PR will be replaced automatically the next time you log a lower-assist set (or edit it manually).'},
   {v:'2.75',d:'Fix sync PERMISSION_DENIED — cloud save now uses update() instead of set(), respecting the new security rules',det:'After locking down the Firebase security rules, auto-sync started failing with PERMISSION_DENIED. Root cause: saveToCloud did .set({data,updated}) on the whole users/{uid} node, which requires write permission on the entire node — but the new rules (correctly) only grant write on the data and updated CHILD paths, not the parent (so friends can write a friend-request to your sub-node without being able to overwrite your whole record). Changed .set() to .update() — it writes only the data and updated children, which the rules allow. Bonus: this also fixes a latent bug where the full set() would have wiped your profile/friends/friendRequests/advisor sub-nodes on every sync (those siblings are now preserved). No Firebase rule change needed — the rules you already pasted support this.'},
   {v:'2.74',d:'Landscape mode fixes — login/onboarding no longer clips, content clears the notch, safe-area handling on all edges',det:'The app is portrait-first, but landscape was genuinely broken in places. Fixes: (1) The lock/login/onboarding screen used centered flex layout with no scroll — in landscape\'s short viewport, content taller than the screen got clipped at top and bottom with no way to reach it. Added overflow-y:auto and justify-content:safe center so it centers when it fits and scrolls from the top when it doesn\'t. (2) Added left/right safe-area insets (--sl/--sr) — previously only top/bottom were handled, so in landscape on notched phones content could hide under the notch. Now the main screen, the bottom nav, and the lock screen all pad away from the notch on whichever side it\'s on. The main content already centered in a 430px column so it reads fine in landscape — just now without clipping or notch intrusion. Note: this app is designed for portrait (one-handed logging at the gym); landscape is now usable but not a dedicated wide layout.'},
@@ -6872,7 +6873,11 @@ function completeWk(){
   const recent=DB.get('recent_ex',[]);
   DB.set('recent_ex',[...new Set([...ids,...recent])].slice(0,40));
   syncUp();
-  go('day',{viewDate:S.viewDate});
+  // Done with this log session — clear it and return to the main week view
+  // (previously went to the day-detail screen, which felt like a dead end).
+  S.activeLog=null;S.activeLogKey=null;
+  go('week',{_dir:'back'});
+  showToast('✓ Workout logged','var(--grn)');
 }
 
 /* ── CYCLING PROFILE (FTP + weight) ── */
