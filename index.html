@@ -912,10 +912,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.77';
+const APP_VERSION='2.78';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.78',d:'Assisted-machine logic verified across the whole app — every PR/progression/label path now respects "lower = stronger"',det:'Followed up on v2.76 to make sure the assisted-exercise inversion is applied EVERYWHERE, not just the two main spots. Audited all five PR-write paths: checkPR (manual logging) ✓ and the AI log_gym_sets tool ✓ were already inverted in v2.76; CSV import and manual edit/delete take values as-is (no comparison, correct). Fixed one remaining spot: the AI weekly-review data builder was picking the "best set" by highest weight×reps and labelling "[NEW PR]" by highest weight — backwards for assisted exercises. Now for assisted machines it picks the lowest-assist set as best and labels a PR when assist is at/below your record (with "assist" noted). The whole system is driven by the EX.assist flag, so it\'s centralized — the two assisted machines (Assisted Pull-Up, Assisted Dip) are the only ones in the library and both are flagged; any future assisted exercise just needs the flag and every path handles it automatically.'},
   {v:'2.77',d:'"Complete Workout" now returns you to the main week view (was landing on the day-detail screen — felt like a dead end)',det:'After logging a session, tapping "✓ Complete Workout" navigated to the day-detail screen instead of the main plan page, so it felt like the button didn\'t bounce you out. Now it returns straight to the week view with a back-slide animation, clears the active log session, and shows a "✓ Workout logged" confirmation toast. One tap = done and home.'},
   {v:'2.76',d:'Assisted exercises (pull-up/dip) now tracked correctly — weight is ASSISTANCE, so lower = stronger',det:'On an assisted pull-up/dip machine, the weight you set is how much the machine HELPS you (counterweight) — so MORE weight = MORE help = easier, and getting stronger means REDUCING it toward unassisted. The app was treating it like a normal exercise (higher = better), so it celebrated "70lb assist" as a PR (it\'s actually the most help = weakest) and the progression target told you to ADD assistance. Fixed: (1) assisted_pull-up and assisted_dip flagged with assist:true. (2) PR logic inverted for them — a personal best is now LOWER assist weight (at equal/more reps), or same assist with more reps. So as you reduce the help, you set real PRs. (3) Progression target inverted — when you hit the top of the rep range it now suggests LESS assistance ("↓ −5lb assist"), and at 0 it prompts "try it unassisted!". (4) A clear amber note appears on assisted exercises in the log: "⚖️ This is assistance weight — lower = stronger." The weight column header shows "assist lbs". (5) The AI coach is told these are assisted so its advice points the right way. Your existing 70lb PR will be replaced automatically the next time you log a lower-assist set (or edit it manually).'},
   {v:'2.75',d:'Fix sync PERMISSION_DENIED — cloud save now uses update() instead of set(), respecting the new security rules',det:'After locking down the Firebase security rules, auto-sync started failing with PERMISSION_DENIED. Root cause: saveToCloud did .set({data,updated}) on the whole users/{uid} node, which requires write permission on the entire node — but the new rules (correctly) only grant write on the data and updated CHILD paths, not the parent (so friends can write a friend-request to your sub-node without being able to overwrite your whole record). Changed .set() to .update() — it writes only the data and updated children, which the rules allow. Bonus: this also fixes a latent bug where the full set() would have wiped your profile/friends/friendRequests/advisor sub-nodes on every sync (those siblings are now preserved). No Firebase rule change needed — the rules you already pasted support this.'},
@@ -4686,16 +4687,22 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
           const ex=EX[le.id];if(!ex)return null;
           const done=le.sets.filter(s=>s.done&&s.w&&s.r);if(!done.length)return null;
           const pr=prs[le.id];
+          const _assist=EX[le.id]?.assist;
           const avgW=Math.round(done.reduce((a,s)=>a+(parseFloat(s.w)||0),0)/done.length*10)/10;
           const avgR=Math.round(done.reduce((a,s)=>a+(parseInt(s.r)||0),0)/done.length);
-          const bestSet=done.reduce((b,s)=>(((parseFloat(s.w)||0)*(parseInt(s.r)||0))>((parseFloat(b.w)||0)*(parseInt(b.r)||0))?s:b),done[0]);
+          // Best set: highest weight×reps normally; for assisted exercises the
+          // best set is the LOWEST assist weight (with reps as tiebreaker).
+          const bestSet=_assist
+            ?done.reduce((b,s)=>{const sw=parseFloat(s.w)||1e9,bw=parseFloat(b.w)||1e9;return sw<bw||(sw===bw&&(parseInt(s.r)||0)>(parseInt(b.r)||0))?s:b;},done[0])
+            :done.reduce((b,s)=>(((parseFloat(s.w)||0)*(parseInt(s.r)||0))>((parseFloat(b.w)||0)*(parseInt(b.r)||0))?s:b),done[0]);
           const bestW=Math.round((parseFloat(bestSet?.w)||0)*10)/10;
           const bestR=parseInt(bestSet?.r)||0;
           let prLabel='';
           if(pr){
-            const atOrAbovePR=bestW>=pr.w&&bestR>=pr.r;
+            // Assisted: at/above PR means LESS assist (bestW <= pr.w) at equal/more reps
+            const atOrAbovePR=_assist?(bestW<=pr.w&&bestR>=pr.r):(bestW>=pr.w&&bestR>=pr.r);
             if(atOrAbovePR){prLabel=isEarlyUser?' [baseline]':' [NEW PR]';}
-            else{prLabel=` [below PR: ${pr.w}${u}×${pr.r}]`;}
+            else{prLabel=` [below PR: ${pr.w}${u}×${pr.r}${_assist?' assist':''}]`;}
           }
           return `    ${ex.n}: best ${bestW}${u}×${bestR}, avg ${avgW}${u}×${avgR}, ${done.length} sets${prLabel}`;
         }).filter(Boolean);
