@@ -502,6 +502,9 @@ const EX_EQUIP={
   sl_glute_bridge:['bodyweight'],donkey_kick:['bodyweight'],wall_sit:['bodyweight'],
   mountain_climber:['bodyweight'],bicycle_crunch:['bodyweight'],side_plank:['bodyweight'],
   leg_raise_floor:['bodyweight'],crunch:['bodyweight'],burpee:['bodyweight'],
+  // Single-leg variants (v2.68) — tagged so the gym-equipment filter applies
+  sl_squat:['dumbbell'],reverse_lunge:['dumbbell'],sl_legext:['machine'],
+  sl_rdl:['dumbbell'],cable_kickback:['cable'],sl_seated_calf:['dumbbell'],
 };
 
 /* ── COACHING CUES ── */
@@ -912,10 +915,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.78';
+const APP_VERSION='2.79';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.79',d:'Gym-equipment filtering completed — Swap menu now respects your gym, and all exercises are equipment-tagged',det:'The gym-equipment feature was already live for plan GENERATION (pick a gym → the generator only picks exercises that gym has equipment for, via filterSlot/exAvail/getActiveEquip). But two gaps remained: (1) The manual "🔄 Swap" menu showed ALL same-group alternatives regardless of your gym — so you could swap into an exercise your gym doesn\'t have. Now the swap suggestions (movement slot, muscle group, related) are filtered to only show exercises your selected gym supports, with a safety fallback to the full list if filtering would leave a section empty. (2) The 6 single-leg variants added in v2.68 had no equipment tags, so they bypassed the filter entirely (untagged = always shown). Tagged them now: single-leg squat/reverse lunge/single-leg deadlift/single-leg calf → dumbbell, single-leg leg extension → machine, cable kickback → cable. So picking a gym now correctly governs both generation AND swapping, across every exercise. (Note: the full-text search box in the swap sheet still searches all exercises, so you can always pick something manually if you know your gym has it.)'},
   {v:'2.78',d:'Assisted-machine logic verified across the whole app — every PR/progression/label path now respects "lower = stronger"',det:'Followed up on v2.76 to make sure the assisted-exercise inversion is applied EVERYWHERE, not just the two main spots. Audited all five PR-write paths: checkPR (manual logging) ✓ and the AI log_gym_sets tool ✓ were already inverted in v2.76; CSV import and manual edit/delete take values as-is (no comparison, correct). Fixed one remaining spot: the AI weekly-review data builder was picking the "best set" by highest weight×reps and labelling "[NEW PR]" by highest weight — backwards for assisted exercises. Now for assisted machines it picks the lowest-assist set as best and labels a PR when assist is at/below your record (with "assist" noted). The whole system is driven by the EX.assist flag, so it\'s centralized — the two assisted machines (Assisted Pull-Up, Assisted Dip) are the only ones in the library and both are flagged; any future assisted exercise just needs the flag and every path handles it automatically.'},
   {v:'2.77',d:'"Complete Workout" now returns you to the main week view (was landing on the day-detail screen — felt like a dead end)',det:'After logging a session, tapping "✓ Complete Workout" navigated to the day-detail screen instead of the main plan page, so it felt like the button didn\'t bounce you out. Now it returns straight to the week view with a back-slide animation, clears the active log session, and shows a "✓ Workout logged" confirmation toast. One tap = done and home.'},
   {v:'2.76',d:'Assisted exercises (pull-up/dip) now tracked correctly — weight is ASSISTANCE, so lower = stronger',det:'On an assisted pull-up/dip machine, the weight you set is how much the machine HELPS you (counterweight) — so MORE weight = MORE help = easier, and getting stronger means REDUCING it toward unassisted. The app was treating it like a normal exercise (higher = better), so it celebrated "70lb assist" as a PR (it\'s actually the most help = weakest) and the progression target told you to ADD assistance. Fixed: (1) assisted_pull-up and assisted_dip flagged with assist:true. (2) PR logic inverted for them — a personal best is now LOWER assist weight (at equal/more reps), or same assist with more reps. So as you reduce the help, you set real PRs. (3) Progression target inverted — when you hit the top of the rep range it now suggests LESS assistance ("↓ −5lb assist"), and at 0 it prompts "try it unassisted!". (4) A clear amber note appears on assisted exercises in the log: "⚖️ This is assistance weight — lower = stronger." The weight column header shows "assist lbs". (5) The AI coach is told these are assisted so its advice points the right way. Your existing 70lb PR will be replaced automatically the next time you log a lower-assist set (or edit it manually).'},
@@ -9014,12 +9018,17 @@ function getAlternatives(exId,type){
   const ds=S.viewDate?fd(S.viewDate):null;
   const currentExs=plan?.find(d=>d.date===ds)?.exercises||[];
   const ex=EX[exId];
-  const sameGroup=Object.entries(EX)
-    .filter(([id,e])=>id!==exId&&e.g===ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id))
+  // v2.79: only suggest exercises the user's selected gym actually has equipment
+  // for. If filtering a section empties it (e.g. minimal home gym), fall back to
+  // the unfiltered list so the user is never left with zero options.
+  const avail=id=>exAvail(id);
+  const slotAltsF=slotAlts.filter(avail); slotAlts=slotAltsF.length?slotAltsF:slotAlts;
+  let sameGroup=Object.entries(EX)
+    .filter(([id,e])=>id!==exId&&e.g===ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id)&&exAvail(id))
     .map(([id])=>id);
   // broader same-category (adjacent muscle groups)
-  const broader=Object.entries(EX)
-    .filter(([id,e])=>id!==exId&&e.g!==ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id)&&!sameGroup.includes(id)&&ex.m.split(' · ').some(m=>e.m.includes(m.split(' ')[0])))
+  let broader=Object.entries(EX)
+    .filter(([id,e])=>id!==exId&&e.g!==ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id)&&!sameGroup.includes(id)&&exAvail(id)&&ex.m.split(' · ').some(m=>e.m.includes(m.split(' ')[0])))
     .map(([id])=>id).slice(0,3);
   return{slotAlts,sameGroup,broader};
 }
