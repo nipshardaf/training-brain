@@ -915,10 +915,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.81';
+const APP_VERSION='2.82';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.82',d:'Generate plan now directly prioritises what you skipped last week — not just inferred from gaps',det:'Made the catch-up logic in getMostNeededGymType() much more direct. Before: it looked at the LAST 14 days of completed logs and prioritised whichever muscle group had the biggest gap — indirect. Now: it FIRST checks what was planned in the last 7 days but had no log, and anchors the new week\'s rotation on the EARLIEST of those direct misses (so the most overdue catch-up comes Monday, with any later misses falling in next). Falls back to the longest-gap logic only if there were no planned-but-skipped sessions. Practical effect: if you planned Legs on Saturday and skipped it, Monday\'s first gym day this week is Legs — guaranteed, not inferred. The banner from v2.81 still appears showing what was caught up.'},
   {v:'2.81',d:'Made the missed-workouts catch-up VISIBLE — banner on the week view shows what you missed and how the plan adjusted',det:'The catch-up logic (since v2.64) silently prioritised muscle groups you skipped — but you couldn\'t tell it was working. Now an amber banner appears at the top of the week view when last week had misses: "Last week you missed Legs + 1 ride. This week starts with Legs to catch up." Dismissible (x), per-week, and re-appears after every Regenerate so you can confirm the new plan accounted for what you skipped. Only shows on the current/future week, never historical. The banner reads the prior week\'s plan, compares it to actual gym logs and Strava rides, and only fires when there\'s a real miss — so it stays out of the way when you\'re on track.'},
   {v:'2.80',d:'Gym-equipment preference now carries into the AI coach — it won\'t suggest or swap to exercises your gym lacks',det:'Completing the gym-equipment work: the Ask Coach now respects your selected gym. (1) The AI prompt has a new "GYM EQUIPMENT (hard constraint)" section listing your gym name and available equipment, with explicit instructions to only suggest/swap exercises that equipment supports and to offer the closest available alternative if you ask for something the gym can\'t do. (2) The swap_exercise tool now rejects swapping into an exercise your gym lacks ("Your gym doesn\'t have the equipment for X"). (3) make_legs_unilateral skips any single-leg conversion whose variant needs equipment your gym doesn\'t have (keeps the original, notes how many were kept). The plan-mutating tools that generate fresh exercises (change_day_type, add_workout_to_ride_day, swap_workout_days, regenerate) already route through genSession, which has always filtered by gym equipment. So the gym preference now governs the entire app: generation, manual swap, AND the AI coach.'},
   {v:'2.79',d:'Gym-equipment filtering completed — Swap menu now respects your gym, and all exercises are equipment-tagged',det:'The gym-equipment feature was already live for plan GENERATION (pick a gym → the generator only picks exercises that gym has equipment for, via filterSlot/exAvail/getActiveEquip). But two gaps remained: (1) The manual "🔄 Swap" menu showed ALL same-group alternatives regardless of your gym — so you could swap into an exercise your gym doesn\'t have. Now the swap suggestions (movement slot, muscle group, related) are filtered to only show exercises your selected gym supports, with a safety fallback to the full list if filtering would leave a section empty. (2) The 6 single-leg variants added in v2.68 had no equipment tags, so they bypassed the filter entirely (untagged = always shown). Tagged them now: single-leg squat/reverse lunge/single-leg deadlift/single-leg calf → dumbbell, single-leg leg extension → machine, cable kickback → cable. So picking a gym now correctly governs both generation AND swapping, across every exercise. (Note: the full-text search box in the swap sheet still searches all exercises, so you can always pick something manually if you know your gym has it.)'},
@@ -2833,8 +2834,31 @@ function getLastGymType(){
 // e.g. user did Pull (Wed) then Push (Fri) — old logic: next=Pull (repeats),
 //      new logic: next=Legs (longest gap, never done in 14 days).
 function getMostNeededGymType(){
+  // v2.82: PRIMARY signal — anything planned in the last 7 days that wasn't done?
+  // A directly-missed workout is the clearest "catch this up" signal there is.
+  // We anchor the new week's rotation on the EARLIEST missed type so the user's
+  // first gym day of the new week hits whatever they skipped longest ago.
+  const missedRecently=[];
+  for(let i=1;i<=7;i++){
+    const d=addDays(new Date(),-i);
+    const plan=DB.get(DB.pk(getMon(d)),null);
+    const dp=plan?.find(x=>x.date===fd(d));
+    if(dp&&GYM_SEQ.includes(dp.type)){
+      const log=DB.get(DB.lk(d),null);
+      const done=log?.exercises?.some(e=>e.sets?.some(s=>s.done));
+      if(!done)missedRecently.push({type:dp.type,daysAgo:i});
+    }
+  }
+  if(missedRecently.length){
+    // Most overdue (largest daysAgo) goes first. Walking GYM_SEQ from there picks up
+    // any later misses naturally — e.g. missed LEGS (5d ago) + UPPER (2d ago) →
+    // rotation = LEGS, UPPER, PUSH, PULL → both missed types come first.
+    missedRecently.sort((a,b)=>b.daysAgo-a.daysAgo);
+    return missedRecently[0].type;
+  }
+
+  // FALLBACK: nothing was planned-but-skipped — use longest-gap logic.
   // Track how many days ago each gym type was last completed.
-  // -Infinity means "not seen in the lookback window" (highest priority).
   const lastSeen={PUSH:-Infinity,PULL:-Infinity,LEGS:-Infinity,UPPER_PUMP:-Infinity};
   for(let i=1;i<=14;i++){
     const d=addDays(new Date(),-i);
@@ -2843,17 +2867,15 @@ function getMostNeededGymType(){
       const plan=DB.get(DB.pk(getMon(d)),null);
       const dp=plan?.find(x=>x.date===fd(d));
       if(dp&&GYM_SEQ.includes(dp.type)){
-        // Record the FIRST time we encounter each type (scanning back = most recent)
         if(lastSeen[dp.type]===-Infinity)lastSeen[dp.type]=i;
       }
     }
   }
-  // If any type was never seen in the window, it's the highest-priority "skipped" type.
-  // When multiple are tied at -Infinity, pick the one earliest in canonical PPL order.
+  // Any type never seen in the window? It's the highest-priority skipped type.
   for(const t of GYM_SEQ){
     if(lastSeen[t]===-Infinity)return t;
   }
-  // All types have been done recently — return the one done longest ago.
+  // All types done recently — return the one done longest ago.
   return Object.entries(lastSeen).sort((a,b)=>b[1]-a[1])[0][0];
 }
 
