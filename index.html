@@ -893,6 +893,7 @@ const WI = {
   LONG_INDOOR:  {l:()=>{const s=getRideSession('LONG_INDOOR');  return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('LONG_INDOOR');  return `${s.total} min · Zone 2 · Indoor`;}},
   SHORT_INDOOR: {l:()=>{const s=getRideSession('SHORT_INDOOR'); return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('SHORT_INDOOR'); return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
+  SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Day passed without a workout — moved to the next available day.'},
 };
 
 const COACH = {
@@ -915,10 +916,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.82';
+const APP_VERSION='2.83';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.83',d:'Past days with nothing logged auto-mark as Skipped and the missed workout cascades forward through the rest of the week',det:'When a day passes with no completed workout (no gym sets, no Strava ride, no manual ride log), it now auto-converts to a Skipped day and its planned workout shifts into the next available day, pushing later workouts forward by one. Example: planned Tue=Push / Wed=Legs / Thu=Pull, you skip Tue, and today is Wed → Tue=Skipped, Wed=Push, Thu=Legs, Fri=Pull. Cascade stops at any already-completed day (so logged sessions are never disturbed). New SKIPPED day type added to WI map with its own grey colour and "Skipped" label. Runs idempotently on every week-view render so the layout always reflects reality. Only operates on the current week (never on past or future weeks).'},
   {v:'2.82',d:'Generate plan now directly prioritises what you skipped last week — not just inferred from gaps',det:'Made the catch-up logic in getMostNeededGymType() much more direct. Before: it looked at the LAST 14 days of completed logs and prioritised whichever muscle group had the biggest gap — indirect. Now: it FIRST checks what was planned in the last 7 days but had no log, and anchors the new week\'s rotation on the EARLIEST of those direct misses (so the most overdue catch-up comes Monday, with any later misses falling in next). Falls back to the longest-gap logic only if there were no planned-but-skipped sessions. Practical effect: if you planned Legs on Saturday and skipped it, Monday\'s first gym day this week is Legs — guaranteed, not inferred. The banner from v2.81 still appears showing what was caught up.'},
   {v:'2.81',d:'Made the missed-workouts catch-up VISIBLE — banner on the week view shows what you missed and how the plan adjusted',det:'The catch-up logic (since v2.64) silently prioritised muscle groups you skipped — but you couldn\'t tell it was working. Now an amber banner appears at the top of the week view when last week had misses: "Last week you missed Legs + 1 ride. This week starts with Legs to catch up." Dismissible (x), per-week, and re-appears after every Regenerate so you can confirm the new plan accounted for what you skipped. Only shows on the current/future week, never historical. The banner reads the prior week\'s plan, compares it to actual gym logs and Strava rides, and only fires when there\'s a real miss — so it stays out of the way when you\'re on track.'},
   {v:'2.80',d:'Gym-equipment preference now carries into the AI coach — it won\'t suggest or swap to exercises your gym lacks',det:'Completing the gym-equipment work: the Ask Coach now respects your selected gym. (1) The AI prompt has a new "GYM EQUIPMENT (hard constraint)" section listing your gym name and available equipment, with explicit instructions to only suggest/swap exercises that equipment supports and to offer the closest available alternative if you ask for something the gym can\'t do. (2) The swap_exercise tool now rejects swapping into an exercise your gym lacks ("Your gym doesn\'t have the equipment for X"). (3) make_legs_unilateral skips any single-leg conversion whose variant needs equipment your gym doesn\'t have (keeps the original, notes how many were kept). The plan-mutating tools that generate fresh exercises (change_day_type, add_workout_to_ride_day, swap_workout_days, regenerate) already route through genSession, which has always filtered by gym equipment. So the gym preference now governs the entire app: generation, manual swap, AND the AI coach.'},
@@ -2912,6 +2914,59 @@ function dismissCatchUp(){
   render();
 }
 
+// v2.83: Auto-skip + cascade. When a past day in the current week had a workout
+// planned but nothing was logged, mark the day SKIPPED and shift its workout into
+// the next non-completed day, cascading later days forward by one position. So:
+// missed Tue Push + today Wed (originally Legs) → Tue=SKIPPED, Wed=Push, Thu=Legs…
+// Runs idempotently at every render of the current week. Never touches:
+//   - already-completed days (logged sets / completed flag / Strava ride)
+//   - REST days (skipping a rest day is not interesting)
+//   - already-SKIPPED days
+//   - days in the future (today included — user may still log)
+function _dayPayload(d){const p={};for(const k in d)if(k!=='date')p[k]=d[k];return p;}
+function _setDayPayload(d,p){for(const k of Object.keys(d))if(k!=='date')delete d[k];Object.assign(d,p);}
+function _dayWasDone(d){
+  const log=DB.get('log_'+d.date,null);
+  if(log?.completed)return true;
+  if(log?.exercises?.some(e=>e.sets?.some(s=>s.done)))return true;
+  if(log?.ride?.dur!=null)return true;
+  if(typeof stravaRideOnDate==='function'&&stravaRideOnDate(d.date))return true;
+  return false;
+}
+function applyAutoSkipShift(){
+  // Only operate on the currently-displayed week, and only if it's the current week.
+  const todayMon=getMon(new Date());
+  if(+S.weekStart!==+todayMon)return false;
+  const pk=DB.pk(S.weekStart);
+  const plan=DB.get(pk,null);
+  if(!plan||!plan.length)return false;
+  const sorted=[...plan].sort((a,b)=>a.date.localeCompare(b.date));
+  const todayStr=fd(new Date());
+  let changed=false;
+  for(let i=0;i<sorted.length;i++){
+    const day=sorted[i];
+    if(day.date>=todayStr)break;          // only past days
+    if(day.type==='SKIPPED'||day.type==='REST')continue;
+    if(_dayWasDone(day))continue;
+    // This day was missed — carry its payload forward, cascading later uncompleted days
+    const orig=_dayPayload(day); // capture original (incl. weather) before cascade clobbers it
+    let carry=orig;
+    for(let j=i+1;j<sorted.length;j++){
+      const futDay=sorted[j];
+      if(_dayWasDone(futDay))break;       // hit a locked day — stop cascading
+      if(futDay.type==='SKIPPED')continue; // step over earlier skipped slots
+      const next=_dayPayload(futDay);
+      _setDayPayload(futDay,carry);
+      carry=next;
+    }
+    // Preserve weather so the day-row renderer (which reads day.weather) keeps working
+    _setDayPayload(day,{type:'SKIPPED',weather:orig.weather||{score:0,code:1,tmax:15,tmin:5,rain:0,wind:10}});
+    changed=true;
+  }
+  if(changed)DB.set(pk,sorted);
+  return changed;
+}
+
 function rCatchUpBanner(){
   // Only show on the CURRENT or future week (not historical weeks)
   const todayMon=getMon(new Date());
@@ -4268,6 +4323,9 @@ function render(){
 
 /* ── WEEK SCREEN ── */
 function rWeek(){
+  // v2.83: Auto-shift any past missed days before rendering so the week always
+  // reflects "skipped→cascade forward" by the time the user sees it.
+  applyAutoSkipShift();
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   const sun=addDays(S.weekStart,6);
