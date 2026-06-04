@@ -916,10 +916,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.83';
+const APP_VERSION='2.84';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.84',d:'Auto-skip + cascade now also reaches back into last week — trailing missed days carry into this week',det:'Extends v2.83. The auto-cascade now scans BACKWARDS from last Sunday: every trailing workout day with no log gets pulled into this week. Example: you skip last Sunday\'s Legs and today is Monday → last Sun is marked Skipped AND this Monday becomes Legs (whatever Monday was originally gets pushed to Tuesday, etc). If you skipped both Sat and Sun, the OLDER miss lands on Monday (Sat→Mon, Sun→Tue, original Mon→Wed) — chronological catch-up. The backward scan stops at last week\'s first completed day so sessions you actually did are never disturbed. Trailing workouts that fall off this week are caught next week via the v2.82 catch-up signal.'},
   {v:'2.83',d:'Past days with nothing logged auto-mark as Skipped and the missed workout cascades forward through the rest of the week',det:'When a day passes with no completed workout (no gym sets, no Strava ride, no manual ride log), it now auto-converts to a Skipped day and its planned workout shifts into the next available day, pushing later workouts forward by one. Example: planned Tue=Push / Wed=Legs / Thu=Pull, you skip Tue, and today is Wed → Tue=Skipped, Wed=Push, Thu=Legs, Fri=Pull. Cascade stops at any already-completed day (so logged sessions are never disturbed). New SKIPPED day type added to WI map with its own grey colour and "Skipped" label. Runs idempotently on every week-view render so the layout always reflects reality. Only operates on the current week (never on past or future weeks).'},
   {v:'2.82',d:'Generate plan now directly prioritises what you skipped last week — not just inferred from gaps',det:'Made the catch-up logic in getMostNeededGymType() much more direct. Before: it looked at the LAST 14 days of completed logs and prioritised whichever muscle group had the biggest gap — indirect. Now: it FIRST checks what was planned in the last 7 days but had no log, and anchors the new week\'s rotation on the EARLIEST of those direct misses (so the most overdue catch-up comes Monday, with any later misses falling in next). Falls back to the longest-gap logic only if there were no planned-but-skipped sessions. Practical effect: if you planned Legs on Saturday and skipped it, Monday\'s first gym day this week is Legs — guaranteed, not inferred. The banner from v2.81 still appears showing what was caught up.'},
   {v:'2.81',d:'Made the missed-workouts catch-up VISIBLE — banner on the week view shows what you missed and how the plan adjusted',det:'The catch-up logic (since v2.64) silently prioritised muscle groups you skipped — but you couldn\'t tell it was working. Now an amber banner appears at the top of the week view when last week had misses: "Last week you missed Legs + 1 ride. This week starts with Legs to catch up." Dismissible (x), per-week, and re-appears after every Regenerate so you can confirm the new plan accounted for what you skipped. Only shows on the current/future week, never historical. The banner reads the prior week\'s plan, compares it to actual gym logs and Strava rides, and only fires when there\'s a real miss — so it stays out of the way when you\'re on track.'},
@@ -2943,6 +2944,47 @@ function applyAutoSkipShift(){
   const sorted=[...plan].sort((a,b)=>a.date.localeCompare(b.date));
   const todayStr=fd(new Date());
   let changed=false;
+
+  // Reusable: cascade ONE payload into this week — slot it into the first non-completed,
+  // non-SKIPPED day, pushing later payloads down by one. Trailing payloads fall off (they
+  // become catch-up signal for NEXT week via getMostNeededGymType).
+  function _cascadeIn(carry){
+    for(let j=0;j<sorted.length;j++){
+      const futDay=sorted[j];
+      if(_dayWasDone(futDay))break;
+      if(futDay.type==='SKIPPED')continue;
+      const next=_dayPayload(futDay);
+      _setDayPayload(futDay,carry);
+      carry=next;
+    }
+  }
+
+  // v2.84: also pull in LAST week's trailing misses. Scan back from last Sunday: each
+  // workout day with no log gets cascaded into this week. Stops at the first day that
+  // WAS done (so we never drag earlier complete sessions forward). Most-recent miss
+  // cascades first so the OLDEST miss ends up on Monday (chronological catch-up).
+  const lastMonDate=getMon(addDays(S.weekStart,-7));
+  const lastPk=DB.pk(lastMonDate);
+  const lastPlan=DB.get(lastPk,null);
+  if(lastPlan&&lastPlan.length){
+    const lastSorted=[...lastPlan].sort((a,b)=>a.date.localeCompare(b.date));
+    const carryIns=[]; // most-recent miss first (matches cascade-order requirement)
+    for(let li=lastSorted.length-1;li>=0;li--){
+      const ld=lastSorted[li];
+      if(_dayWasDone(ld))break;                         // hit a completed day — stop
+      if(ld.type==='SKIPPED'||ld.type==='REST')continue; // not a missed workout
+      carryIns.push({orig:_dayPayload(ld),dayRef:ld});
+    }
+    if(carryIns.length){
+      for(const c of carryIns){
+        _cascadeIn(c.orig);
+        _setDayPayload(c.dayRef,{type:'SKIPPED',weather:c.orig.weather||{score:0,code:1,tmax:15,tmin:5,rain:0,wind:10}});
+      }
+      DB.set(lastPk,lastSorted);
+      changed=true;
+    }
+  }
+
   for(let i=0;i<sorted.length;i++){
     const day=sorted[i];
     if(day.date>=todayStr)break;          // only past days
