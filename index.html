@@ -478,6 +478,17 @@ const SLOTS = {
     ['hammer','preacher','cable_curl','incline_curl','db_curl'],             // 5. Bicep isolation
     ['tri_push','tri_oh','skull','diamond_pu'],                             // 6. Tricep isolation
   ],
+  // FULL_BODY (v2.85) — short-week template. One session covering every major
+  // pattern: squat, hinge, horizontal push, vertical pull, shoulder/arm, core.
+  // Used when the user flags a time-strapped week (1-2 sessions).
+  FULL_BODY:[
+    ['bb_squat','front_squat','goblet_squat','leg_press','bw_squat'],         // 1. Squat / quad compound
+    ['rdl','deadlift','hip_thrust','glute_bridge','sl_glute_bridge'],         // 2. Hinge / posterior
+    ['bb_bench','db_bench','incline_db','pushup','decline_pu'],               // 3. Horizontal press
+    ['pullup','assisted_pullup','lat_pull','bb_row','db_row','inverted_row'], // 4. Pull (vertical or row)
+    ['db_spress','arnold','lat_raise','pike_pu'],                             // 5. Shoulder / arm finisher
+    ['plank','hang_raise','ab_wheel','cable_crunch','bicycle_crunch','leg_raise_floor'], // 6. Core
+  ],
 };
 
 /* ── EQUIPMENT TAGS ── */
@@ -894,6 +905,7 @@ const WI = {
   SHORT_INDOOR: {l:()=>{const s=getRideSession('SHORT_INDOOR'); return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('SHORT_INDOOR'); return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
   SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Day passed without a workout — moved to the next available day.'},
+  FULL_BODY:    {l:()=>'Full Body',         i:_icon('gym-weights.png','💪'),     c:'#7c3aed',d:()=>'One-session full-body — squat · hinge · press · pull · shoulder · core'},
 };
 
 const COACH = {
@@ -916,10 +928,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.84';
+const APP_VERSION='2.85';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.85',d:'Short-week mode — compress your plan into 1, 2, or 3 days when you can\'t make it to the gym as often this week',det:'New ⏱️ button next to the regenerate icon (or ask the AI coach "I can only train 2 days this week"). Pick 1, 2, or 3 — the plan rebuilds: 1-2 days = full-body sessions (squat, hinge, press, pull, shoulder, core), 3 days = Push/Pull/Legs split. Training days land on the best-weather slots, the rest of the week becomes recovery. Locked days (anything you already logged) are preserved. New FULL_BODY day type with a dedicated full-body exercise template. Status indicator on the week-nav shows ⏱️ Nd when an override is active; pick Auto to revert. Per-week — next week resets to your normal profile setting.'},
   {v:'2.84',d:'Auto-skip + cascade now also reaches back into last week — trailing missed days carry into this week',det:'Extends v2.83. The auto-cascade now scans BACKWARDS from last Sunday: every trailing workout day with no log gets pulled into this week. Example: you skip last Sunday\'s Legs and today is Monday → last Sun is marked Skipped AND this Monday becomes Legs (whatever Monday was originally gets pushed to Tuesday, etc). If you skipped both Sat and Sun, the OLDER miss lands on Monday (Sat→Mon, Sun→Tue, original Mon→Wed) — chronological catch-up. The backward scan stops at last week\'s first completed day so sessions you actually did are never disturbed. Trailing workouts that fall off this week are caught next week via the v2.82 catch-up signal.'},
   {v:'2.83',d:'Past days with nothing logged auto-mark as Skipped and the missed workout cascades forward through the rest of the week',det:'When a day passes with no completed workout (no gym sets, no Strava ride, no manual ride log), it now auto-converts to a Skipped day and its planned workout shifts into the next available day, pushing later workouts forward by one. Example: planned Tue=Push / Wed=Legs / Thu=Pull, you skip Tue, and today is Wed → Tue=Skipped, Wed=Push, Thu=Legs, Fri=Pull. Cascade stops at any already-completed day (so logged sessions are never disturbed). New SKIPPED day type added to WI map with its own grey colour and "Skipped" label. Runs idempotently on every week-view render so the layout always reflects reality. Only operates on the current week (never on past or future weeks).'},
   {v:'2.82',d:'Generate plan now directly prioritises what you skipped last week — not just inferred from gaps',det:'Made the catch-up logic in getMostNeededGymType() much more direct. Before: it looked at the LAST 14 days of completed logs and prioritised whichever muscle group had the biggest gap — indirect. Now: it FIRST checks what was planned in the last 7 days but had no log, and anchors the new week\'s rotation on the EARLIEST of those direct misses (so the most overdue catch-up comes Monday, with any later misses falling in next). Falls back to the longest-gap logic only if there were no planned-but-skipped sessions. Practical effect: if you planned Legs on Saturday and skipped it, Monday\'s first gym day this week is Legs — guaranteed, not inferred. The banner from v2.81 still appears showing what was caught up.'},
@@ -3085,9 +3098,33 @@ function buildWeek(wdays){
     if(existingDay&&existingDay.type===type&&existingDay.exercises?.length){
       return{...existingDay,weather:w}; // same type → keep exercises, just update weather
     }
-    const exs=GYM_SEQ.includes(type)?genSession(type):null;
+    // v2.85: generate exercises for any type defined in SLOTS (covers GYM_SEQ + FULL_BODY)
+    const exs=SLOTS[type]?genSession(type):null;
     return{date:w.date,type,exercises:exs,weather:w};
   };
+
+  // v2.85: Short-week override. User flagged "I can only train N days this week"
+  // via the ⏱️ button or AI coach. Skip the rotation/ride logic and build a
+  // minimal plan: N FULL_BODY days on the best-weather slots, rest = REST.
+  // Locked days are preserved as always.
+  const weekCap=DB.get('week_capacity_'+fd(S.weekStart),null);
+  if(weekCap&&weekCap>=1&&weekCap<=3){
+    const numTrain=weekCap;
+    // Available (non-locked) days, ranked by score (best weather first)
+    const _avail=ranked.filter(r=>!locked[wdays[r.i]?.date]);
+    const _pickedIdx=new Set(_avail.slice(0,numTrain).map(r=>r.i));
+    // For 3 days, give the user a PPL split; for 1-2 days, full-body.
+    const _types=numTrain===3?['PUSH','PULL','LEGS']:Array(numTrain).fill('FULL_BODY');
+    const _trainOrder=[...wdays.keys()].filter(i=>_pickedIdx.has(i));
+    return wdays.map((w,i)=>{
+      if(locked[w.date])return{...locked[w.date],weather:w};
+      if(_pickedIdx.has(i)){
+        const slot=_trainOrder.indexOf(i);
+        return mk(w,_types[slot]||'FULL_BODY');
+      }
+      return mk(w,'REST');
+    });
+  }
 
   // Assign gym types, respecting locked days. v2.64: starts the rotation from
   // the MOST-NEEDED type (longest gap) rather than just "next after last done".
@@ -4385,6 +4422,8 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(-1)">‹</button>
   <div class="week-label">${lbl}</div>
   ${plan?`<button onclick="genPlan()" title="Regenerate plan" style="background:none;border:none;font-size:15px;cursor:pointer;padding:4px 6px;color:var(--t2);line-height:1;opacity:0.7">🔄</button>`:''}
+  ${plan?(()=>{const wc=DB.get('week_capacity_'+fd(S.weekStart),null);
+    return`<button onclick="openShortWeek()" title="Short week" style="background:${wc?'rgba(124,58,237,.15)':'none'};border:${wc?'1px solid var(--acc)':'none'};border-radius:8px;font-size:15px;cursor:pointer;padding:3px 7px;color:${wc?'var(--acc)':'var(--t2)'};line-height:1;opacity:${wc?'1':'0.7'};font-weight:${wc?'700':'400'}">⏱️${wc?` ${wc}d`:''}</button>`;})():''}
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rAskCoach()}
@@ -4839,7 +4878,7 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   const goalDesc=_goals.map(g=>_gm[g]||g).join(' + ')||'general fitness';
   const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
   // Human-readable labels for workout types sent to AI (never raw constants)
-  const _typeLabel={PUSH:'Push (Chest/Shoulders/Triceps)',PULL:'Pull (Back/Biceps)',LEGS:'Legs',UPPER_PUMP:'Upper Body (Full Upper)',LONG_OUTDOOR:'Long Outdoor Ride',SHORT_OUTDOOR:'Short Outdoor Ride',LONG_INDOOR:'Long Indoor Ride',SHORT_INDOOR:'Short Indoor Ride',REST:'Rest & Mobility'};
+  const _typeLabel={PUSH:'Push (Chest/Shoulders/Triceps)',PULL:'Pull (Back/Biceps)',LEGS:'Legs',UPPER_PUMP:'Upper Body (Full Upper)',FULL_BODY:'Full Body',LONG_OUTDOOR:'Long Outdoor Ride',SHORT_OUTDOOR:'Short Outdoor Ride',LONG_INDOOR:'Long Indoor Ride',SHORT_INDOOR:'Short Indoor Ride',REST:'Rest & Mobility',SKIPPED:'Skipped'};
   const _tl=t=>_typeLabel[t]||t;
   // Count weeks with actual gym sessions logged (Option A: experience context)
   let weeksOfGymHistory=0;
@@ -5364,7 +5403,7 @@ function buildAskPrompt(question){
   const ydayLog=DB.get('log_'+ydayStr,null);
   const ydayRide=stravaRideOnDate(ydayStr);
   // Format today's plan + weather
-  const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest'};
+  const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',FULL_BODY:'Full body',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest',SKIPPED:'Skipped'};
   const todayPlanStr=todayPlan?`${_typeLabel[todayPlan.type]||todayPlan.type}${todayPlan.weather?` · weather ${todayPlan.weather.tmin}-${todayPlan.weather.tmax}°C, rain ${todayPlan.weather.rain}mm`:''}`:'no plan';
   const todayDoneStr=todayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?'GYM ALREADY DONE TODAY':todayRide?`RIDE ALREADY LOGGED TODAY: ${+((todayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((todayRide.moving_time||0)/60)}min`:'nothing logged yet';
   const ydayStr2=ydayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?`Yesterday: gym (${ydayLog.type})`:ydayRide?`Yesterday: rode ${+((ydayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((ydayRide.moving_time||0)/60)}min`:'Yesterday: rest';
@@ -5647,6 +5686,17 @@ const COACH_TOOLS=[{
       }
     },
     {
+      name:'set_week_capacity',
+      description:"Compress this week's plan to a smaller number of training days. Use when the user says they're short on time — e.g. 'I can only train 2 days this week', 'I only have time for one gym session', or 'make this a short week, 3 days max'. 1-2 days becomes a full-body session each; 3 becomes Push/Pull/Legs. Pass null/0 to clear the override and go back to their normal plan.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          days:{type:'INTEGER',description:'How many training days the user can do this week (1, 2, or 3). Use 0 to clear the override.'}
+        },
+        required:['days']
+      }
+    },
+    {
       name:'set_exercise_targets',
       description:"Set the target sets, reps, and/or weight for a specific exercise on a gym day. Use when the user wants to prescribe loading — e.g. 'set my squat to 5 sets of 5 at 100kg on Friday' or 'make today's bench 4x8'. The exercise name is fuzzy-matched. Weight is in the user's preferred unit. Any omitted field keeps its current/default value. This pre-fills the targets in the log — the user still logs their actual sets.",
       parameters:{
@@ -5681,6 +5731,24 @@ const UNILATERAL_MAP={
 // card, plus the actual mutation handler. Each handler returns a short result
 // string used for the success toast.
 const COACH_TOOL_HANDLERS={
+  set_week_capacity:{
+    summarize:({days})=>{
+      const n=parseInt(days,10);
+      if(!n)return`Clear short-week override, regenerate normal plan`;
+      const split=n===3?'Push · Pull · Legs':`${n} full-body session${n>1?'s':''}`;
+      return`Compress this week to ${n} training day${n>1?'s':''} (${split}), rest is recovery`;
+    },
+    execute:({days})=>{
+      const n=parseInt(days,10);
+      const k='week_capacity_'+fd(S.weekStart);
+      if(!n||n<1){try{localStorage.removeItem(k);}catch(e){}DB.set(k,null);genPlan();syncUp();return{ok:true,msg:'Short-week override cleared'};}
+      if(n>3)return{ok:false,msg:'Short-week supports 1-3 days. For 4+ days adjust your profile setting instead.'};
+      DB.set(k,n);
+      genPlan();
+      syncUp();
+      return{ok:true,msg:`Week compressed to ${n} training day${n>1?'s':''}`};
+    }
+  },
   swap_workout_days:{
     summarize:({date1,date2})=>{
       const pk=DB.pk(getMon(new Date(date1+'T12:00:00')));
@@ -8930,6 +8998,37 @@ function filterGyms(q){
 }
 
 /* ── SWAP MODAL ── */
+// v2.85: Short-week override — let the user say "I only have N days this week".
+function openShortWeek(){
+  const cur=DB.get('week_capacity_'+fd(S.weekStart),null);
+  const mk=(n,lbl,sub)=>`<button class="swap-opt" onclick="setShortWeek(${n})" style="${cur===n?'border-color:var(--acc);background:rgba(124,58,237,.08)':''}">${cur===n?'✓ ':''}${lbl}<span>${sub}</span></button>`;
+  const modal=document.createElement('div');
+  modal.className='swap-modal';modal.id='swap-modal';
+  modal.innerHTML=`<div class="swap-ov" onclick="closeSwap()"></div>
+<div class="swap-sheet">
+  <div class="swap-title">Short week — how many days can you train?</div>
+  <div style="font-size:12px;color:var(--t2);padding:0 4px 12px;line-height:1.5">Pick the number of days you can realistically get to the gym. The plan will compress to fit, picking the best-weather days and giving you a full-body session (or a 3-day split if you pick 3).</div>
+  ${mk(1,'⏱️ 1 day','One full-body session — squat · hinge · press · pull')}
+  ${mk(2,'⏱️ 2 days','Two full-body sessions on best-weather days')}
+  ${mk(3,'⏱️ 3 days','Push · Pull · Legs split')}
+  <button class="swap-opt" onclick="setShortWeek(null)" style="${cur===null?'border-color:var(--acc);background:rgba(124,58,237,.08)':''}">${cur===null?'✓ ':''}Auto (use my normal plan)<span>Honour my profile days/week setting</span></button>
+  <button class="swap-cancel" onclick="closeSwap()">Cancel</button>
+</div>`;
+  document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('on'));
+}
+function setShortWeek(n){
+  const k='week_capacity_'+fd(S.weekStart);
+  if(n==null)DB.del?.(k);else DB.set(k,n);
+  // Also clear via direct localStorage in case DB.del isn't defined
+  if(n==null){try{localStorage.removeItem(k);}catch(e){}}
+  closeSwap();
+  // Also clear catchup_dismissed so the week's banner refreshes
+  DB.set('catchup_dismissed_'+fd(S.weekStart),false);
+  // Regenerate the week's plan with the new capacity
+  genPlan();
+}
+
 function openSwap(ds){
   const modal=document.createElement('div');
   modal.className='swap-modal';
