@@ -1,0 +1,19 @@
+// Cloud Firestore security rules — Training Brain
+//
+// The app does NOT use Cloud Firestore (it uses the Realtime Database; see
+// database.rules.json). A "(default)" Firestore database was auto-created when
+// the project was first set up in Test Mode, and it held some leftover workout
+// data from an early version of the app. Those open test-mode rules were set to
+// expire on 2026-06-18, leaving the data exposed until then.
+//
+// These rules deny all client access, closing that exposure. The leftover data
+// is preserved (not deleted) but is now unreachable from the open internet.
+// Published to the live project on 2026-06-15.
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "rules": {
+    "users": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "data":    { ".write": "auth != null && auth.uid === $uid" },
+        "updated": { ".write": "auth != null && auth.uid === $uid" },
+        "profile": { ".write": "auth != null && auth.uid === $uid" },
+        "advisor": { ".write": "auth != null && auth.uid === $uid" },
+        "friends": {
+          "$fid": {
+            ".write": "auth != null && (auth.uid === $uid || auth.uid === $fid)"
+          }
+        },
+        "friendRequests": {
+          "$fromUid": {
+            ".read":  "auth != null && (auth.uid === $uid || auth.uid === $fromUid)",
+            ".write": "auth != null && (auth.uid === $uid || auth.uid === $fromUid)"
+          }
+        }
+      }
+    },
+    "public": {
+      "$uid": {
+        ".read":  "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "usernames": {
+      ".read": "auth != null",
+      "$name": {
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid)"
+      }
+    },
+    "friendCodes": {
+      ".read": "auth != null",
+      "$code": {
+        ".write": "auth != null && (!data.exists() || data.child('uid').val() === auth.uid)"
+      }
+    }
+  }
+}
