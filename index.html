@@ -2665,6 +2665,15 @@ let _pinBuf='';
 /* ── STORAGE ── */
 // Guest mode uses an in-memory store — full app works, data vanishes on exit
 const _guestStore={};
+// Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
+// and the dirty-key tracker so incremental sync only uploads what changed.
+const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+  'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache'];
+function _isSyncKey(k){return k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
+const _dirtyKeys=new Set();   // sync keys changed since the last successful cloud write
+let _suppressDirty=false;     // true while applying a cloud pull (don't re-mark those keys)
+let _needFullSync=true;       // first cloud save of the session uploads everything
+
 const DB = {
   get:(k,d=null)=>{
     if(S.guest){const v=_guestStore[k];return v!==undefined?v:d;}
@@ -2673,6 +2682,8 @@ const DB = {
   set:(k,v)=>{
     if(S.guest){_guestStore[k]=v;return;}
     try{localStorage.setItem(k,JSON.stringify(v));}catch{}
+    // Track changed sync keys so saveToCloud can write only the diff.
+    if(!_suppressDirty&&_isSyncKey(k))_dirtyKeys.add(k);
   },
   pk:(mon)=>'plan_'+fd(mon),
   lk:(d)=>'log_'+fd(d),
@@ -3831,6 +3842,10 @@ async function signOut(){
   try{if(_fbAuth)await _fbAuth.signOut();}catch(e){}
   DB.set('fb_user',null);
   S.fbUser=null;
+  // Reset sync state so a different account signing in (without a page reload)
+  // starts with a clean full snapshot rather than inheriting stale dirty keys.
+  _dirtyKeys.clear();
+  _needFullSync=true;
   render();
 }
 
@@ -4020,30 +4035,46 @@ async function doAuth(isNew){
 
 async function saveToCloud(manual=false){
   if(!S.fbUser||!_fbDb||S.guest){if(manual)showToast('⚠️ Not signed in — cannot sync','var(--red)');return;}
-  const data={};
-  const _syncKeys=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-    'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache'];
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||_syncKeys.includes(k))data[k]=DB.get(k);
-  }
-  // Diagnostic: capture payload size so we can spot Firebase write limit failures
-  let _payloadKb=0;try{_payloadKb=Math.round(JSON.stringify(data).length/1024);}catch(_){}
+  // Full snapshot on the first save of the session (or a manual sync) to
+  // guarantee the cloud matches local; incremental diff-only writes after that.
+  const full=_needFullSync||manual;
+  if(!full&&_dirtyKeys.size===0)return; // nothing changed — skip the round-trip entirely
+  const _ts=new Date().toISOString();
+  let _payloadKb=0;
   try{
-    const _ts=new Date().toISOString();
-    _myLastSaveTs=_ts; // stamp before the write so the listener can recognise our own echo
-    // update() (not set()) so we only write the data+updated children — this
+    _myLastSaveTs=_ts; // stamp before the write so the listener recognises our own echo
+    // update() (not set()) so we only touch the data+updated children — this
     // respects the security rules (write granted on those children, not the
-    // whole node) AND preserves siblings like profile/friends/advisor that a
-    // full set() would wipe. v2.75.
-    await _fbDb.ref('users/'+S.fbUser.uid).update({data,updated:_ts});
+    // whole node) AND preserves siblings like profile/friends/advisor. v2.75.
+    if(full){
+      const data={};
+      for(let i=0;i<localStorage.length;i++){
+        const k=localStorage.key(i);
+        if(_isSyncKey(k))data[k]=DB.get(k);
+      }
+      try{_payloadKb=Math.round(JSON.stringify(data).length/1024);}catch(_){}
+      await _fbDb.ref('users/'+S.fbUser.uid).update({data,updated:_ts});
+    }else{
+      // Multi-path update: write only the changed children under data/. A null
+      // value (key cleared locally) deletes that child in the cloud. The write
+      // rule on users/{uid}/data cascades to these deeper paths.
+      const upd={updated:_ts};
+      _dirtyKeys.forEach(k=>{upd['data/'+k]=DB.get(k);});
+      try{_payloadKb=Math.round(JSON.stringify(upd).length/1024);}catch(_){}
+      await _fbDb.ref('users/'+S.fbUser.uid).update(upd);
+    }
+    _dirtyKeys.clear();
+    _needFullSync=false;
     DB.set('fb_last_sync',_ts);
     DB.set('fb_last_sync_err',null);
     // Write public week summary so friends can see this user's weekly stats
     try{await _fbDb.ref('public/'+S.fbUser.uid+'/weekSummary').set(computeWeekSummary());}catch(_){}
-    if(manual){showToast(`☁️ Synced to cloud (${_payloadKb}KB)`,'var(--grn)');render();}
+    if(manual){showToast(`☁️ Synced to cloud (${_payloadKb}KB${full?'':' diff'})`,'var(--grn)');render();}
   }catch(e){
     const msg=e?.message||String(e)||'unknown';
+    // Don't drop the dirty set on failure — keep it so the next save retries
+    // those keys, and force a full snapshot next time to be safe.
+    _needFullSync=true;
     DB.set('fb_last_sync_err',msg+' ['+_payloadKb+'KB]');
     if(manual)showToast(`⚠️ Sync failed: ${msg}`,'var(--red)');
     console.error('[saveToCloud failed]',msg,'payload='+_payloadKb+'KB',e);
@@ -4062,22 +4093,27 @@ async function loadFromCloud(manual=false){
     const data=val.data||{};
     const remoteUpdated=val.updated;
     let planCount=0,logCount=0,otherCount=0;
-    Object.entries(data).forEach(([k,v])=>{
-      if(k==='ai_usage'){
-        const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
-        const remote=v||{calls:[]};
-        const seen=new Set((local.calls||[]).map(c=>c.ts));
-        const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
-        merged.sort((a,b)=>a.ts-b.ts);
-        const cutoff=fd(addDays(new Date(),-30));
-        DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
-      } else {
-        DB.set(k,v);
-        if(k.startsWith('plan_'))planCount++;
-        else if(k.startsWith('log_'))logCount++;
-        else otherCount++;
-      }
-    });
+    // Suppress dirty-tracking while applying the pull — these keys came FROM the
+    // cloud, so they're already in sync and must not be queued for re-upload.
+    _suppressDirty=true;
+    try{
+      Object.entries(data).forEach(([k,v])=>{
+        if(k==='ai_usage'){
+          const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
+          const remote=v||{calls:[]};
+          const seen=new Set((local.calls||[]).map(c=>c.ts));
+          const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
+          merged.sort((a,b)=>a.ts-b.ts);
+          const cutoff=fd(addDays(new Date(),-30));
+          DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
+        } else {
+          DB.set(k,v);
+          if(k.startsWith('plan_'))planCount++;
+          else if(k.startsWith('log_'))logCount++;
+          else otherCount++;
+        }
+      });
+    }finally{_suppressDirty=false;}
     DB.set('fb_last_pull',new Date().toISOString());
     DB.set('fb_last_pull_remote_ts',remoteUpdated||'');
     DB.set('fb_last_pull_err',null);
