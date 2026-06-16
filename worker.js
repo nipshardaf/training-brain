@@ -1,9 +1,16 @@
-// v8 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
+// v9 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
+//      + Firebase Hosting origins (training-631c1.web.app / .firebaseapp.com)
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     const origin = request.headers.get('Origin') || '';
-    const allowed = ['https://nipshardaf.github.io', 'http://127.0.0.1', 'null'];
+    const allowed = [
+      'https://nipshardaf.github.io',
+      'https://training-631c1.web.app',
+      'https://training-631c1.firebaseapp.com',
+      'http://127.0.0.1',
+      'null',
+    ];
     // Allow empty origin (iOS standalone PWA sends no Origin header)
     if (origin && !allowed.some(o => origin.startsWith(o))) {
       return new Response('Forbidden', { status: 403 });
