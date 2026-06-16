@@ -928,10 +928,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.85';
+const APP_VERSION='2.86';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.86',d:'Faster launches — the app now opens instantly from cache and tells you when a new version is ready',det:'Performance pass. (1) The service worker switched the app shell from network-first to stale-while-revalidate: instead of waiting on a full re-download of index.html every launch, it serves the cached copy instantly and refreshes in the background — launches feel immediate even on a slow connection. When a newer version is fetched (detected by comparing APP_VERSION), a small "✨ New version ready — Reload" toast appears so updates still land, just without blocking every open. (2) Exercise GIFs no longer re-run their Image() preload + placeholder fade on every re-render (e.g. while logging sets) — once an exercise image has loaded this session it paints straight from cache, removing redundant work and a visible flicker. (3) Removed ~2MB of unused dev preview images that were shipping in the repo. No behaviour changes to your data or plans.'},
   {v:'2.85',d:'Short-week mode — compress your plan into 1, 2, or 3 days when you can\'t make it to the gym as often this week',det:'New ⏱️ button next to the regenerate icon (or ask the AI coach "I can only train 2 days this week"). Pick 1, 2, or 3 — the plan rebuilds: 1-2 days = full-body sessions (squat, hinge, press, pull, shoulder, core), 3 days = Push/Pull/Legs split. Training days land on the best-weather slots, the rest of the week becomes recovery. Locked days (anything you already logged) are preserved. New FULL_BODY day type with a dedicated full-body exercise template. Status indicator on the week-nav shows ⏱️ Nd when an override is active; pick Auto to revert. Per-week — next week resets to your normal profile setting.'},
   {v:'2.84',d:'Auto-skip + cascade now also reaches back into last week — trailing missed days carry into this week',det:'Extends v2.83. The auto-cascade now scans BACKWARDS from last Sunday: every trailing workout day with no log gets pulled into this week. Example: you skip last Sunday\'s Legs and today is Monday → last Sun is marked Skipped AND this Monday becomes Legs (whatever Monday was originally gets pushed to Tuesday, etc). If you skipped both Sat and Sun, the OLDER miss lands on Monday (Sat→Mon, Sun→Tue, original Mon→Wed) — chronological catch-up. The backward scan stops at last week\'s first completed day so sessions you actually did are never disturbed. Trailing workouts that fall off this week are caught next week via the v2.82 catch-up signal.'},
   {v:'2.83',d:'Past days with nothing logged auto-mark as Skipped and the missed workout cascades forward through the rest of the week',det:'When a day passes with no completed workout (no gym sets, no Strava ride, no manual ride log), it now auto-converts to a Skipped day and its planned workout shifts into the next available day, pushing later workouts forward by one. Example: planned Tue=Push / Wed=Legs / Thu=Pull, you skip Tue, and today is Wed → Tue=Skipped, Wed=Push, Thu=Legs, Fri=Pull. Cascade stops at any already-completed day (so logged sessions are never disturbed). New SKIPPED day type added to WI map with its own grey colour and "Skipped" label. Runs idempotently on every week-view render so the layout always reflects reality. Only operates on the current week (never on past or future weeks).'},
@@ -3315,6 +3316,10 @@ function loadGifDb(){
   });
   patchGifs();
 }
+// Exercise ids whose GIF has loaded at least once this session. render() rebuilds
+// the DOM (new <img> elements) on every call, so we key off the exercise id, not
+// the element — lets us skip the Image() preload + placeholder flash on re-render.
+const _gifLoaded=new Set();
 function patchGifs(){
   document.querySelectorAll('.ex-gif[data-xid]').forEach(img=>loadExImg(img));
 }
@@ -3331,8 +3336,11 @@ function loadExImg(img){
     if(ph)ph.innerHTML=`<div onclick="event.stopPropagation();openVid('${xid}')" style="width:100%;height:100%;background:${style.bg};display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer"><div style="font-size:38px">${style.i}</div><div style="font-size:12px;font-weight:700;color:rgba(255,255,255,.85);text-align:center;padding:0 16px">${ex?.n||''}</div><div style="font-size:10px;color:rgba(255,255,255,.55)">${ex?.m||''}</div><div style="margin-top:6px;font-size:11px;font-weight:700;color:#fff;background:rgba(0,0,0,.35);border:1px solid rgba(255,255,255,.3);border-radius:100px;padding:5px 13px">▶ Watch demo</div></div>`;
     return;
   }
+  // Loaded earlier this session — the URL is warm in the HTTP cache, so paint it
+  // straight away with no preload Image() and no placeholder fade on re-render.
+  if(_gifLoaded.has(xid)){img.src=entry.f0;img.classList.add('on');if(ph)ph.classList.add('off');return;}
   const t=new Image();
-  t.onload=()=>{img.src=t.src;img.classList.add('on');if(ph)ph.classList.add('off');};
+  t.onload=()=>{_gifLoaded.add(xid);img.src=t.src;img.classList.add('on');if(ph)ph.classList.add('off');};
   t.onerror=()=>{
     // Path wrong/broken — fall back to the same tappable styled placeholder
     const ex=EX[xid];
@@ -9781,7 +9789,20 @@ function init(){
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('/training-brain/sw.js')
       .catch(e=>console.warn('SW register failed:',e));
+    // The SW serves the shell from cache instantly, then revalidates in the
+    // background. When it detects a newer deploy it pings us — offer a reload.
+    navigator.serviceWorker.addEventListener('message',ev=>{
+      if(ev.data&&ev.data.type==='tb-shell-updated')showUpdateToast();
+    });
   }
+}
+function showUpdateToast(){
+  if(document.getElementById('tb-update-toast'))return;
+  const d=document.createElement('div');
+  d.id='tb-update-toast';
+  d.style.cssText='position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--sb) + 96px);z-index:99999;background:var(--s3);color:var(--txt);border:1px solid var(--bord);border-radius:100px;padding:10px 8px 10px 16px;display:flex;align-items:center;gap:12px;font-size:13px;font-weight:600;box-shadow:0 8px 28px rgba(0,0,0,.45)';
+  d.innerHTML='✨ New version ready <button onclick="location.reload()" style="background:var(--acc);border:none;color:#fff;font-weight:700;font-size:12px;padding:7px 14px;border-radius:100px;cursor:pointer">Reload</button>';
+  document.body.appendChild(d);
 }
 // Manual sync — push local changes up, then pull anything fresh from cloud.
 // Triggered by tapping the sync status block in Account settings.
