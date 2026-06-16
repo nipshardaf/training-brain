@@ -53,6 +53,9 @@ html{height:-webkit-fill-available}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:100vh;min-height:-webkit-fill-available;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) calc(16px + var(--sr)) calc(var(--sb) + 88px) calc(16px + var(--sl));background:var(--bg)}
 
+/* reusable card surface — extracted from a style string repeated 21× */
+.card{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px}
+
 /* header */
 .hdr{text-align:center;margin-bottom:18px}
 .hdr h1{font-size:24px;font-weight:800;letter-spacing:-.6px;background:linear-gradient(135deg,#a78bfa,#f472b6 55%,#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
@@ -4239,7 +4242,7 @@ async function removeFriend(fuid){
 }
 
 function rFriendsSection(){
-  if(!S.fbUser||S.guest)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  if(!S.fbUser||S.guest)return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">👥 Friends</div>
     <span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(245,158,11,.15);color:#f59e0b;letter-spacing:.4px">🔒 SIGN IN</span>
@@ -4294,7 +4297,7 @@ function rFriendsSection(){
   </div>`).join('')}
 </div>`:'';
 
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="font-size:13px;font-weight:700;margin-bottom:12px">👥 Friends</div>
 
   <div style="margin-bottom:14px">
@@ -5004,7 +5007,7 @@ function rWeeklyAdvisor(){
   const icons={LOAD:'📊',TREND:'📈',FOCUS:'🎯',RECOVERY:'💤'};
   const labels={LOAD:'Training Load',TREND:'What the data shows',FOCUS:'Focus this week',RECOVERY:'Recovery'};
   const colors={LOAD:'var(--al)',TREND:'#0891b2',FOCUS:'var(--grn)',RECOVERY:'#f59e0b'};
-  if(loading)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  if(loading)return`<div class="card">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:10px">🧠 Weekly Advisor</div>
   <div style="display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px"><div class="sync-dot"></div>Analysing your training data…</div>
 </div>`;
@@ -5016,18 +5019,18 @@ function rWeeklyAdvisor(){
       :_isOverload
       ?`🌐 Gemini is temporarily overloaded right now — this usually clears up within a minute. Tap Try again.`
       :`Couldn't reach the AI right now — might just be a connection blip. Give it another go.`;
-    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+    return`<div class="card">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">${_errMsg}</div>
   ${_isQuota&&!_isOverload?'':`<button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 16px;cursor:pointer">↻ Try again</button>`}
 </div>`;
   }
-  if(S._advisorNoData)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  if(S._advisorNoData)return`<div class="card">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Looks like this is your first week on the app — welcome! Once you've got a few sessions logged or your Strava rides synced, I'll be able to give you a proper read on your training load, trends and what to focus on next.</div>
   <button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:8px 16px;cursor:pointer">↻ Check again</button>
 </div>`;
-  if(!data)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  if(!data)return`<div class="card">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Get a data-driven read on your training — load, trends, what to focus on this week.</div>
   <button onclick="loadWeeklyAdvisor()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:10px 18px;cursor:pointer;width:100%">🧠 Analyse my training</button>
@@ -5039,7 +5042,7 @@ function rWeeklyAdvisor(){
 </div>`).join('');
   const age=data.ts?Math.round((Date.now()-data.ts)/60000):null;
   const ageStr=age===null?'':age<2?'just now':age<60?`${age}m ago`:`${Math.round(age/60)}h ago`;
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px">🧠 Weekly Advisor</div>
     <button onclick="loadWeeklyAdvisor(true)" style="background:none;border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer">↻ Refresh</button>
@@ -7851,7 +7854,7 @@ function rExerciseProgress(){
   </select>`;
 
   if(points.length<2){
-    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+    return`<div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
     <div>
       <div style="font-size:12px;font-weight:700;color:var(--al)">Estimated 1RM Progression</div>
@@ -7930,7 +7933,7 @@ function rExerciseProgress(){
     ?`<div style="font-size:11px;color:var(--amb);margin-top:6px;text-align:center;line-height:1.4">⚠️ ${daysSincePeak} days since peak 1RM — consider a deload or rep-range switch</div>`
     :'';
 
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px;gap:10px">
     <div style="min-width:0;flex:1">
       <div style="font-size:12px;font-weight:700;color:var(--al)">Estimated 1RM Progression</div>
@@ -8500,16 +8503,16 @@ ${profile?(()=>{
   </div>`:''}
   <div style="font-size:12px;color:var(--t2);margin-bottom:10px">${(profile.activities||[]).map(a=>({gym:'🏋️ Gym',cycling:'🚴 Cycling',running:'🏃 Running',cardio:'🏊 Cardio & Classes'})[a]).filter(Boolean).join(' · ')}${(profile.activities||[]).length?' · ':''}${profile.days||4} days/week${profile.level?' · '+profile.level[0].toUpperCase()+profile.level.slice(1):''}${profile.gender?' · '+({male:'♂ Male',female:'♀ Female'}[profile.gender]||''):''}</div>
   <button onclick="openGoalsSetup(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">✏️ Edit goals</button>
-</div>`;})():`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+</div>`;})():`<div class="card">
   <div style="font-size:13px;color:var(--t2);margin-bottom:10px">No goals set yet — the app will personalise your plan and coaching once you do.</div>
   <button onclick="openGoalsSetup(false)" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 14px;cursor:pointer">Set up goals →</button>
 </div>`}
 
 <div class="sec-hdr">${_T('your_activities')}</div>
-${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:_icon('gym-weights.png','🏋️',20),l:'Gym & Weights'},cycling:{i:_icon('cycling.png','🚴',20),l:'Cycling'},running:{i:_icon('running.png','🏃',20),l:'Running'},cardio:{i:_icon('cardio-classes.png','🏊',20),l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
+${(()=>{const _a2=(profile?.activities||[]);const _am={gym:{i:_icon('gym-weights.png','🏋️',20),l:'Gym & Weights'},cycling:{i:_icon('cycling.png','🚴',20),l:'Cycling'},running:{i:_icon('running.png','🏃',20),l:'Running'},cardio:{i:_icon('cardio-classes.png','🏊',20),l:'Cardio & Classes'}};const _ms=Object.keys(_am).filter(a=>!_a2.includes(a));return`<div class="card">${_a2.length?`<div style="display:flex;flex-wrap:wrap;gap:8px;${_ms.length?'margin-bottom:14px':''}">${_a2.map(a=>{const m=_am[a];return m?`<div style="display:flex;align-items:center;gap:6px;background:rgba(124,58,237,.1);border:1.5px solid rgba(124,58,237,.25);border-radius:11px;padding:8px 12px"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:700;color:var(--al)">${m.l}</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 2px;line-height:1">ⓘ</button><button onclick="event.stopPropagation();removeActivity('${a}')" style="background:none;border:none;color:rgba(239,68,68,.7);font-size:16px;font-weight:700;cursor:pointer;padding:0 0 0 2px;line-height:1">−</button></div>`:'';}).join('')}</div>`:`<div style="font-size:13px;color:var(--t2);margin-bottom:14px">No activities set yet.</div>`}${_ms.length?`<div style="font-size:12px;color:var(--t2);margin-bottom:10px;${_a2.length?'margin-top:14px':''}">Not in your plan yet:</div><div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px">${_ms.map(a=>{const m=_am[a];return`<div onclick="quickAddActivity('${a}')" style="display:flex;align-items:center;gap:7px;background:var(--s2);border:1.5px dashed var(--bord);border-radius:11px;padding:8px 13px;cursor:pointer"><span style="font-size:18px">${m.i}</span><span style="font-size:13px;font-weight:600;color:var(--t2)">${m.l}</span><span style="font-size:11px;color:var(--al);font-weight:700">+ Add</span><button onclick="event.stopPropagation();showActInfo('${a}')" style="margin-left:auto;background:none;border:none;color:var(--t2);font-size:14px;cursor:pointer;padding:0 0 0 4px;line-height:1">ⓘ</button></div>`;}).join('')}</div>`:''} ${!_a2.length?`<button onclick="openGoalsSetup(true,2)" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:12px;cursor:pointer">➕ Set up activities</button>`:''}</div>`;})()}
 
 ${(()=>{const _bp=DB.get('bike_pref','weather');const _pr3=DB.get('user_profile',null);const _hasCy=(_pr3?.activities||[]).includes('cycling');const _cyOpts=[{v:'weather',i:'🌤️',l:'Outdoor + Gym'},{v:'indoor',i:'🏠',l:'Indoor + Gym'},{v:'none',i:'🏋️',l:'Gym only'}];return`<div class="sec-hdr">Training Plan</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+<div class="card">
 ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:8px">Workout preference</div>
 <div style="display:flex;gap:6px;margin-bottom:14px">${_cyOpts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${_bp===o.v?'var(--acc)':'var(--bord)'};background:${_bp===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${_bp===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${_bp===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:''}
 <button onclick="S.weekStart=getMon(new Date());go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
@@ -8612,7 +8615,7 @@ function rSettingsWeeklyReview(){
   <div style="font-size:12px;color:var(--t2);line-height:1.55">${_T('wr_soon')}</div>
 </div>`;
   }
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:12px">${_T('wr_settings_sub')}</div>
   <label style="display:block;font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px">${_T('wr_your_email')}</label>
   <input type="email" value="${_esc(DB.get('review_email',''))}" placeholder="you@example.com" onchange="DB.set('review_email',this.value.trim());syncUp()"
@@ -8636,7 +8639,7 @@ function rSettings(){
 <div class="hdr"><h1><img src="/training-brain/assets/icons/app-logo-symbol.png" width="22" height="22" style="vertical-align:middle;margin-right:5px;object-fit:contain" onerror="this.style.display='none'">Training Brain</h1><div class="hdr-sub">${_T('sub_settings')}</div></div>
 
 <div class="sec-hdr">${_T('ai_coach')}</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+<div class="card">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
     <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
@@ -8652,7 +8655,7 @@ ${(()=>{
   const quotaPct=Math.min(100,Math.round(st.todayCount/quotaLimit*100));
   const quotaColor=quotaPct>85?'var(--red)':quotaPct>60?'#f59e0b':'var(--grn)';
   const lastStr=st.last?`${new Date(st.last.ts).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})} — ${typeLabels[st.last.type]||st.last.type} ${st.last.ok?'✓':'✗'}`:'Never';
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-size:13px;font-weight:700">📊 AI Usage</div>
     <button onclick="DB.set('ai_usage',{calls:[]});render()" style="background:none;border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:11px;font-weight:600;padding:3px 9px;cursor:pointer">Clear</button>
@@ -8706,7 +8709,7 @@ ${(()=>{
   const isHome=gid==='home';
   const homeEquip=DB.get('home_equip',[]);
   const curGym=gid!=='home'?GYMS_BUILTIN[gid]:null;
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${isHome?'12px':'0'}">
     <div style="flex:1;min-width:0">
       <div style="font-size:13px;font-weight:700;color:${!gid?'var(--t2)':'var(--txt)'};margin-bottom:2px">${curGym?curGym.area:isHome?'🏠 Home Gym':'No gym selected'}</div>
@@ -8731,7 +8734,7 @@ ${(()=>{
   if(!hasCycling)return'';
   const p=DB.get('bike_pref','weather');
   return`<div class="sec-hdr">🚴 Ride preference</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+<div class="card">
   <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should your week be structured when cycling is in your activities?</div>
   <div style="display:flex;flex-direction:column;gap:8px">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
@@ -8772,7 +8775,7 @@ ${(()=>{
   const goalLabel={base:'Build aerobic base',event:'Train for an event',active:'Stay active'}[setup?.goal]||'—';
   const ev=DB.get('bike_event',null);
   const evWeeks=ev?.date?Math.round((new Date(ev.date+'T12:00:00')-S.weekStart)/6048e5):null;
-  if(setup)return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  if(setup)return`<div class="card">
   <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
     <div style="flex:1;min-width:80px;background:var(--s2);border-radius:10px;padding:10px;text-align:center">
       <div style="font-size:20px;font-weight:800">${setup.dur}<span style="font-size:11px;font-weight:600;color:var(--t2)"> min</span></div>
@@ -8793,7 +8796,7 @@ ${(()=>{
   </div>`:''}
   <button onclick="openBikeSetup()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--al);font-size:13px;font-weight:700;padding:10px;cursor:pointer">✏️ Edit cycling setup</button>
 </div>`;
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="font-size:13px;font-weight:700;margin-bottom:6px">Set up your cycling plan</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Takes 30 seconds. Personalises your ride durations and progression to your current fitness.</div>
   <button onclick="openBikeSetup()" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:13px;cursor:pointer">🚴 Set up my plan</button>
@@ -8817,7 +8820,7 @@ ${(()=>{
     <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Sync rides</button>
     <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
   </div></div>`;
-  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">Connect Strava</div>
     ${S.guest?`<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(245,158,11,.15);color:#f59e0b;letter-spacing:.4px">🔒 SIGN IN</span>`:''}
@@ -8868,7 +8871,7 @@ ${S.fbUser
       <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
     </div>`:''}`;
   })()
-  :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  :`<div class="card">
       <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
       <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Sign in to save your workouts, PRs, and plan to the cloud — accessible on any device.</div>
       <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
