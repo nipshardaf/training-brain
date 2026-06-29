@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.87';
+const APP_VERSION='2.88';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.88',d:'Fix — a ride logged on a rest day now shows its details when you tap into the day',det:'Bug fix. If you logged (or Strava-synced) a ride on a day the plan marked as Rest & Mobility, the week view correctly showed it as your ride — but tapping into that day still showed only the rest/stretch plan, with no ride details. Now the day screen surfaces the logged ride (distance, time, heart rate, power, elevation, cadence, training load) under a "🚴 Logged today" heading, above the optional mobility routine. The ride detail card was extracted into a shared component so rest days and planned ride days render it identically.'},
   {v:'2.87',d:'Codebase cleanup — CSS card class consolidation and incremental cloud sync',det:'Visual and performance pass. (1) Extracted a card style repeated 21x into a unified `.card` CSS class in index.html, reducing code duplication and standardizing margins, borders, and paddings across the app. (2) Implemented incremental cloud sync (saveToCloud) to upload only changed keys (via local _dirtyKeys tracking and Firebase multi-path updates) instead of uploading the entire data bundle on every sync, saving mobile battery and database bandwidth.'},
   {v:'2.86',d:'Faster launches — the app now opens instantly from cache and tells you when a new version is ready',det:'Performance pass. (1) The service worker switched the app shell from network-first to stale-while-revalidate: instead of waiting on a full re-download of index.html every launch, it serves the cached copy instantly and refreshes in the background — launches feel immediate even on a slow connection. When a newer version is fetched (detected by comparing APP_VERSION), a small "✨ New version ready — Reload" toast appears so updates still land, just without blocking every open. (2) Exercise GIFs no longer re-run their Image() preload + placeholder fade on every re-render (e.g. while logging sets) — once an exercise image has loaded this session it paints straight from cache, removing redundant work and a visible flicker. (3) Removed ~2MB of unused dev preview images that were shipping in the repo. No behaviour changes to your data or plans.'},
   {v:'2.85',d:'Short-week mode — compress your plan into 1, 2, or 3 days when you can\'t make it to the gym as often this week',det:'New ⏱️ button next to the regenerate icon (or ask the AI coach "I can only train 2 days this week"). Pick 1, 2, or 3 — the plan rebuilds: 1-2 days = full-body sessions (squat, hinge, press, pull, shoulder, core), 3 days = Push/Pull/Legs split. Training days land on the best-weather slots, the rest of the week becomes recovery. Locked days (anything you already logged) are preserved. New FULL_BODY day type with a dedicated full-body exercise template. Status indicator on the week-nav shows ⏱️ Nd when an override is active; pick Auto to revert. Per-week — next week resets to your normal profile setting.'},
@@ -4621,6 +4622,9 @@ function rDay(){
   // chosen "Keep both" (dp.rideAlongside === true).
   const stravaRideOnThisDay=isGym&&!dp.rideAlongside?stravaRideOnDate(ds):null;
   const rideAlongsideAck=isGym&&dp.rideAlongside?stravaRideOnDate(ds):null;
+  // A ride logged on a REST day — surface its details so tapping in shows the
+  // ride, not just the mobility plan (the week row already overrides to it). v2.88.
+  const restDayRide=dp.type==='REST'?stravaRideOnDate(ds):null;
   return`<div class="screen">
 <div class="day-hdr">
   <button class="back-btn" onclick="go('week',{_dir:'back'})">← ${_T('back_week')}</button>
@@ -4693,6 +4697,7 @@ ${(()=>{
 })()}
 ${isGym&&dp.exercises?rExList(dp,log):''}
 ${isRide?rRideCard(dp):''}
+${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
 ${dp.type==='REST'?rRestCard():''}
 ${isGym?`<button class="btn btn-p mt12" onclick="startLog('${ds}')">${log&&log.completed?'✓ '+_T('view_log'):log?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button>`:''}
 ${isRide&&dp.extraGym?(()=>{const xlog=DB.get('extralog_'+ds,null);const xwi=WI[dp.extraGym.type]||WI.REST;return`<div style="border-top:1px solid var(--bord);margin-top:20px;padding-top:18px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:14px">💪</span><div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.8px">${_T('add_gym_extra_lbl')}: ${typeof xwi.l==='function'?xwi.l():xwi.l}</div></div>${rExList({exercises:dp.extraGym.exercises},xlog)}<button class="btn btn-p mt12" onclick="startLog('${ds}',true)">${xlog&&xlog.completed?'✓ '+_T('view_log'):xlog?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button></div>`;})():''}
@@ -4761,12 +4766,13 @@ function rExList(dp,log){
   }).join('')}</div>`;
 }
 
-function rRideCard(dp){
-  const indoor=dp.type.includes('INDOOR');
-  const s=getRideSession(dp.type);
-  const isRec=s.phase==='Recovery week';
-  const actual=stravaRideOnDate(dp.date);
-  const actualHtml=actual?`
+// Logged Strava ride detail card — distance, time, HR, power, elevation, cadence,
+// training load. Shown on planned ride days AND on rest days where a ride was
+// actually logged (so tapping into a rest-day ride shows the ride, not just the
+// rest plan). v2.88.
+function rLoggedRideCard(actual){
+  if(!actual)return'';
+  return `
 <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
     <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
@@ -4783,7 +4789,15 @@ function rRideCard(dp){
     ${actual.average_cadence?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_cadence)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">rpm</div></div>`:''}
   </div>
   ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
-</div>`:'';
+</div>`;
+}
+
+function rRideCard(dp){
+  const indoor=dp.type.includes('INDOOR');
+  const s=getRideSession(dp.type);
+  const isRec=s.phase==='Recovery week';
+  const actual=stravaRideOnDate(dp.date);
+  const actualHtml=rLoggedRideCard(actual);
   // Manual ride log — inline form, shown when Strava has no activity for this day.
   // Behavior depends on context:
   //   - Future date: hide entirely (no point logging a planned ride)
