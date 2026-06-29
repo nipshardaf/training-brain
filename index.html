@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.90';
+const APP_VERSION='2.91';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.91',d:'AI coach panel now starts collapsed every time you open the app — out of the way until you want it',det:'The "💬 Ask the Coach" panel sat at the top of the week view expanded by default, taking real estate even when you just opened the app to check your plan or log a set. Now every fresh app open starts with the panel collapsed to its compact header bar. Tap the header to expand it (with your conversation history intact), use it, and on the next open it\'s tucked away again. Previously the collapse state was sticky — once expanded it stayed expanded across opens — defeating the point. The conversation thread itself still persists in the cloud as before; only the expand/collapse UI state is per-session now.'},
   {v:'2.90',d:'Garmin helper now reads correctly for cycling computer users (not just watch users)',det:'The v2.89 Garmin helper was framed around a Garmin watch — the heading used a ⌚ icon and the wording implied a wearable. Fixed: heading is now "🚴 Using a Garmin (Edge / watch)?" and the explanation describes the device-neutral path: your Garmin (Edge cycling computer, Forerunner, Fenix, etc.) syncs to Garmin Connect, which auto-forwards to Strava. Same one-time setup steps; just clearer for anyone whose Garmin is a cycling computer rather than a wrist device.'},
   {v:'2.89',d:'Garmin onboarding — a clear "how to connect your Garmin" guide in the Strava settings',det:'Garmin has no direct public API for a personal app, so it connects through Strava: your Garmin auto-pushes activities to Strava, and the app reads them from there (this also covers running and any other Strava-connected app). Added an expandable "⌚ Using a Garmin? How to connect" helper in the Strava section of Settings — shown whether or not Strava is connected, so it also helps anyone whose Garmin rides aren\'t appearing because their Garmin isn\'t linked to Strava yet. Walks through the one-time Garmin Connect → Connected Apps → Strava link. No change to the existing Strava connection.'},
   {v:'2.88',d:'Fix — a ride logged on a rest day now shows its details when you tap into the day',det:'Bug fix. If you logged (or Strava-synced) a ride on a day the plan marked as Rest & Mobility, the week view correctly showed it as your ride — but tapping into that day still showed only the rest/stretch plan, with no ride details. Now the day screen surfaces the logged ride (distance, time, heart rate, power, elevation, cadence, training load) under a "🚴 Logged today" heading, above the optional mobility routine. The ride detail card was extracted into a shared component so rest days and planned ride days render it identically.'},
@@ -6202,9 +6203,14 @@ function resetAskConversation(){
 
 // Toggle collapsed state of the Ask Coach panel. Stored in localStorage so the
 // preference persists across reloads. Not synced — purely a UI preference.
+// Ask-the-Coach collapsed state — session-only (NOT persisted to DB) so every
+// fresh app open starts with the coach panel collapsed out of the way. Tapping
+// the header expands it for the rest of the session; reload returns to collapsed.
+// (Previously persisted via DB.get('ask_collapsed'), which meant once expanded it
+// stayed expanded across opens — defeating the point.) v2.91.
+let _askCollapsed=true;
 function toggleAskCollapse(){
-  const cur=DB.get('ask_collapsed',false);
-  DB.set('ask_collapsed',!cur);
+  _askCollapsed=!_askCollapsed;
   render();
   // After expanding: scroll the chat into view, jump the thread to its latest
   // message (so the user sees the most recent exchange), and refresh the
@@ -6471,7 +6477,7 @@ function rAskCoach(){
   // header bar to reclaim vertical space. State persists across reloads via DB.
   // Following the exercise-card pattern: the WHOLE row is clickable, with a
   // chevron indicating state. v2.62.
-  const collapsed=DB.get('ask_collapsed',false);
+  const collapsed=_askCollapsed;
   if(collapsed){
     const msgCount=conv.length;
     const summary=msgCount>0?`${msgCount} message${msgCount!==1?'s':''}`:'Tap to ask';
