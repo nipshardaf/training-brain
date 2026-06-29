@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.88';
+const APP_VERSION='2.89';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.89',d:'Garmin onboarding — a clear "how to connect your Garmin" guide in the Strava settings',det:'Garmin has no direct public API for a personal app, so it connects through Strava: your Garmin auto-pushes activities to Strava, and the app reads them from there (this also covers running and any other Strava-connected app). Added an expandable "⌚ Using a Garmin? How to connect" helper in the Strava section of Settings — shown whether or not Strava is connected, so it also helps anyone whose Garmin rides aren\'t appearing because their Garmin isn\'t linked to Strava yet. Walks through the one-time Garmin Connect → Connected Apps → Strava link. No change to the existing Strava connection.'},
   {v:'2.88',d:'Fix — a ride logged on a rest day now shows its details when you tap into the day',det:'Bug fix. If you logged (or Strava-synced) a ride on a day the plan marked as Rest & Mobility, the week view correctly showed it as your ride — but tapping into that day still showed only the rest/stretch plan, with no ride details. Now the day screen surfaces the logged ride (distance, time, heart rate, power, elevation, cadence, training load) under a "🚴 Logged today" heading, above the optional mobility routine. The ride detail card was extracted into a shared component so rest days and planned ride days render it identically.'},
   {v:'2.87',d:'Codebase cleanup — CSS card class consolidation and incremental cloud sync',det:'Visual and performance pass. (1) Extracted a card style repeated 21x into a unified `.card` CSS class in index.html, reducing code duplication and standardizing margins, borders, and paddings across the app. (2) Implemented incremental cloud sync (saveToCloud) to upload only changed keys (via local _dirtyKeys tracking and Firebase multi-path updates) instead of uploading the entire data bundle on every sync, saving mobile battery and database bandwidth.'},
   {v:'2.86',d:'Faster launches — the app now opens instantly from cache and tells you when a new version is ready',det:'Performance pass. (1) The service worker switched the app shell from network-first to stale-while-revalidate: instead of waiting on a full re-download of index.html every launch, it serves the cached copy instantly and refreshes in the background — launches feel immediate even on a slow connection. When a newer version is fetched (detected by comparing APP_VERSION), a small "✨ New version ready — Reload" toast appears so updates still land, just without blocking every open. (2) Exercise GIFs no longer re-run their Image() preload + placeholder fade on every re-render (e.g. while logging sets) — once an exercise image has loaded this session it paints straight from cache, removing redundant work and a visible flicker. (3) Removed ~2MB of unused dev preview images that were shipping in the repo. No behaviour changes to your data or plans.'},
@@ -8680,6 +8681,25 @@ function rSettingsWeeklyReview(){
 </div>`;
 }
 
+// Garmin onboarding helper — Garmin has no direct public API for a personal app,
+// so it connects through Strava (Garmin auto-pushes activities to Strava). This
+// explains the one-time Garmin→Strava link. Shown in both Strava states so it also
+// helps users whose Garmin rides aren't appearing (their Garmin isn't linked). v2.89.
+function rGarminHelp(){
+  return `<details style="margin-top:10px;background:var(--s2);border:1px solid var(--bord);border-radius:12px">
+  <summary style="cursor:pointer;padding:11px 14px;font-size:12px;font-weight:700;color:var(--al)">⌚ Using a Garmin? How to connect</summary>
+  <div style="padding:0 14px 13px;font-size:12px;color:var(--t2);line-height:1.65">
+    Garmin doesn't link to this app directly — it connects through Strava (one time). Once linked, your Garmin rides <em>and runs</em> sync in here automatically.
+    <ol style="margin:8px 0 0;padding-left:18px">
+      <li>In the <strong>Garmin Connect</strong> app: <strong>More ⋯ → Settings → Connected Apps → Strava → Connect</strong>.</li>
+      <li>Sign in to Strava and allow access.</li>
+      <li>Back here, tap <strong>Connect Strava</strong> — done.</li>
+    </ol>
+    <div style="margin-top:8px;opacity:.85">Tip: only activities recorded <em>after</em> you link Garmin ↔ Strava push across on their own. Older ones can be uploaded to Strava manually.</div>
+  </div>
+</details>`;
+}
+
 /* ── SETTINGS SCREEN ── */
 function rSettings(){
   const hasPIN=!!DB.get('pin',null);
@@ -8870,7 +8890,8 @@ ${(()=>{
   <div class="data-btns">
     <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Sync rides</button>
     <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
-  </div></div>`;
+  </div>
+  ${rGarminHelp()}</div>`;
   return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">Connect Strava</div>
@@ -8881,6 +8902,7 @@ ${(()=>{
     ?`<button onclick="lockApp()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:10px 16px;cursor:pointer">🔓 Sign in to connect Strava</button>`
     :`<button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">🟠 Connect Strava</button>`
   }
+  ${rGarminHelp()}
 </div>`;
 })()}
 
