@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.96';
+const APP_VERSION='2.97';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.97',d:'New ⓘ buttons explain the training jargon — TSS, FTP, TSB and friends in plain English',det:'The coach and charts use sports-science shorthand (Load/TSS, Fitness/CTL, Fatigue/ATL, Form/TSB, FTP, NP, Intensity, RPE, Zone 2, tonnage, estimated 1RM…) and nothing in the app explained them. Small ⓘ buttons now sit wherever the jargon is densest — the Ask Coach header, the day-screen coach card, the logged-ride detail card, and the Cycling Performance and Gym Progress sections in My Training. Tapping one opens a plain-English glossary of all 16 terms, scrolled to and highlighting the most relevant entry for where you tapped (e.g. the ride card jumps to Load/TSS). Each explanation is 2-3 friendly sentences with practical reference points — like "an easy hour is ~40-50 TSS" or "RPE 7 = about 3 clean reps left in the tank" — plus why assisted-machine numbers run backwards.'},
   {v:'2.96',d:'Smarter daily coaching — the AI now knows your FTP, fatigue, weather and today\'s targets',det:'Upgrade pass on what the AI coach actually sees before giving advice. (1) RIDE NOTES: the daily pre-ride coach was asked for "specific power targets" without ever being told your FTP — targets were guesses. It now gets your FTP with computed Zone 2 / threshold power bands (or is told to use HR/RPE targets if FTP isn\'t set), your current fitness/fatigue/form (CTL/ATL/TSB), yesterday\'s ride load, the planned session and duration, today\'s weather, and NP/TSS per ride in your history. (2) GYM NOTES: the daily pre-workout coach now sees today\'s actual prescription per exercise (sets×reps×RPE and the suggested weight from your card — comeback-aware), plus your current form so it can account for ride fatigue on lifting days. Assisted machines are tagged so it never suggests adding assistance as progression. (3) NEXT-WEEK WEIGHTS: the weekly suggestion prompt now carries an explicit assisted-machine exception (progress = LESS assistance). (4) LANGUAGE: daily coach notes now come back in Traditional Chinese when the app language is 繁體中文 (previously English-only). (5) RELIABILITY: the backup AI providers (used when Gemini hits quota) had a response cap that truncated weekly reviews and coach actions — raised to cover the largest responses (requires the Cloudflare worker update).'},
   {v:'2.95',d:'My Training tab fixed up — extra gym sessions now cloud-sync, search works properly, e-bike rides show in History',det:'Review pass over the My Training tab. (1) SYNC FIX (important): extra gym sessions logged on ride days (the "+ Add gym workout" feature) were never included in cloud sync — they only existed on the device that logged them, so they never appeared on your other devices and would be lost with the phone. They now sync like every other log; your next full sync uploads any existing ones. (2) SEARCH: typing in the PR search box lost keyboard focus after every single character (each keystroke re-rendered the screen and destroyed the input). Focus and cursor position are now restored — you can actually type a whole word. (3) HISTORY: e-bike (EBikeSport) and e-MTB rides showed on the week view but were missing from the History list due to an out-of-date activity-type filter; all six copies of that filter are now one shared list. (4) PERFORMANCE: the tab re-scanned ~450 days\' worth of logs on every render (including per keystroke); the scan is now cached and reused until a workout changes. (5) History shows the latest 25 sessions with a "Show all" button instead of rendering six months of entries at once.'},
   {v:'2.94',d:'Comeback mode for long breaks — plus smarter load tracking for rides without power',det:'Four upgrades. (1) COMEBACK MODE: if you haven\'t logged anything for 4+ weeks, the week view now greets you with a "Welcome back" banner offering an eased 2-week re-entry: a short-week plan (2-3 full-body days depending on how long you were away), working-weight suggestions damped to 60-80% of your pre-break PRs (assisted machines get MORE help, not less), and — crucially — every AI coach prompt now includes your layoff context, so the coach stops telling you to chase pre-break PRs and instead paces your return. A status chip shows "Comeback week 1 of 2" while active; end it early anytime. Even if you decline the banner, the coach is still told about the gap. (2) RIDES WITHOUT POWER now contribute an estimated training load (from heart rate vs your observed max, or a steady-Zone-2 assumption) instead of counting as zero — previously an HR-only ride looked like a rest day, making your Form (TSB) read artificially fresh and skewing coach advice toward "push harder". Estimated loads show with a ~ prefix. (3) STRAVA SYNC now paginates — athletes with 200+ activities in 6 months no longer silently lose older rides from the fitness curve. (4) The Ask Coach prompt now lists each exercise with the same sets/reps/RPE and suggested weight the screen shows you, instead of library defaults.'},
@@ -4921,7 +4922,7 @@ ${ct!=='rest'?`<div class="sec-lbl">${_T('how_feeling')}</div>
   ${eBtn('fresh','🔥',_T('e_fresh'))}${eBtn('okay','💪',_T('e_okay'))}${eBtn('tired','😪',_T('e_tired'))}${eBtn('sore','🤕',_T('e_sore'))}
 </div>`:''}
 <div class="coach${S.energy&&ct!=='rest'?' on':''}" id="coach-card">
-  <div class="coach-lbl">${_T('coach_says')}</div>
+  <div class="coach-lbl">${_T('coach_says')} ${_glossBtn('tsb',12)}</div>
   <p>${S.energy?coachMsg(S.energy,ct):''}</p>
   ${S.guest&&S.energy?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bord);font-size:11px;color:var(--t2)">🔒 <a href="#" onclick="lockApp();return false;" style="color:var(--al);text-decoration:none;font-weight:700">Sign in</a> for personalised advice based on your actual lifts and history</div>`:''}
 </div>
@@ -5019,6 +5020,7 @@ function rLoggedRideCard(actual){
   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
     <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
     ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 Load ${actual._tssEst?'~':''}${actual._tss}${actual._if?` · Intensity ${actual._tssEst?'~':''}${actual._if}`:''}</span>`:''}
+    ${_glossBtn('tss',12)}
     ${actual.suffer_score?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">⚡ Load ${actual.suffer_score}</span>`:''}
     ${actual.kilojoules?`<span class="bdg" style="background:rgba(59,130,246,.1);color:#60a5fa">🔋 ${Math.round(actual.kilojoules)}kJ</span>`:''}
   </div>
@@ -6782,6 +6784,7 @@ function rAskCoach(){
       <span style="font-size:13px;color:var(--t2);font-weight:700;margin-left:2px">▼</span>
     </div>
     <div style="display:flex;align-items:center;gap:8px">
+      ${_glossBtn('tsb',12)}
       ${counter}
       ${hasThread?`<button onclick="resetAskConversation()" style="background:none;border:1px solid var(--bord);border-radius:7px;color:var(--t2);font-size:10px;font-weight:700;cursor:pointer;padding:3px 8px">🗑 Reset</button>`:''}
     </div>
@@ -8011,7 +8014,7 @@ function rGymTonnage(){
   const sets=_scanGymSets(84); // 12 weeks
   if(!sets.length){
     return`<div style="margin-bottom:10px">
-<div class="sec-hdr">💪 Gym Progress</div>
+<div class="sec-hdr">💪 Gym Progress ${_glossBtn('tonnage')}</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:18px 15px;text-align:center;font-size:13px;color:var(--t2);line-height:1.5">
   No gym sets logged yet.<br><span style="font-size:11px">Complete a workout and the volume chart will start populating.</span>
 </div></div>`;
@@ -8094,7 +8097,7 @@ function rGymTonnage(){
 
   return`<div style="margin-bottom:10px">
 <div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center">
-  <span>💪 Gym Progress</span>
+  <span>💪 Gym Progress ${_glossBtn('tonnage')}</span>
   ${trendBadge}
 </div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:8px">
@@ -8727,7 +8730,7 @@ function rPRs(){
 
 ${rWeightChart()}
 
-${(()=>{const p=DB.get('user_profile',null);const hasCy=(p?.activities||[]).includes('cycling');return hasCy?`<div class="sec-hdr">🚴 Cycling Performance</div>
+${(()=>{const p=DB.get('user_profile',null);const hasCy=(p?.activities||[]).includes('cycling');return hasCy?`<div class="sec-hdr">🚴 Cycling Performance ${_glossBtn('ftp')}</div>
 <div style="background:rgba(124,58,237,.04);border:1px solid rgba(124,58,237,.18);border-radius:18px;padding:10px 8px 4px;margin-bottom:14px">
 ${rCyclingProfile()}
 ${rFitnessForm()}
@@ -9627,6 +9630,65 @@ function removeActivity(key){
   const labels={gym:_T('act_gym'),cycling:_T('act_cycling'),running:_T('act_running'),cardio:_T('act_cardio')};
   showToast(_T('removed_toast').replace('{act}',labels[key]||key),'var(--t2)');
 }
+/* ── TRAINING TERMS GLOSSARY ── */
+// The coach, charts and ride cards use sports-science shorthand (TSS, CTL, TSB,
+// FTP, NP, RPE…) with no explanation anywhere in the app. ⓘ buttons in those
+// spots open this plain-English glossary; passing a term key scrolls to and
+// highlights that entry. v2.97.
+const GLOSSARY=[
+  {k:'ftp',i:'⚡',t:'FTP — Functional Threshold Power',d:'The highest power (watts) you could hold for about an hour. It\'s the baseline everything else is measured against — your zones, ride targets and Load all key off it. Set it manually or let the app estimate it from your rides.'},
+  {k:'wkg',i:'⚖️',t:'W/kg — Watts per kilogram',d:'Your FTP divided by your body weight. It\'s the fairest way to compare cycling fitness between riders — and against your past self as your weight changes.'},
+  {k:'np',i:'📈',t:'NP — Normalized Power',d:'A ride\'s "feels-like" average power. Surges and hills cost more than steady riding, so NP weights hard moments more than a plain average. NP well above average power = a punchy, stop-start ride.'},
+  {k:'if',i:'🎚️',t:'Intensity (IF)',d:'How hard the ride was relative to your FTP (NP ÷ FTP). Around 0.65 is an easy spin, 0.75-0.85 a solid endurance ride, 0.95+ is race-hard. A ~ before it means it was estimated from heart rate.'},
+  {k:'tss',i:'📊',t:'Load (TSS) — Training Stress Score',d:'The overall training "dose" of a session — combining how long and how hard. 100 = one hour flat-out at FTP. An easy hour is ~40-50, a hard 2h ride ~140+. A ~ prefix means it\'s estimated (no power meter data on that ride).'},
+  {k:'ctl',i:'🏔️',t:'Fitness (CTL)',d:'Your training load averaged over the last 42 days — a slow-moving measure of how much training your body is used to. It climbs a few points per week with consistent riding and drops when you stop. Higher = bigger engine.'},
+  {k:'atl',i:'🥵',t:'Fatigue (ATL)',d:'Your training load averaged over just the last 7 days. It spikes quickly after hard days and fades within a week — it\'s the "how tired are your legs right now" number.'},
+  {k:'tsb',i:'🔋',t:'Form (TSB)',d:'Fitness minus Fatigue — your freshness today. Above +5: recovered and ready to push. Around 0 to −10: productive training. Below −10: carrying real fatigue. Below −25: deep hole, prioritise recovery. You get faster by training at slightly negative TSB, then recovering into positive for big days.'},
+  {k:'zone2',i:'🫁',t:'Zone 2',d:'The easy-but-not-trivial endurance pace — roughly 56-75% of FTP, where you could still hold a conversation. It feels too easy to matter, but it\'s where most aerobic fitness is built. The bulk of your riding should live here.'},
+  {k:'rpe',i:'🌡️',t:'RPE — Rate of Perceived Exertion',d:'How hard a set feels, from 1 to 10. RPE 7 means you had about 3 clean reps left in the tank; RPE 9 means barely one. The app prescribes RPE so the weight adapts to how you feel on the day.'},
+  {k:'e1rm',i:'🧮',t:'Estimated 1RM',d:'Your estimated one-rep max, calculated from a weight × reps set (e.g. 80kg×8 ≈ 101kg single). Lets the app track strength across different rep ranges without you ever maxing out.'},
+  {k:'pr',i:'🏆',t:'PR — Personal Record',d:'Your best-ever weight × reps for an exercise. The app updates these automatically as you log sets, and uses them to suggest working weights.'},
+  {k:'assist',i:'🤝',t:'Assisted weight (assisted pull-up / dip)',d:'On assisted machines the number you set is how much the machine HELPS you — so LOWER weight = stronger you. Progress means reducing the assistance toward zero, which is why the app\'s suggestions for these run "backwards".'},
+  {k:'tonnage',i:'🏗️',t:'Tonnage (volume)',d:'Total weight moved in a session or week: weight × reps, summed across all sets. A steady upward trend is the clearest sign of progressive overload; sudden +30% spikes are an injury flag.'},
+  {k:'suffer',i:'😰',t:'Suffer score / Relative Effort',d:'Strava\'s heart-rate-based effort score for a ride. Similar idea to Load (TSS) but computed from HR — useful on rides without a power meter.'},
+  {k:'kj',i:'🔥',t:'kJ — kilojoules',d:'The mechanical work you did on a ride. Handily, in cycling 1 kJ of work ≈ 1 kcal burned, so it doubles as a decent calorie estimate.'},
+];
+function openGlossary(term){
+  if(document.getElementById('glossary-modal'))return;
+  const el=document.createElement('div');
+  el.className='swap-modal';el.id='glossary-modal';
+  el.innerHTML=`<div class="swap-ov" onclick="document.getElementById('glossary-modal').remove()"></div>
+<div class="swap-sheet" style="padding:20px 16px;max-height:78vh;display:flex;flex-direction:column">
+  <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 14px;flex-shrink:0"></div>
+  <div style="font-size:16px;font-weight:800;margin-bottom:4px;flex-shrink:0">📖 What do these terms mean?</div>
+  <div style="font-size:11px;color:var(--t2);margin-bottom:12px;flex-shrink:0">Plain-English guide to the numbers the coach and charts use.</div>
+  <div style="overflow-y:auto;-webkit-overflow-scrolling:touch;min-height:0">
+    ${GLOSSARY.map(g=>`<div id="gl-${g.k}" style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:800;margin-bottom:4px">${g.i} ${g.t}</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.6">${g.d}</div>
+    </div>`).join('')}
+  </div>
+  <button onclick="document.getElementById('glossary-modal').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:14px;font-weight:700;padding:12px;cursor:pointer;margin-top:12px;flex-shrink:0">Got it</button>
+</div>`;
+  document.body.appendChild(el);
+  requestAnimationFrame(()=>{
+    el.classList.add('on');
+    if(term){
+      const row=document.getElementById('gl-'+term);
+      if(row){
+        row.scrollIntoView({block:'center'});
+        row.style.borderColor='var(--acc)';
+        row.style.background='rgba(124,58,237,.10)';
+      }
+    }
+  });
+}
+// Small ⓘ trigger used wherever jargon appears. stopPropagation so it can sit
+// inside clickable headers/cards without triggering their own onclick.
+function _glossBtn(term,size=13){
+  return`<button onclick="event.stopPropagation();openGlossary('${term||''}')" title="What do these terms mean?" style="background:none;border:none;color:var(--t2);font-size:${size}px;cursor:pointer;padding:0 3px;line-height:1;opacity:.75;-webkit-appearance:none">ⓘ</button>`;
+}
+
 function showActInfo(k){
   const info={
     gym:{i:_icon('gym-weights.png','🏋️',52),t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
