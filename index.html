@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.92';
+const APP_VERSION='2.93';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.93',d:'Training-logic review — assisted-machine weight suggestions fixed, and stale caches now clean themselves up',det:'Two fixes from a logic review of the coaching and planning systems. (1) ASSISTED MACHINES: the suggested working weight (the ~weight badge on exercise cards) scaled your PR by an energy multiplier — correct for normal lifts, but backwards for assisted pull-ups/dips, where the weight is how much the machine HELPS you. On a sore/recovery day it suggested roughly half your PR assistance — i.e. the hardest setting of all on your weakest day. The multiplier now inverts for assisted exercises: less energy = more assistance. Fresh suggests slightly more help than your best-ever; sore suggests ~1.45× your PR help. (2) CACHE CLEANUP: daily AI-coach snippets, weather lookups, dismissed banners and weekly-advisor caches were written every day but never deleted, slowly filling the ~5MB local storage cap on iPhones (which would eventually block workout saves — the v2.92 storage warning would have caught it, but prevention beats warning). A sweep now runs shortly after each app start and removes cache entries older than 30 days. Your workouts, plans and reviews are never touched.'},
   {v:'2.92',d:'Hardening pass — security fix in Friends, sync race fix, storage-full warning, and a crash recovery screen',det:'Four robustness fixes from a full code review. (1) SECURITY: friend names in the Friends card and pending-request list were rendered without HTML escaping — since another user controls that string, a malicious "friend" could have injected script into your session (stored XSS). Names are now escaped, and the weekly-summary numbers (streak, sessions, km) are coerced to numbers so malformed data can\'t crash the Settings screen. (2) SYNC: fixed a race in incremental cloud sync where a set logged while a sync was already uploading could be cleared from the pending queue without ever reaching the cloud. The sync now snapshots the queue before uploading; anything changed mid-flight is picked up by the next sync, and failures restore the queue. (3) STORAGE: if the device\'s local storage is full (iOS caps it ~5MB), saves used to fail silently — a logged workout could just vanish. You now get a warning toast the first time a write fails. (4) RECOVERY: if a screen hits a rendering error, instead of a permanently blank page you now get a friendly error screen with "Back to my week" and "Reload" buttons plus the error message for reporting.'},
   {v:'2.91',d:'AI coach panel now starts collapsed every time you open the app — out of the way until you want it',det:'The "💬 Ask the Coach" panel sat at the top of the week view expanded by default, taking real estate even when you just opened the app to check your plan or log a set. Now every fresh app open starts with the panel collapsed to its compact header bar. Tap the header to expand it (with your conversation history intact), use it, and on the next open it\'s tucked away again. Previously the collapse state was sticky — once expanded it stayed expanded across opens — defeating the point. The conversation thread itself still persists in the cloud as before; only the expand/collapse UI state is per-session now.'},
   {v:'2.90',d:'Garmin helper now reads correctly for cycling computer users (not just watch users)',det:'The v2.89 Garmin helper was framed around a Garmin watch — the heading used a ⌚ icon and the wording implied a wearable. Fixed: heading is now "🚴 Using a Garmin (Edge / watch)?" and the explanation describes the device-neutral path: your Garmin (Edge cycling computer, Forerunner, Fenix, etc.) syncs to Garmin Connect, which auto-forwards to Strava. Same one-time setup steps; just clearer for anyone whose Garmin is a cycling computer rather than a wrist device.'},
@@ -2663,7 +2664,14 @@ function energyTargets(exId,energy){
   const reps=prof.reps??ex.reps;
   const rpe=prof.rpe??ex.rpe;
   const pr=DB.get('prs',{})[exId];
-  const sugW=pr?.w?Math.round(pr.w*prof.mult/2.5)*2.5:null;
+  // Assisted machines (ex.assist): the weight is machine HELP, so lower = harder.
+  // The normal multiplier must invert — less energy should mean MORE assistance,
+  // not less. (2−mult) mirrors the reduction: fresh 0.90→1.10×PR help (slightly
+  // easier than your best), sore 0.55→1.45×PR help. Without this, a sore day
+  // suggested 0.55× your PR assistance — the hardest setting on the weakest day.
+  // v2.93.
+  const mult=ex.assist?(2-prof.mult):prof.mult;
+  const sugW=pr?.w?Math.round(pr.w*mult/2.5)*2.5:null;
   return{sets,reps,rpe,sugW};
 }
 
@@ -9870,7 +9878,30 @@ function toggleHomeDay(dateStr){
 }
 
 /* ── INIT ── */
+// Dated cache keys (AI coach snippets, weather, dismissed banners, advisor
+// output) were written daily but never deleted — a slow leak toward the ~5MB
+// localStorage cap on iOS. Sweep anything cache-only older than 30 days.
+// Never touches user data (log_/plan_/weekreview_ don't match the prefixes,
+// and weekly_advisor_ is re-pullable from the cloud advisor/ node). v2.93.
+function pruneOldCacheKeys(){
+  try{
+    const cutoff=fd(addDays(new Date(),-30));
+    const cachePrefix=/^(coach_|excoach_|weather_|catchup_dismissed_|weekly_advisor_)/;
+    const dateRe=/(\d{4}-\d{2}-\d{2})/;
+    const del=[];
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(!cachePrefix.test(k))continue;
+      const m=k.match(dateRe);
+      if(m&&m[1]<cutoff)del.push(k); // undated cache keys are left alone
+    }
+    del.forEach(k=>{try{localStorage.removeItem(k);}catch(_){}});
+    if(del.length)console.log('[cache prune] removed',del.length,'stale cache keys');
+  }catch(_){}
+}
 function init(){
+  // Sweep stale cache keys shortly after boot (not on the critical path)
+  setTimeout(pruneOldCacheKeys,3000);
   // Restore Firebase user from localStorage cache
   const cached=DB.get('fb_user',null);
   if(cached){
