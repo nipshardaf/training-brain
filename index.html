@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.94';
+const APP_VERSION='2.95';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.95',d:'My Training tab fixed up — extra gym sessions now cloud-sync, search works properly, e-bike rides show in History',det:'Review pass over the My Training tab. (1) SYNC FIX (important): extra gym sessions logged on ride days (the "+ Add gym workout" feature) were never included in cloud sync — they only existed on the device that logged them, so they never appeared on your other devices and would be lost with the phone. They now sync like every other log; your next full sync uploads any existing ones. (2) SEARCH: typing in the PR search box lost keyboard focus after every single character (each keystroke re-rendered the screen and destroyed the input). Focus and cursor position are now restored — you can actually type a whole word. (3) HISTORY: e-bike (EBikeSport) and e-MTB rides showed on the week view but were missing from the History list due to an out-of-date activity-type filter; all six copies of that filter are now one shared list. (4) PERFORMANCE: the tab re-scanned ~450 days\' worth of logs on every render (including per keystroke); the scan is now cached and reused until a workout changes. (5) History shows the latest 25 sessions with a "Show all" button instead of rendering six months of entries at once.'},
   {v:'2.94',d:'Comeback mode for long breaks — plus smarter load tracking for rides without power',det:'Four upgrades. (1) COMEBACK MODE: if you haven\'t logged anything for 4+ weeks, the week view now greets you with a "Welcome back" banner offering an eased 2-week re-entry: a short-week plan (2-3 full-body days depending on how long you were away), working-weight suggestions damped to 60-80% of your pre-break PRs (assisted machines get MORE help, not less), and — crucially — every AI coach prompt now includes your layoff context, so the coach stops telling you to chase pre-break PRs and instead paces your return. A status chip shows "Comeback week 1 of 2" while active; end it early anytime. Even if you decline the banner, the coach is still told about the gap. (2) RIDES WITHOUT POWER now contribute an estimated training load (from heart rate vs your observed max, or a steady-Zone-2 assumption) instead of counting as zero — previously an HR-only ride looked like a rest day, making your Form (TSB) read artificially fresh and skewing coach advice toward "push harder". Estimated loads show with a ~ prefix. (3) STRAVA SYNC now paginates — athletes with 200+ activities in 6 months no longer silently lose older rides from the fitness curve. (4) The Ask Coach prompt now lists each exercise with the same sets/reps/RPE and suggested weight the screen shows you, instead of library defaults.'},
   {v:'2.93',d:'Training-logic review — assisted-machine weight suggestions fixed, and stale caches now clean themselves up',det:'Two fixes from a logic review of the coaching and planning systems. (1) ASSISTED MACHINES: the suggested working weight (the ~weight badge on exercise cards) scaled your PR by an energy multiplier — correct for normal lifts, but backwards for assisted pull-ups/dips, where the weight is how much the machine HELPS you. On a sore/recovery day it suggested roughly half your PR assistance — i.e. the hardest setting of all on your weakest day. The multiplier now inverts for assisted exercises: less energy = more assistance. Fresh suggests slightly more help than your best-ever; sore suggests ~1.45× your PR help. (2) CACHE CLEANUP: daily AI-coach snippets, weather lookups, dismissed banners and weekly-advisor caches were written every day but never deleted, slowly filling the ~5MB local storage cap on iPhones (which would eventually block workout saves — the v2.92 storage warning would have caught it, but prevention beats warning). A sweep now runs shortly after each app start and removes cache entries older than 30 days. Your workouts, plans and reviews are never touched.'},
   {v:'2.92',d:'Hardening pass — security fix in Friends, sync race fix, storage-full warning, and a crash recovery screen',det:'Four robustness fixes from a full code review. (1) SECURITY: friend names in the Friends card and pending-request list were rendered without HTML escaping — since another user controls that string, a malicious "friend" could have injected script into your session (stored XSS). Names are now escaped, and the weekly-summary numbers (streak, sessions, km) are coerced to numbers so malformed data can\'t crash the Settings screen. (2) SYNC: fixed a race in incremental cloud sync where a set logged while a sync was already uploading could be cleared from the pending queue without ever reaching the cloud. The sync now snapshots the queue before uploading; anything changed mid-flight is picked up by the next sync, and failures restore the queue. (3) STORAGE: if the device\'s local storage is full (iOS caps it ~5MB), saves used to fail silently — a logged workout could just vanish. You now get a warning toast the first time a write fails. (4) RECOVERY: if a screen hits a rendering error, instead of a permanently blank page you now get a friendly error screen with "Back to my week" and "Reload" buttons plus the error message for reporting.'},
@@ -1343,6 +1344,11 @@ function incrementAskQuota(){
   for(const k of Object.keys(usage))if(k<cutoff)delete usage[k];
   DB.set('ai_chat_usage',usage);
 }
+// Strava/Garmin activity types that count as a ride — single source of truth.
+// This was previously copy-pasted in 6 places; the History copy had drifted and
+// was missing EBikeSport/EMountainBikeRide, so those rides showed on the week
+// view but silently vanished from the History list. v2.95.
+const RIDE_TYPE_SET=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
 const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
@@ -1439,7 +1445,7 @@ async function getAICoach(energy,ct,dp){
 
   // For ride days: build coaching from Strava history instead of gym PRs
   if(isRideDay){
-    const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const _rSet=RIDE_TYPE_SET;
     const recentRides=(DB.get('strava_activities',[])||[])
       .filter(a=>_rSet.has(a.type)||_rSet.has(a.sport_type))
       .sort((a,b)=>new Date(b.start_date_local)-new Date(a.start_date_local))
@@ -2206,7 +2212,7 @@ async function stravaFetchActivities(){
       acts.push(...batch);
       if(batch.length<200)break; // last page
     }
-    const _rideTypes=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const _rideTypes=RIDE_TYPE_SET;
     // Strip each activity to only the fields the app uses — raw Strava objects include GPS
     // polylines, segment efforts, achievement data etc. which can push 200 rides to 2MB+,
     // silently blowing localStorage quota and causing syncUp to write stale/null data.
@@ -2822,10 +2828,18 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
-function _isSyncKey(k){return k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
+// NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
+// prefix — it was missing here since the feature shipped, so extra-gym logs never
+// synced to the cloud and lived only on the device that logged them. v2.95.
+function _isSyncKey(k){return k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
 const _dirtyKeys=new Set();   // sync keys changed since the last successful cloud write
 let _suppressDirty=false;     // true while applying a cloud pull (don't re-mark those keys)
 let _needFullSync=true;       // first cloud save of the session uploads everything
+
+// Memoized result of _scanGymSets (My Training tab scans 180 days of logs on
+// every render — including per keystroke in the PR search). Invalidated by any
+// log_/extralog_ write (DB.set above) and by day rollover. v2.95.
+let _gymScanCache=null; // {stamp, days, sets}
 
 const DB = {
   get:(k,d=null)=>{
@@ -2833,6 +2847,8 @@ const DB = {
     try{const v=localStorage.getItem(k);return v?JSON.parse(v):d;}catch{return d;}
   },
   set:(k,v)=>{
+    // Any workout-log write invalidates the memoized gym-set scan (see _scanGymSets)
+    if(k.startsWith('log_')||k.startsWith('extralog_'))_gymScanCache=null;
     if(S.guest){_guestStore[k]=v;return;}
     try{localStorage.setItem(k,JSON.stringify(v));}
     catch(e){_storageWriteFailed(k,e);}
@@ -4350,7 +4366,7 @@ async function ensureFriendCode(){
 
 function computeWeekSummary(){
   const ws=getMon(new Date());
-  const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  const _rSet=RIDE_TYPE_SET;
   const stravaActs=DB.get('strava_activities',[])||[];
   const daysDone=[];let gymSessions=0,rideSessions=0,totalKm=0;
   for(let i=0;i<7;i++){
@@ -4567,8 +4583,8 @@ const syncDown=loadFromCloud;
 function go(screen,opts={}){
   // stop any running exercise animations
   Object.keys(_animTimers).forEach(k=>{clearInterval(_animTimers[k]);delete _animTimers[k];});
-  // clear PR search when leaving progress tab
-  if(screen!=='prs')DB.set('_pr_search','');
+  // clear PR search + collapse full history when leaving progress tab
+  if(screen!=='prs'){DB.set('_pr_search','');S._histAll=false;}
   // Extract optional navigation direction (slide-in animation) and _noAnim
   // (used when a manual gesture has already animated the transition).
   const _navDir=opts._dir;
@@ -4716,7 +4732,7 @@ ${rCatchUpBanner()}
   const _isPastWeek=fd(sun)<fd(today);
   if(_isPastWeek){
     const _ws=fd(S.weekStart),_we=fd(sun);
-    const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+    const _rSet=RIDE_TYPE_SET;
     const _allDates=new Set();
     (DB.get('strava_activities',[])||[]).forEach(a=>{const ds=(a.start_date_local||'').slice(0,10);if(ds>=_ws&&ds<=_we&&(_rSet.has(a.type)||_rSet.has(a.sport_type)))_allDates.add(ds);});
     for(let i=0;i<7;i++){const d=addDays(S.weekStart,i);const ds=fd(d);const log=DB.get(DB.lk(d),null);if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))_allDates.add(ds);}
@@ -5130,7 +5146,7 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   const _gm={muscle:'build muscle',lose_weight:'lose weight',fitness:'general fitness',endurance:'endurance',performance:'sport performance'};
   const _goals=profile?.goals||(profile?.goal?[profile.goal]:[]);
   const goalDesc=_goals.map(g=>_gm[g]||g).join(' + ')||'general fitness';
-  const _rSet=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  const _rSet=RIDE_TYPE_SET;
   // Human-readable labels for workout types sent to AI (never raw constants)
   const _typeLabel={PUSH:'Push (Chest/Shoulders/Triceps)',PULL:'Pull (Back/Biceps)',LEGS:'Legs',UPPER_PUMP:'Upper Body (Full Upper)',FULL_BODY:'Full Body',LONG_OUTDOOR:'Long Outdoor Ride',SHORT_OUTDOOR:'Short Outdoor Ride',LONG_INDOOR:'Long Indoor Ride',SHORT_INDOOR:'Short Indoor Ride',REST:'Rest & Mobility',SKIPPED:'Skipped'};
   const _tl=t=>_typeLabel[t]||t;
@@ -7915,6 +7931,15 @@ function rFitnessForm(){
 // {date, exId, exName, group, w, r} for every completed set.
 function _scanGymSets(days){
   const today=new Date();
+  const stamp=fd(today);
+  // Serve from the memo when it's from today and covers at least this window.
+  // rGymTonnage asks for 84 and rExerciseProgress for 180 in the same render,
+  // so after the first 180-day scan both are answered from one pass.
+  if(_gymScanCache&&_gymScanCache.stamp===stamp&&_gymScanCache.days>=days){
+    if(_gymScanCache.days===days)return _gymScanCache.sets;
+    const cutoff=fd(addDays(today,-(days-1)));
+    return _gymScanCache.sets.filter(s=>s.date>=cutoff);
+  }
   const out=[];
   for(let i=0;i<days;i++){
     const ds=fd(addDays(today,-i));
@@ -7931,6 +7956,7 @@ function _scanGymSets(days){
       }
     }
   }
+  _gymScanCache={stamp,days,sets:out};
   return out;
 }
 
@@ -8631,7 +8657,7 @@ function rPRs(){
     if(log&&log.exercises&&log.exercises.some(e=>e.sets.some(s=>s.done)))history.push({...log,date:log.date||ds});
   }
   const _hCutoff=fd(addDays(new Date(),-180));
-  const _hRideSet=new Set(['Ride','VirtualRide','EBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+  const _hRideSet=RIDE_TYPE_SET;
   (DB.get('strava_activities',[])||[]).filter(a=>{
     const ds=(a.start_date_local||'').slice(0,10);
     return ds>=_hCutoff&&(_hRideSet.has(a.type)||_hRideSet.has(a.sport_type));
@@ -8689,8 +8715,8 @@ ${!prKeys.length
     const q=DB.get('_pr_search','').toLowerCase();
     // Search bar
     const searchBar=`<div style="margin-bottom:12px;position:relative">
-      <input id="pr-search" type="search" placeholder="Search exercises…" value="${DB.get('_pr_search','')}"
-        oninput="DB.set('_pr_search',this.value);render()"
+      <input id="pr-search" type="search" placeholder="Search exercises…" value="${_esc(DB.get('_pr_search',''))}"
+        oninput="DB.set('_pr_search',this.value);render();const _i=document.getElementById('pr-search');if(_i){_i.focus();try{_i.setSelectionRange(_i.value.length,_i.value.length)}catch(_){}}"
         style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:13px;padding:10px 14px;outline:none;font-family:inherit">
     </div>`;
     // Group PRs
@@ -8773,7 +8799,7 @@ ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bott
 <div class="sec-hdr">${_T('history')}</div>
 ${!history.length
   ?`<div style="background:var(--s1);border-radius:14px;padding:20px;text-align:center;color:var(--t2);font-size:13px;margin-bottom:20px">${_T('h_no_workouts')}</div>`
-  :history.map((log,hi)=>{
+  :(S._histAll?history:history.slice(0,25)).map((log,hi)=>{
     if(log._strava){
       // Workout type badge
       const _wtMap={0:'',1:'Race',2:'Long',3:'Workout',11:'Virtual Race',12:'E-Bike Ride'};
@@ -8850,6 +8876,7 @@ ${!history.length
     }).join('')}
   </div>
 </div>`;}).join('')}
+${history.length>25&&!S._histAll?`<button onclick="S._histAll=true;render()" style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:12px;color:var(--al);font-size:13px;font-weight:700;padding:12px;cursor:pointer;margin-bottom:20px">Show all ${history.length} sessions ▾</button>`:''}
 
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
