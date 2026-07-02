@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.93';
+const APP_VERSION='2.94';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.94',d:'Comeback mode for long breaks — plus smarter load tracking for rides without power',det:'Four upgrades. (1) COMEBACK MODE: if you haven\'t logged anything for 4+ weeks, the week view now greets you with a "Welcome back" banner offering an eased 2-week re-entry: a short-week plan (2-3 full-body days depending on how long you were away), working-weight suggestions damped to 60-80% of your pre-break PRs (assisted machines get MORE help, not less), and — crucially — every AI coach prompt now includes your layoff context, so the coach stops telling you to chase pre-break PRs and instead paces your return. A status chip shows "Comeback week 1 of 2" while active; end it early anytime. Even if you decline the banner, the coach is still told about the gap. (2) RIDES WITHOUT POWER now contribute an estimated training load (from heart rate vs your observed max, or a steady-Zone-2 assumption) instead of counting as zero — previously an HR-only ride looked like a rest day, making your Form (TSB) read artificially fresh and skewing coach advice toward "push harder". Estimated loads show with a ~ prefix. (3) STRAVA SYNC now paginates — athletes with 200+ activities in 6 months no longer silently lose older rides from the fitness curve. (4) The Ask Coach prompt now lists each exercise with the same sets/reps/RPE and suggested weight the screen shows you, instead of library defaults.'},
   {v:'2.93',d:'Training-logic review — assisted-machine weight suggestions fixed, and stale caches now clean themselves up',det:'Two fixes from a logic review of the coaching and planning systems. (1) ASSISTED MACHINES: the suggested working weight (the ~weight badge on exercise cards) scaled your PR by an energy multiplier — correct for normal lifts, but backwards for assisted pull-ups/dips, where the weight is how much the machine HELPS you. On a sore/recovery day it suggested roughly half your PR assistance — i.e. the hardest setting of all on your weakest day. The multiplier now inverts for assisted exercises: less energy = more assistance. Fresh suggests slightly more help than your best-ever; sore suggests ~1.45× your PR help. (2) CACHE CLEANUP: daily AI-coach snippets, weather lookups, dismissed banners and weekly-advisor caches were written every day but never deleted, slowly filling the ~5MB local storage cap on iPhones (which would eventually block workout saves — the v2.92 storage warning would have caught it, but prevention beats warning). A sweep now runs shortly after each app start and removes cache entries older than 30 days. Your workouts, plans and reviews are never touched.'},
   {v:'2.92',d:'Hardening pass — security fix in Friends, sync race fix, storage-full warning, and a crash recovery screen',det:'Four robustness fixes from a full code review. (1) SECURITY: friend names in the Friends card and pending-request list were rendered without HTML escaping — since another user controls that string, a malicious "friend" could have injected script into your session (stored XSS). Names are now escaped, and the weekly-summary numbers (streak, sessions, km) are coerced to numbers so malformed data can\'t crash the Settings screen. (2) SYNC: fixed a race in incremental cloud sync where a set logged while a sync was already uploading could be cleared from the pending queue without ever reaching the cloud. The sync now snapshots the queue before uploading; anything changed mid-flight is picked up by the next sync, and failures restore the queue. (3) STORAGE: if the device\'s local storage is full (iOS caps it ~5MB), saves used to fail silently — a logged workout could just vanish. You now get a warning toast the first time a write fails. (4) RECOVERY: if a screen hits a rendering error, instead of a permanently blank page you now get a friendly error screen with "Back to my week" and "Reload" buttons plus the error message for reporting.'},
   {v:'2.91',d:'AI coach panel now starts collapsed every time you open the app — out of the way until you want it',det:'The "💬 Ask the Coach" panel sat at the top of the week view expanded by default, taking real estate even when you just opened the app to check your plan or log a set. Now every fresh app open starts with the panel collapsed to its compact header bar. Tap the header to expand it (with your conversation history intact), use it, and on the next open it\'s tucked away again. Previously the collapse state was sticky — once expanded it stayed expanded across opens — defeating the point. The conversation thread itself still persists in the cloud as before; only the expand/collapse UI state is per-session now.'},
@@ -1460,7 +1461,7 @@ async function getAICoach(energy,ct,dp){
     const _g2=(profile2?.goals||[profile2?.goal]||[]).filter(Boolean);
     const gd2=_g2.map(g=>_gm2[g]||g).join(' + ')||'general fitness';
     const isLong=(dp?.type||ct).includes('LONG');
-    const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history.
+    const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history.${_layoffNote()}
 
 Athlete goal: ${gd2}
 Recent rides (newest first):
@@ -1548,7 +1549,7 @@ SORE: [active recovery ride — specific reduced targets]`;
     return line;
   }).filter(Boolean);
 
-  const prompt=`You are a no-nonsense strength coach. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences — specific, data-driven. Look at the trend data: if reps dropped at the same weight, flag possible fatigue. If the athlete is close to a PR, push them. Reference exercise names and actual numbers.
+  const prompt=`You are a no-nonsense strength coach. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences — specific, data-driven. Look at the trend data: if reps dropped at the same weight, flag possible fatigue. If the athlete is close to a PR, push them. Reference exercise names and actual numbers.${_layoffNote()}
 
 Athlete:
 - Goal: ${goalDesc}
@@ -2127,11 +2128,29 @@ function _maybeAutoEstimateFtp(rides){
 // IF = NP/FTP   TSS = (moving_time × NP²) / (FTP² × 3600) × 100
 function _annotateRideLoad(rides,ftp){
   if(!ftp||ftp<=0)return rides;
+  // Observed max HR across all rides — proxy for the athlete's true max, used to
+  // approximate LTHR (~90% of max) for the HR-based TSS fallback below.
+  let obsMaxHr=0;
+  for(const a of rides)if(a.max_heartrate>obsMaxHr)obsMaxHr=a.max_heartrate;
+  const lthr=obsMaxHr>=120?obsMaxHr*0.9:null;
   for(const a of rides){
+    if(!a.moving_time)continue;
     const np=a.weighted_average_watts||a.average_watts;
-    if(np&&a.moving_time){
+    if(np){
       a._if=+(np/ftp).toFixed(2);
       a._tss=Math.round((a.moving_time*np*np)/(ftp*ftp*3600)*100);
+      a._tssEst=false;
+    }else{
+      // No power data. Previously these rides contributed ZERO load, so the
+      // fitness curve read "rest day" after a hard HR-only ride and TSB looked
+      // artificially fresh. Estimate instead: IF ≈ avgHR/LTHR when HR exists
+      // (clamped to a sane band), else assume steady Zone 2 (IF 0.65). Marked
+      // _tssEst so the UI can show it as approximate. v2.94.
+      let ifEst=0.65;
+      if(a.average_heartrate&&lthr)ifEst=Math.min(1.10,Math.max(0.45,a.average_heartrate/lthr));
+      a._if=+ifEst.toFixed(2);
+      a._tss=Math.round((a.moving_time/3600)*ifEst*ifEst*100);
+      a._tssEst=true;
     }
   }
   return rides;
@@ -2174,11 +2193,19 @@ async function stravaFetchActivities(){
     // Pull athlete data (FTP/weight) in parallel — fail-soft, doesn't block activity sync
     stravaFetchAthlete().catch(()=>{});
     const after=Math.floor(Date.now()/1000)-180*86400; // 6 months of history
-    const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=200`,{
-      headers:{Authorization:'Bearer '+token}
-    });
-    if(!r.ok)throw new Error('activities '+r.status);
-    const acts=await r.json();
+    // Paginate: a single page capped at 200 activities silently truncated history
+    // for high-volume athletes (8+/week over 6 months). Up to 4 pages = 800. v2.94.
+    const acts=[];
+    for(let page=1;page<=4;page++){
+      const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=200&page=${page}`,{
+        headers:{Authorization:'Bearer '+token}
+      });
+      if(!r.ok){if(page===1)throw new Error('activities '+r.status);break;}
+      const batch=await r.json();
+      if(!Array.isArray(batch)||!batch.length)break;
+      acts.push(...batch);
+      if(batch.length<200)break; // last page
+    }
     const _rideTypes=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
     // Strip each activity to only the fields the app uses — raw Strava objects include GPS
     // polylines, segment efforts, achievement data etc. which can push 200 rides to 2MB+,
@@ -2670,9 +2697,118 @@ function energyTargets(exId,energy){
   // easier than your best), sore 0.55→1.45×PR help. Without this, a sore day
   // suggested 0.55× your PR assistance — the hardest setting on the weakest day.
   // v2.93.
-  const mult=ex.assist?(2-prof.mult):prof.mult;
+  let mult=ex.assist?(2-prof.mult):prof.mult;
+  // Comeback block: PRs reflect pre-layoff strength, so damp suggestions further
+  // (and give assisted lifts correspondingly MORE help) until the block ends. v2.94.
+  const _cb=_comebackState();
+  if(_cb&&_cb.factor)mult=ex.assist?mult*(2-_cb.factor):mult*_cb.factor;
   const sugW=pr?.w?Math.round(pr.w*mult/2.5)*2.5:null;
   return{sets,reps,rpe,sugW};
+}
+
+/* ── COMEBACK MODE (long-layoff re-entry) ── */
+// The app previously had nothing for "life happened and I didn't train for 2-3
+// months": the plan restarted at full volume, weight suggestions still keyed off
+// pre-break PRs, and the AI coach was never told about the gap. Now: a 28+ day
+// gap with nothing logged offers a 2-week eased re-entry (short-week plan via the
+// v2.85 week_capacity infrastructure, damped weight targets, and an explicit
+// layoff note injected into every AI prompt). v2.94.
+let _layoffCache={date:null,days:null};
+function getLastActivityDate(){
+  const today=fd(new Date());
+  let last=null;
+  try{
+    for(let i=0;i<localStorage.length;i++){
+      const k=localStorage.key(i);
+      if(!k.startsWith('log_'))continue;
+      const ds=k.slice(4);
+      if(!/^\d{4}-\d{2}-\d{2}$/.test(ds)||ds>today)continue;
+      if(last&&ds<=last)continue; // only parse candidates newer than current best
+      const log=DB.get(k,null);
+      if(log?.completed||log?.exercises?.some(e=>e.sets?.some(s=>s.done))||log?.ride?.dur!=null)last=ds;
+    }
+  }catch(_){}
+  for(const a of (DB.get('strava_activities',[])||[])){
+    const ds=(a.start_date_local||'').slice(0,10);
+    if(ds&&ds<=today&&(!last||ds>last))last=ds;
+  }
+  return last;
+}
+function getLayoffDays(){
+  const today=fd(new Date());
+  if(_layoffCache.date===today)return _layoffCache.days; // scan once per day per session
+  const last=getLastActivityDate();
+  const days=last?Math.round((new Date(today+'T12:00:00')-new Date(last+'T12:00:00'))/86400000):null;
+  _layoffCache={date:today,days};
+  return days;
+}
+// Active comeback block, or null when none/expired. weekNum is 1-based.
+function _comebackState(){
+  const cm=DB.get('comeback_mode',null);
+  if(!cm||!cm.start)return null;
+  const elapsed=Math.round((new Date(fd(new Date())+'T12:00:00')-new Date(cm.start+'T12:00:00'))/86400000);
+  const weeks=cm.weeks||2;
+  if(elapsed<0||elapsed>=weeks*7)return null; // block finished — normal targets resume
+  return{...cm,weekNum:Math.floor(elapsed/7)+1,weeks};
+}
+// Layoff/comeback context for AI prompts — the coach was previously never told
+// about training gaps, so its advice assumed continuity ("push your top sets").
+function _layoffNote(){
+  const cb=_comebackState();
+  if(cb){
+    const lw=Math.round((cb.layoffDays||28)/7);
+    return`\nIMPORTANT — RETURNING FROM A LAYOFF: the user is in week ${cb.weekNum} of a ${cb.weeks}-week comeback block after ~${lw} weeks without training. Suggested weights are auto-reduced to ~${Math.round((cb.factor||0.7)*100)}% of pre-break levels. Existing PRs reflect PRE-BREAK strength — do NOT push toward them yet. Prioritise technique, moderate volume, consistency and recovery; ramp gradually week over week.`;
+  }
+  const days=getLayoffDays();
+  if(days!=null&&days>=28){
+    return`\nIMPORTANT — RETURNING FROM A LAYOFF: the user has not logged ANY training in ~${Math.round(days/7)} weeks. Treat them as detrained: recommend a conservative re-entry (2-3 easy full-body sessions in the first week at ~70-80% of old working weights), NOT their old plan or PR-based targets.`;
+  }
+  return'';
+}
+function startComeback(){
+  const days=getLayoffDays()||28;
+  const factor=days>=84?0.6:days>=56?0.7:0.8; // 12+wk → 60%, 8-12wk → 70%, 4-8wk → 80%
+  const cap=days>=56?2:3;                     // 8+wk off → 2 full-body days, else 3-day PPL
+  const mon=getMon(new Date());
+  DB.set('comeback_mode',{start:fd(new Date()),layoffDays:days,factor,weeks:2});
+  DB.set('week_capacity_'+fd(mon),cap);
+  DB.set('catchup_dismissed_'+fd(mon),true); // don't ALSO nag about months of "missed" days
+  S.weekStart=mon;
+  genPlan();
+  showToast(`🌱 Comeback plan ready — ${cap} easy days this week, weights eased ${Math.round((1-factor)*100)}%`,'var(--grn)');
+}
+function dismissComeback(){
+  DB.set('comeback_dismissed_'+fd(getMon(new Date())),true);
+  render();
+}
+function endComeback(){
+  DB.set('comeback_mode',null);
+  render();
+  showToast('Comeback block ended — normal targets restored','var(--acc)');
+}
+function rComebackBanner(){
+  if(S.guest)return'';
+  if(+S.weekStart!==+getMon(new Date()))return''; // current week only
+  const cb=_comebackState();
+  if(cb){
+    return`<div style="display:flex;align-items:center;gap:10px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:12px;padding:10px 13px;margin-bottom:12px">
+  <span style="font-size:16px">🌱</span>
+  <div style="flex:1;min-width:0;font-size:11px;color:var(--grn);font-weight:600;line-height:1.4">Comeback week ${cb.weekNum} of ${cb.weeks} — weights eased ~${Math.round((1-(cb.factor||0.7))*100)}%. Consistency beats intensity right now.</div>
+  <button onclick="endComeback()" style="background:none;border:1px solid rgba(16,185,129,.35);border-radius:8px;color:var(--grn);font-size:10px;font-weight:700;padding:5px 9px;cursor:pointer;flex-shrink:0">End early</button>
+</div>`;
+  }
+  const days=getLayoffDays();
+  if(days==null||days<28)return'';
+  if(DB.get('comeback_dismissed_'+fd(S.weekStart),false))return'';
+  const wks=Math.round(days/7);
+  return`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:14px;padding:13px 14px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px">🌱</span><div style="font-size:13px;font-weight:800;color:var(--grn)">Welcome back!</div></div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">It's been about <strong style="color:var(--txt)">${wks} weeks</strong> since your last logged session. Jumping straight back to old weights is how comebacks get cut short — want an eased 2-week re-entry instead? Fewer days, lighter targets, and the coach paces you back up.</div>
+  <div style="display:flex;gap:6px">
+    <button onclick="startComeback()" style="flex:1;background:var(--grn);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:10px;cursor:pointer">🌱 Start comeback plan</button>
+    <button onclick="dismissComeback()" style="flex:0 0 auto;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:10px 12px;cursor:pointer">No thanks</button>
+  </div>
+</div>`;
 }
 
 /* ── STATE ── */
@@ -2685,7 +2821,7 @@ const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-  'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache'];
+  'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
 function _isSyncKey(k){return k.startsWith('log_')||k.startsWith('plan_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
 const _dirtyKeys=new Set();   // sync keys changed since the last successful cloud write
 let _suppressDirty=false;     // true while applying a cloud pull (don't re-mark those keys)
@@ -4531,6 +4667,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rAskCoach()}
+${rComebackBanner()}
 ${rReviewCard()}
 ${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');
@@ -4831,7 +4968,7 @@ function rLoggedRideCard(actual){
 <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
     <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
-    ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 Load ${actual._tss}${actual._if?` · Intensity ${actual._if}`:''}</span>`:''}
+    ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 Load ${actual._tssEst?'~':''}${actual._tss}${actual._if?` · Intensity ${actual._tssEst?'~':''}${actual._if}`:''}</span>`:''}
     ${actual.suffer_score?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">⚡ Load ${actual.suffer_score}</span>`:''}
     ${actual.kilojoules?`<span class="bdg" style="background:rgba(59,130,246,.1);color:#60a5fa">🔋 ${Math.round(actual.kilojoules)}kJ</span>`:''}
   </div>
@@ -5449,7 +5586,7 @@ ${d.weight.logged_days} weigh-in${d.weight.logged_days!==1?'s':''} on record. No
   const planTxt=d.plan?d.plan.map(x=>`${x.date}:${x.type}`).join(', '):'No plan set for the current week.';
   const zh=DB.get('lang','en')==='zh';
   const langNote=zh?'\n\nIMPORTANT: Write your ENTIRE response in Traditional Chinese (繁體中文). Keep the five section labels SUMMARY:/OVERLOAD:/RECOVERY:/FOCUS:/SEQUENCE: in English so the app can parse them, but all content must be Traditional Chinese.':'';
-  return`You are a personal training coach. Analyse the user's last 8 weeks of training data. User goal: ${goalStr}. Fitness level: ${levelStr}. Weights in ${u}. Be concise, specific, and data-driven.${langNote}
+  return`You are a personal training coach. Analyse the user's last 8 weeks of training data. User goal: ${goalStr}. Fitness level: ${levelStr}. Weights in ${u}. Be concise, specific, and data-driven.${_layoffNote()}${langNote}
 
 Respond with EXACTLY these five labelled sections, each starting on its own line:
 SUMMARY: <honest performance summary>
@@ -5544,7 +5681,11 @@ function buildAskPrompt(question){
         for(const exId of day.exercises){
           const ex=EX[exId];if(!ex)continue;
           const assistNote=ex.assist?' [ASSISTED — weight is assistance/help; LOWER weight = stronger, goal is to reduce it]':'';
-          weekPlanLines.push(`      - ${ex.n} (${ex.sets}×${ex.reps}, RPE ${ex.rpe})${assistNote}`);
+          // Use the same prescription the screen shows (energyTargets) rather than
+          // the library defaults, and include the suggested working weight so the
+          // coach reasons from what the user actually sees. v2.94.
+          const tgt=energyTargets(exId,'okay');
+          weekPlanLines.push(`      - ${ex.n} (${tgt.sets}×${tgt.reps}, RPE ${tgt.rpe}${tgt.sugW?`, suggested ~${tgt.sugW}${u}`:''})${assistNote}`);
         }
       }
     }
@@ -5565,7 +5706,7 @@ function buildAskPrompt(question){
   }
   const zh=DB.get('lang','en')==='zh';
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
-  return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${langNote}
+  return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${_layoffNote()}${langNote}
 
 VOCABULARY — NEVER write these acronyms in your response. Use plain English ONLY:
 - "CTL" / "ATL" / "TSB" — concepts called "Fitness" / "Fatigue" / "Form". NEVER write the acronym at all.
@@ -6770,7 +6911,7 @@ function buildNextWeekPrompt(weekSessions,nextGymDays){
     return`${s.date} (${s.type}): ${exStr||'no data'}`;
   }).join('\n'):'No gym sessions logged this week.';
   const nextTxt=nextGymDays.map(d=>`${d.date} (${d.type}): ${(d.exercises||[]).map(id=>EX[id]?.n||id).join(', ')}`).join('\n')||'No gym days planned.';
-  return`You are a personal training coach. Review this week's performance and provide starting weight/rep suggestions for each exercise in next week's plan.
+  return`You are a personal training coach. Review this week's performance and provide starting weight/rep suggestions for each exercise in next week's plan.${_layoffNote()}
 
 User goal: ${goalStr} | Level: ${levelStr} | Weight unit: ${u}
 
@@ -9886,7 +10027,7 @@ function toggleHomeDay(dateStr){
 function pruneOldCacheKeys(){
   try{
     const cutoff=fd(addDays(new Date(),-30));
-    const cachePrefix=/^(coach_|excoach_|weather_|catchup_dismissed_|weekly_advisor_)/;
+    const cachePrefix=/^(coach_|excoach_|weather_|catchup_dismissed_|comeback_dismissed_|weekly_advisor_)/;
     const dateRe=/(\d{4}-\d{2}-\d{2})/;
     const del=[];
     for(let i=0;i<localStorage.length;i++){
