@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.95';
+const APP_VERSION='2.96';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.96',d:'Smarter daily coaching — the AI now knows your FTP, fatigue, weather and today\'s targets',det:'Upgrade pass on what the AI coach actually sees before giving advice. (1) RIDE NOTES: the daily pre-ride coach was asked for "specific power targets" without ever being told your FTP — targets were guesses. It now gets your FTP with computed Zone 2 / threshold power bands (or is told to use HR/RPE targets if FTP isn\'t set), your current fitness/fatigue/form (CTL/ATL/TSB), yesterday\'s ride load, the planned session and duration, today\'s weather, and NP/TSS per ride in your history. (2) GYM NOTES: the daily pre-workout coach now sees today\'s actual prescription per exercise (sets×reps×RPE and the suggested weight from your card — comeback-aware), plus your current form so it can account for ride fatigue on lifting days. Assisted machines are tagged so it never suggests adding assistance as progression. (3) NEXT-WEEK WEIGHTS: the weekly suggestion prompt now carries an explicit assisted-machine exception (progress = LESS assistance). (4) LANGUAGE: daily coach notes now come back in Traditional Chinese when the app language is 繁體中文 (previously English-only). (5) RELIABILITY: the backup AI providers (used when Gemini hits quota) had a response cap that truncated weekly reviews and coach actions — raised to cover the largest responses (requires the Cloudflare worker update).'},
   {v:'2.95',d:'My Training tab fixed up — extra gym sessions now cloud-sync, search works properly, e-bike rides show in History',det:'Review pass over the My Training tab. (1) SYNC FIX (important): extra gym sessions logged on ride days (the "+ Add gym workout" feature) were never included in cloud sync — they only existed on the device that logged them, so they never appeared on your other devices and would be lost with the phone. They now sync like every other log; your next full sync uploads any existing ones. (2) SEARCH: typing in the PR search box lost keyboard focus after every single character (each keystroke re-rendered the screen and destroyed the input). Focus and cursor position are now restored — you can actually type a whole word. (3) HISTORY: e-bike (EBikeSport) and e-MTB rides showed on the week view but were missing from the History list due to an out-of-date activity-type filter; all six copies of that filter are now one shared list. (4) PERFORMANCE: the tab re-scanned ~450 days\' worth of logs on every render (including per keystroke); the scan is now cached and reused until a workout changes. (5) History shows the latest 25 sessions with a "Show all" button instead of rendering six months of entries at once.'},
   {v:'2.94',d:'Comeback mode for long breaks — plus smarter load tracking for rides without power',det:'Four upgrades. (1) COMEBACK MODE: if you haven\'t logged anything for 4+ weeks, the week view now greets you with a "Welcome back" banner offering an eased 2-week re-entry: a short-week plan (2-3 full-body days depending on how long you were away), working-weight suggestions damped to 60-80% of your pre-break PRs (assisted machines get MORE help, not less), and — crucially — every AI coach prompt now includes your layoff context, so the coach stops telling you to chase pre-break PRs and instead paces your return. A status chip shows "Comeback week 1 of 2" while active; end it early anytime. Even if you decline the banner, the coach is still told about the gap. (2) RIDES WITHOUT POWER now contribute an estimated training load (from heart rate vs your observed max, or a steady-Zone-2 assumption) instead of counting as zero — previously an HR-only ride looked like a rest day, making your Form (TSB) read artificially fresh and skewing coach advice toward "push harder". Estimated loads show with a ~ prefix. (3) STRAVA SYNC now paginates — athletes with 200+ activities in 6 months no longer silently lose older rides from the fitness curve. (4) The Ask Coach prompt now lists each exercise with the same sets/reps/RPE and suggested weight the screen shows you, instead of library defaults.'},
   {v:'2.93',d:'Training-logic review — assisted-machine weight suggestions fixed, and stale caches now clean themselves up',det:'Two fixes from a logic review of the coaching and planning systems. (1) ASSISTED MACHINES: the suggested working weight (the ~weight badge on exercise cards) scaled your PR by an energy multiplier — correct for normal lifts, but backwards for assisted pull-ups/dips, where the weight is how much the machine HELPS you. On a sore/recovery day it suggested roughly half your PR assistance — i.e. the hardest setting of all on your weakest day. The multiplier now inverts for assisted exercises: less energy = more assistance. Fresh suggests slightly more help than your best-ever; sore suggests ~1.45× your PR help. (2) CACHE CLEANUP: daily AI-coach snippets, weather lookups, dismissed banners and weekly-advisor caches were written every day but never deleted, slowly filling the ~5MB local storage cap on iPhones (which would eventually block workout saves — the v2.92 storage warning would have caught it, but prevention beats warning). A sweep now runs shortly after each app start and removes cache entries older than 30 days. Your workouts, plans and reviews are never touched.'},
@@ -1441,6 +1442,9 @@ async function getAICoach(energy,ct,dp){
     return line;
   }).filter(Boolean);
 
+  // Daily notes previously always came back in English even with the app in
+  // Traditional Chinese (only Ask Coach / weekly review had a language note). v2.96.
+  const _dailyLangNote=DB.get('lang','en')==='zh'?'\nWrite the note text in Traditional Chinese (繁體中文), but keep the FRESH:/OKAY:/TIRED:/SORE: labels in English so the app can parse them.':'';
   const isRideDay=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp?.type||ct);
 
   // For ride days: build coaching from Strava history instead of gym PRs
@@ -1458,19 +1462,28 @@ async function getAICoach(energy,ct,dp){
       const dur=Math.round((a.moving_time||0)/60);
       const dist=+((a.distance||0)/1000).toFixed(1);
       const hr=a.average_heartrate?Math.round(a.average_heartrate):null;
+      const np=a.weighted_average_watts?Math.round(a.weighted_average_watts):null;
       const watts=a.average_watts?Math.round(a.average_watts):null;
       const elev=a.total_elevation_gain?Math.round(a.total_elevation_gain):null;
-      return `${ds}: ${dist}km ${dur}min${hr?' HR '+hr+'bpm':''}${watts?' '+watts+'W':''}${elev?' ↗'+elev+'m':''}`;
+      return `${ds}: ${dist}km ${dur}min${hr?' HR '+hr+'bpm':''}${np?' NP '+np+'W':watts?' '+watts+'W':''}${a._tss?' TSS '+(a._tssEst?'~':'')+a._tss:''}${elev?' ↗'+elev+'m':''}`;
     });
     const profile2=DB.get('user_profile',null);
     const _gm2={muscle:'build muscle',lose_weight:'lose weight',fitness:'general fitness',endurance:'endurance/event prep',performance:'sport performance'};
     const _g2=(profile2?.goals||[profile2?.goal]||[]).filter(Boolean);
     const gd2=_g2.map(g=>_gm2[g]||g).join(' + ')||'general fitness';
     const isLong=(dp?.type||ct).includes('LONG');
-    const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history.${_layoffNote()}
+    // Context the model previously never saw: FTP (it was asked for "specific
+    // power targets" with no FTP to anchor them), current form, the planned
+    // session, and today's weather. v2.96.
+    const _ftpLine=profile2?.ftp?`FTP: ${profile2.ftp}W${profile2.weight?` (${(profile2.ftp/profile2.weight).toFixed(2)} W/kg)`:''} — Zone 2 ≈ ${Math.round(profile2.ftp*0.56)}-${Math.round(profile2.ftp*0.75)}W, threshold ≈ ${Math.round(profile2.ftp*0.91)}-${Math.round(profile2.ftp*1.05)}W`:'FTP not set — give HR/RPE-based targets, not watts';
+    const _sess2=(()=>{try{const s=getRideSession(dp?.type||ct);return s?`Planned session: ${s.name} — ~${s.total} min`:'';}catch(_){return'';}})();
+    const _wx2=dp?.weather?`Weather today: ${dp.weather.tmin}–${dp.weather.tmax}°C · wind ${dp.weather.wind}km/h · rain ${dp.weather.rain}mm`:'';
+    const _fit2=_fitnessLine();
+    const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history and give power/HR targets consistent with their FTP and current form.${_layoffNote()}${_dailyLangNote}
 
 Athlete goal: ${gd2}
-Recent rides (newest first):
+${_ftpLine}
+${_fit2?_fit2+'\n':''}${_sess2?_sess2+'\n':''}${_wx2?_wx2+'\n':''}Recent rides (newest first):
 ${rideLines.join('\n')}
 
 Write exactly 4 notes labelled:
@@ -1482,7 +1495,7 @@ SORE: [active recovery ride — specific reduced targets]`;
     _coachInFlight[batchKey]=true;
     try{
       const r2=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({contents:[{parts:[{text:ridePrompt}]}],generationConfig:{maxOutputTokens:300,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
+        body:JSON.stringify({contents:[{parts:[{text:ridePrompt}]}],generationConfig:{maxOutputTokens:420,temperature:0.7,thinkingConfig:{thinkingBudget:0}}})});
       const raw2=await r2.text();
       trackAICall('coach_ride',r2.ok);
       if(!r2.ok)throw new Error('API '+r2.status);
@@ -1549,13 +1562,19 @@ SORE: [active recovery ride — specific reduced targets]`;
       if(sessions.length>=3)break;
     }
     const pr=DB.get('prs',{})[id];
-    let line=`${ex.n}`;
+    // Give the model the same prescription the screen shows (sets×reps×RPE +
+    // suggested weight — comeback-aware via energyTargets), and flag assisted
+    // machines so it never advises ADDING assistance as progression. v2.96.
+    const tgt=energyTargets(id,'okay');
+    let line=`${ex.n} | today's target: ${tgt.sets}×${tgt.reps} RPE ${tgt.rpe}${tgt.sugW?` @ ~${tgt.sugW}${unit()}`:''}`;
+    if(ex.assist)line+=' [ASSISTED — weight is machine HELP; LOWER = stronger; progress by REDUCING it]';
     if(pr)line+=` | PR: ${pr.w}${unit()}×${pr.r}`;
     if(sessions.length)line+=` | Recent: ${sessions.join(', ')}`;
     return line;
   }).filter(Boolean);
 
-  const prompt=`You are a no-nonsense strength coach. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences — specific, data-driven. Look at the trend data: if reps dropped at the same weight, flag possible fatigue. If the athlete is close to a PR, push them. Reference exercise names and actual numbers.${_layoffNote()}
+  const _fitG=_fitnessLine();
+  const prompt=`You are a no-nonsense strength coach. Write 4 pre-workout coaching notes for today's ${dp?.type||ct} session. Each note is 2 sentences — specific, data-driven. Look at the trend data: if reps dropped at the same weight, flag possible fatigue. If the athlete is close to a PR, push them. Reference exercise names and actual numbers.${_layoffNote()}${_dailyLangNote}
 
 Athlete:
 - Goal: ${goalDesc}
@@ -1564,7 +1583,8 @@ ${genderNote}
 ${bodyNote}
 - Sessions this week: ${weekSessions}
 - Last ${dp?.type||ct}: ${lastDone}
-- Exercise history (PR + last 3 sessions):
+${_fitG?'- '+_fitG:''}
+- Exercise history (today's target + PR + last 3 sessions):
 ${trendLines.map(l=>'  '+l).join('\n')}
 
 Write exactly 4 notes:
@@ -1578,7 +1598,7 @@ SORE: [recovery focus — what to skip or go light on]`;
     const r=await fetch(GEMINI_PROXY,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:300,temperature:0.75,thinkingConfig:{thinkingBudget:0}}})
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:420,temperature:0.75,thinkingConfig:{thinkingBudget:0}}})
     });
     const raw=await r.text();
     trackAICall('coach_gym',r.ok);
@@ -2771,6 +2791,20 @@ function _layoffNote(){
   }
   return'';
 }
+// One-line fitness/fatigue snapshot for AI prompts — the daily coach notes were
+// generated blind to CTL/ATL/TSB (only the weekly review saw them), so "push
+// harder" advice couldn't account for ride fatigue. Empty string when no curve. v2.96.
+function _fitnessLine(){
+  const curve=DB.get('bike_fitness_curve',null);
+  if(!curve)return'';
+  const cur=curve[fd(new Date())]||curve[fd(addDays(new Date(),-1))];
+  if(!cur)return'';
+  let s=`Current form: Fitness(CTL) ${Math.round(cur.ctl)} · Fatigue(ATL) ${Math.round(cur.atl)} · Form(TSB) ${cur.tsb>0?'+':''}${Math.round(cur.tsb)} (TSB below -10 = carrying fatigue, above +5 = fresh)`;
+  const yRide=stravaRideOnDate(fd(addDays(new Date(),-1)));
+  if(yRide&&yRide._tss)s+=`. Yesterday's ride load: TSS ${yRide._tssEst?'~':''}${yRide._tss}`;
+  return s;
+}
+
 function startComeback(){
   const days=getLayoffDays()||28;
   const factor=days>=84?0.6:days>=56?0.7:0.8; // 12+wk → 60%, 8-12wk → 70%, 4-8wk → 80%
@@ -6926,7 +6960,7 @@ function buildNextWeekPrompt(weekSessions,nextGymDays){
     }).filter(Boolean).join(' | ');
     return`${s.date} (${s.type}): ${exStr||'no data'}`;
   }).join('\n'):'No gym sessions logged this week.';
-  const nextTxt=nextGymDays.map(d=>`${d.date} (${d.type}): ${(d.exercises||[]).map(id=>EX[id]?.n||id).join(', ')}`).join('\n')||'No gym days planned.';
+  const nextTxt=nextGymDays.map(d=>`${d.date} (${d.type}): ${(d.exercises||[]).map(id=>{const e=EX[id];return e?e.n+(e.assist?' [ASSISTED]':''):id;}).join(', ')}`).join('\n')||'No gym days planned.';
   return`You are a personal training coach. Review this week's performance and provide starting weight/rep suggestions for each exercise in next week's plan.${_layoffNote()}
 
 User goal: ${goalStr} | Level: ${levelStr} | Weight unit: ${u}
@@ -6938,6 +6972,7 @@ NEXT WEEK'S EXERCISES:
 ${nextTxt}
 
 For each exercise listed in "NEXT WEEK'S EXERCISES", provide a starting weight and rep target using progressive overload principles. If the exercise was done this week, add 2.5–5${u} if all reps were completed, keep the same if it was hard, or reduce slightly if sets were missed. If not done this week, base on similar exercises or overall level.
+EXCEPTION — exercises marked [ASSISTED]: the weight is how much the machine HELPS (counterweight), so LOWER = stronger. For those, progress by REDUCING the weight 2.5–5${u} when all reps were completed, keep it if it was hard, and INCREASE it slightly if sets were missed. Never suggest adding assistance as progression. In your response line, use the exercise name WITHOUT the [ASSISTED] tag.
 
 Respond in EXACTLY this format (one line per exercise, nothing else before SUGGESTIONS:):
 SUGGESTIONS:
@@ -6954,7 +6989,7 @@ function parseNextWeekSuggestions(text){
   for(const line of lines){
     const m=line.match(/^(.+?):\s*([\d.]+)\s*(?:kg|lbs?)?\s*[x×]\s*(\d+)/i);
     if(!m)continue;
-    const name=m[1].trim();
+    const name=m[1].replace(/\s*\[ASSISTED\]\s*$/i,'').trim();
     const weight=parseFloat(m[2]);const reps=parseInt(m[3]);
     const exId=Object.entries(EX).find(([id,e])=>e.n.toLowerCase()===name.toLowerCase())?.[0];
     if(exId&&weight>0&&reps>0)sugg[exId]={w:String(weight),r:String(reps)};

@@ -1,5 +1,6 @@
-// v9 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
-//      + Firebase Hosting origins (training-631c1.web.app / .firebaseapp.com)
+// v10 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
+//       + Firebase Hosting origins (training-631c1.web.app / .firebaseapp.com)
+//       + fallback max_tokens raised 500 → 1500 (was truncating weekly reviews)
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -115,7 +116,10 @@ export default {
           body: JSON.stringify({
             model: 'sonar',
             messages: [{ role: 'user', content: prompt }],
-            max_tokens: 500,
+            // 1500 covers the app's largest expected response (coach-with-tools
+            // asks Gemini for up to 1400 output tokens); 500 truncated weekly
+            // reviews (5 labelled sections) and tool-call JSON on fallback. v10.
+            max_tokens: 1500,
           }),
         });
         if (r.ok) {
@@ -138,7 +142,10 @@ export default {
           body: JSON.stringify({
             model: 'gpt-4o-mini',
             messages: [{ role: 'user', content: prompt }],
-            max_tokens: 500,
+            // 1500 covers the app's largest expected response (coach-with-tools
+            // asks Gemini for up to 1400 output tokens); 500 truncated weekly
+            // reviews (5 labelled sections) and tool-call JSON on fallback. v10.
+            max_tokens: 1500,
           }),
         });
         if (r.ok) {
