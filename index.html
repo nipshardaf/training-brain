@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.97';
+const APP_VERSION='2.98';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.98',d:'Comeback mode fixes — the eased return now actually ramps over both weeks',det:'Four fixes found by walking through what happens when you open the app after a long break. (1) VOLUME RAMP: the comeback block reduced your training days in week 1, but week 2 jumped straight back to a full 4-5 day week — the exact volume spike a graded return exists to prevent. Week 2 now steps up by one day instead (e.g. 2 easy days → 3), then normal service resumes. (2) STALE DETECTION: the "welcome back" check ran once on the first screen draw, before Strava had finished syncing — so if you\'d actually ridden during your break, the app could still greet you as detrained until you reloaded. The check now refreshes whenever new workout or Strava data arrives. (3) Extra gym sessions logged on ride days now count as training for that check (they were invisible to it). (4) Tapping "Start comeback plan" announced "plan ready" instantly, even though building the week needs your location and can fail or be declined — the message now says what it\'s doing rather than claiming a result it doesn\'t have yet.'},
   {v:'2.97',d:'New ⓘ buttons explain the training jargon — TSS, FTP, TSB and friends in plain English',det:'The coach and charts use sports-science shorthand (Load/TSS, Fitness/CTL, Fatigue/ATL, Form/TSB, FTP, NP, Intensity, RPE, Zone 2, tonnage, estimated 1RM…) and nothing in the app explained them. Small ⓘ buttons now sit wherever the jargon is densest — the Ask Coach header, the day-screen coach card, the logged-ride detail card, and the Cycling Performance and Gym Progress sections in My Training. Tapping one opens a plain-English glossary of all 16 terms, scrolled to and highlighting the most relevant entry for where you tapped (e.g. the ride card jumps to Load/TSS). Each explanation is 2-3 friendly sentences with practical reference points — like "an easy hour is ~40-50 TSS" or "RPE 7 = about 3 clean reps left in the tank" — plus why assisted-machine numbers run backwards.'},
   {v:'2.96',d:'Smarter daily coaching — the AI now knows your FTP, fatigue, weather and today\'s targets',det:'Upgrade pass on what the AI coach actually sees before giving advice. (1) RIDE NOTES: the daily pre-ride coach was asked for "specific power targets" without ever being told your FTP — targets were guesses. It now gets your FTP with computed Zone 2 / threshold power bands (or is told to use HR/RPE targets if FTP isn\'t set), your current fitness/fatigue/form (CTL/ATL/TSB), yesterday\'s ride load, the planned session and duration, today\'s weather, and NP/TSS per ride in your history. (2) GYM NOTES: the daily pre-workout coach now sees today\'s actual prescription per exercise (sets×reps×RPE and the suggested weight from your card — comeback-aware), plus your current form so it can account for ride fatigue on lifting days. Assisted machines are tagged so it never suggests adding assistance as progression. (3) NEXT-WEEK WEIGHTS: the weekly suggestion prompt now carries an explicit assisted-machine exception (progress = LESS assistance). (4) LANGUAGE: daily coach notes now come back in Traditional Chinese when the app language is 繁體中文 (previously English-only). (5) RELIABILITY: the backup AI providers (used when Gemini hits quota) had a response cap that truncated weekly reviews and coach actions — raised to cover the largest responses (requires the Cloudflare worker update).'},
   {v:'2.95',d:'My Training tab fixed up — extra gym sessions now cloud-sync, search works properly, e-bike rides show in History',det:'Review pass over the My Training tab. (1) SYNC FIX (important): extra gym sessions logged on ride days (the "+ Add gym workout" feature) were never included in cloud sync — they only existed on the device that logged them, so they never appeared on your other devices and would be lost with the phone. They now sync like every other log; your next full sync uploads any existing ones. (2) SEARCH: typing in the PR search box lost keyboard focus after every single character (each keystroke re-rendered the screen and destroyed the input). Focus and cursor position are now restored — you can actually type a whole word. (3) HISTORY: e-bike (EBikeSport) and e-MTB rides showed on the week view but were missing from the History list due to an out-of-date activity-type filter; all six copies of that filter are now one shared list. (4) PERFORMANCE: the tab re-scanned ~450 days\' worth of logs on every render (including per keystroke); the scan is now cached and reused until a workout changes. (5) History shows the latest 25 sessions with a "Show all" button instead of rendering six months of entries at once.'},
@@ -2747,8 +2748,11 @@ function getLastActivityDate(){
   try{
     for(let i=0;i<localStorage.length;i++){
       const k=localStorage.key(i);
-      if(!k.startsWith('log_'))continue;
-      const ds=k.slice(4);
+      // extralog_ (extra gym on a ride day) counts as training too — it does not
+      // start with 'log_', so it was previously invisible to the layoff scan. v2.98.
+      const isLog=k.startsWith('log_'),isExtra=k.startsWith('extralog_');
+      if(!isLog&&!isExtra)continue;
+      const ds=k.slice(isExtra?9:4);
       if(!/^\d{4}-\d{2}-\d{2}$/.test(ds)||ds>today)continue;
       if(last&&ds<=last)continue; // only parse candidates newer than current best
       const log=DB.get(k,null);
@@ -2811,12 +2815,15 @@ function startComeback(){
   const factor=days>=84?0.6:days>=56?0.7:0.8; // 12+wk → 60%, 8-12wk → 70%, 4-8wk → 80%
   const cap=days>=56?2:3;                     // 8+wk off → 2 full-body days, else 3-day PPL
   const mon=getMon(new Date());
-  DB.set('comeback_mode',{start:fd(new Date()),layoffDays:days,factor,weeks:2});
+  DB.set('comeback_mode',{start:fd(new Date()),layoffDays:days,factor,weeks:2,cap});
   DB.set('week_capacity_'+fd(mon),cap);
   DB.set('catchup_dismissed_'+fd(mon),true); // don't ALSO nag about months of "missed" days
   S.weekStart=mon;
+  // Toast BEFORE genPlan and worded as "building": genPlan is asynchronous for
+  // weather users (geolocation prompt) and can fail or be denied, so claiming
+  // "plan ready" here could contradict an error alert a second later. v2.98.
+  showToast(`🌱 Comeback block started — ${cap} easy days, weights eased ${Math.round((1-factor)*100)}%. Building your week…`,'var(--grn)');
   genPlan();
-  showToast(`🌱 Comeback plan ready — ${cap} easy days this week, weights eased ${Math.round((1-factor)*100)}%`,'var(--grn)');
 }
 function dismissComeback(){
   DB.set('comeback_dismissed_'+fd(getMon(new Date())),true);
@@ -2884,6 +2891,11 @@ const DB = {
   set:(k,v)=>{
     // Any workout-log write invalidates the memoized gym-set scan (see _scanGymSets)
     if(k.startsWith('log_')||k.startsWith('extralog_'))_gymScanCache=null;
+    // ...and the layoff scan, which also reads Strava. Without this the comeback
+    // banner keeps the value computed on the FIRST render of the session, before
+    // the Strava auto-sync or cloud pull lands — so a ride done during a break
+    // wouldn't clear the "welcome back" prompt until a reload. v2.98.
+    if(k.startsWith('log_')||k.startsWith('extralog_')||k==='strava_activities')_layoffCache={date:null,days:null};
     if(S.guest){_guestStore[k]=v;return;}
     try{localStorage.setItem(k,JSON.stringify(v));}
     catch(e){_storageWriteFailed(k,e);}
@@ -3336,7 +3348,19 @@ function buildWeek(wdays){
   // via the ⏱️ button or AI coach. Skip the rotation/ride logic and build a
   // minimal plan: N FULL_BODY days on the best-weather slots, rest = REST.
   // Locked days are preserved as always.
-  const weekCap=DB.get('week_capacity_'+fd(S.weekStart),null);
+  let weekCap=DB.get('week_capacity_'+fd(S.weekStart),null);
+  // During an active comeback block, carry a reduced capacity into week 2 as well,
+  // ramping by one day. startComeback only sets week_capacity_ for week 1, so
+  // without this the plan jumped straight from 2 easy days back to a full week —
+  // exactly the volume spike a graded return is meant to avoid. v2.98.
+  if(weekCap==null){
+    const _cb=(typeof _comebackState==='function')?_comebackState():null;
+    if(_cb){
+      const _base=_cb.cap||(_cb.layoffDays>=56?2:3);
+      const _ramped=_base+((_cb.weekNum||1)-1);
+      if(_ramped>=1&&_ramped<=3)weekCap=_ramped;
+    }
+  }
   if(weekCap&&weekCap>=1&&weekCap<=3){
     const numTrain=weekCap;
     // Available (non-locked) days, ranked by score (best weather first)
