@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.09';
+const APP_VERSION='3.10';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.10',d:'Connect your own Endurain server — plus honest wording about Strava',det:'Two changes. (1) ENDURAIN: if you self-host Endurain, the app can now pull rides straight from it — no third-party service in between. Add your server address and sign in under Settings → Ride sync → Ride sources; only the access token is kept, never your password. Rides arrive with power, normalized power, heart rate, elevation and calories, and are labelled as coming from Endurain. It syncs automatically on app open like the other sources, and non-cycling activities are filtered out. Two requirements: the server must be reachable over https, and it must be configured to allow requests from this app\'s web address — the app explains this if the connection is refused. (2) STRAVA WORDING: the app no longer states that Strava requires a paid subscription unless Strava has actually reported that to the app. If you have not connected Strava, it simply offers to connect; the subscription explanation appears only when Strava itself returns the "inactive application" response.'},
   {v:'3.09',d:'Ride sessions now explain themselves — and tell you the watts to aim for',det:'A heading like "Sweet Spot" means nothing on its own. Every ride session now carries a one-line explanation of what it is and why it\'s in your week, plus — if your FTP is set — the actual power range to target. For a 256W FTP, Sweet Spot reads "Aim for ~225-238W", Tempo "~195-223W", Recovery "~115-154W", and so on, so the session name turns into something you can act on. There\'s also an ⓘ next to the name opening a fuller explanation, including why the weeks rotate: your rides run a repeating 4-week cycle (Build 1 → Build 2 → Peak → Recovery), each week using a different session type — Tempo, Sweet Spot, Hills, then easy — so you develop different systems rather than repeating the same ride. If you haven\'t set an FTP, it says so instead of inventing numbers.'},
   {v:'3.08',d:'No more Strava error popping up every time you open the app',det:'If Strava had deactivated the app\'s API access, the automatic sync on every launch failed and threw the same red error on screen each time — for a sync you never asked for, about a service you may have deliberately stopped using. Background syncs are now silent when they fail: the app skips the Strava call entirely once it knows access is deactivated, and only reports failures when you actually tap a sync button yourself. Nothing is hidden — the current state and the exact error are still in Settings → Ride sync, and "Check again" re-tests whenever you want. You can leave Strava connected indefinitely without it nagging you.'},
   {v:'3.07',d:'Ride settings tidied into one section — and rides now say where they actually came from',det:'Three fixes. (1) SETTINGS were sprawling: Strava, intervals.icu and file import each had their own full-height card stacked down the page, even when two of them weren\'t in use. They\'re now a single "Ride sync" section — one compact line telling you sync is working and when it last ran, with setup, alternatives and any dead connection folded behind a "Ride sources & setup" toggle (flagged if something needs attention). (2) LABELS: rides were tagged "Strava" everywhere regardless of origin, so a ride imported from Garmin still claimed to be from Strava. Each ride now shows its real source — intervals.icu, Garmin, or Strava — on day cards, the week list, ride details and History. (3) AVERAGE POWER is now its own figure on the ride card next to Normalized Power, instead of small print underneath it. Also added glossary entries explaining Sweet Spot and the Build/Peak/Recovery week cycle.'},
@@ -2458,12 +2459,14 @@ function getRideDuration(which){
 function rideSourceLabel(a){
   if(!a)return'Logged';
   if(a._icu)return'intervals.icu';
+  if(a._endurain)return'Endurain';
   if(a._imported)return'Garmin';
   return'Strava';
 }
 function rideSourceIcon(a){
   if(!a)return'🚴';
   if(a._icu)return'🔗';
+  if(a._endurain)return'🏠';
   if(a._imported)return'⌚';
   return'🟠';
 }
@@ -2593,7 +2596,8 @@ function rRideSyncSection(){
   const acts=DB.get('strava_activities',[])||[];
   const nIcu=acts.filter(a=>a._icu).length;
   const nFile=acts.filter(a=>a._imported).length;
-  const active=icuKey?'icu':stravaLive?'strava':null;
+  const endOn=!!(DB.get('endurain_url',null)&&DB.get('endurain_token',null));
+  const active=icuKey?'icu':endOn?'endurain':stravaLive?'strava':null;
 
   const statusCard=active==='icu'
     ?`<div style="background:var(--s1);border:1px solid rgba(16,185,129,.3);border-radius:14px;padding:12px 14px;margin-bottom:8px">
@@ -2604,6 +2608,17 @@ function rRideSyncSection(){
       <div style="font-size:11px;color:var(--t2);margin-top:1px">Garmin → intervals.icu → app · ${acts.length} ride${acts.length!==1?'s':''}${icuLast?` · ${_relTime(icuLast)}`:''}</div>
     </div>
     <button onclick="icuFetchActivities(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;flex-shrink:0">🔄</button>
+  </div>
+</div>`
+    :active==='endurain'
+    ?`<div style="background:var(--s1);border:1px solid rgba(16,185,129,.3);border-radius:14px;padding:12px 14px;margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px;line-height:1">🏠</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700">Rides sync from your own server</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">Endurain → app · ${acts.length} ride${acts.length!==1?'s':''}${DB.get('endurain_last_sync',null)?` · ${_relTime(DB.get('endurain_last_sync',null))}`:''}</div>
+    </div>
+    <button onclick="endurainFetchActivities(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;flex-shrink:0">🔄</button>
   </div>
 </div>`
     :active==='strava'
@@ -2629,6 +2644,7 @@ ${statusCard}
   <summary style="cursor:pointer;padding:11px 14px;font-size:12px;font-weight:700;color:var(--al);list-style:none">⚙️ Ride sources &amp; setup${stravaDead?' <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;background:rgba(239,68,68,.15);color:var(--red);margin-left:4px">1 issue</span>':''}</summary>
   <div style="padding:0 12px 12px">
     ${icuKey?'':rIcuCard()}
+    ${rEndurainCard()}
     ${rRideImportCard(nFile)}
     ${rStravaCard(tok,stravaDead)}
   </div>
@@ -2646,7 +2662,7 @@ function rStravaCard(tok,dead){
   if(tok&&dead)return`<div style="background:var(--s2);border:1px solid ${inactive?'rgba(239,68,68,.3)':'rgba(245,158,11,.3)'};border-radius:12px;padding:11px 13px;margin-bottom:8px">
   <div style="font-size:12px;font-weight:700;color:${inactive?'var(--red)':'var(--amb)'};margin-bottom:4px">${inactive?'🚫 Strava API deactivated':'⚠️ Strava needs reconnecting'}</div>
   <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">${inactive
-    ?'Strava now requires a paid subscription on the account owning the API key. Not needed — intervals.icu covers this for free.'
+    ?'Strava reported this app\'s API access as inactive, which happens when the Strava account that owns the API key has no active subscription.'
     :'Strava stopped accepting the saved access.'}</div>
   <div style="display:flex;gap:6px">
     ${inactive?'':`<button class="btn btn-s" onclick="stravaConnect()" style="flex:1;font-size:12px;padding:8px">Reconnect</button>`}
@@ -2662,10 +2678,13 @@ function rStravaCard(tok,dead){
   </div>${errBox}
 </div>`;
   if(S.guest)return'';
+  // Neutral copy when nothing is connected: don't assert that Strava is
+  // paywalled for this user — that's only claimed once Strava itself has
+  // actually returned Application/Inactive (see the `inactive` branch). v3.10.
   return`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin-bottom:8px">
   <div style="font-size:12px;font-weight:700;margin-bottom:3px">🟠 Strava</div>
-  <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Optional, and now needs a paid Strava subscription for API access. intervals.icu does the same job for free.</div>
-  <button class="btn btn-s" onclick="stravaConnect()" style="width:100%;font-size:12px;padding:8px">Connect Strava anyway</button>
+  <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Sync rides from Strava instead of (or alongside) intervals.icu.</div>
+  <button class="btn btn-s" onclick="stravaConnect()" style="width:100%;font-size:12px;padding:8px">Connect Strava</button>
 </div>`;
 }
 function _relTime(iso){
@@ -2709,6 +2728,179 @@ function rIcuCard(){
     style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:13px;padding:11px 13px;outline:none;font-family:monospace;margin-bottom:9px">
   <button class="btn btn-p" onclick="saveIcuKey()" style="width:100%">🔗 Connect intervals.icu</button>
 </div>`;
+}
+
+/* ── ENDURAIN (self-hosted) ────────────────────────────────────────────────
+   Optional third ride source for anyone running their own Endurain server.
+   Auth is OAuth2 password flow: POST {host}/api/v1/auth/login (form-encoded)
+   returns a JWT. We send X-Client-Type: mobile because Endurain's web client
+   mode puts tokens in httpOnly cookies, which a cross-origin PWA can't read —
+   mobile mode returns them in the body. Only the token is stored, never the
+   password. NOTE: the instance must allow this app's origin via CORS; a browser
+   cannot bypass that, so the error path calls it out explicitly. v3.10. */
+function _endHeaders(extra){
+  const t=DB.get('endurain_token',null);
+  return Object.assign({'X-Client-Type':'mobile'},t?{Authorization:'Bearer '+t}:{},extra||{});
+}
+function _endHost(){
+  let h=DB.get('endurain_url','')||'';
+  return h.replace(/\/+$/,'');
+}
+async function endurainLogin(){
+  const host=(document.getElementById('end-url')?.value||'').trim().replace(/\/+$/,'');
+  const user=(document.getElementById('end-user')?.value||'').trim();
+  const pass=document.getElementById('end-pass')?.value||'';
+  if(!host||!user||!pass){showToast('Fill in server address, username and password','var(--amb)');return;}
+  if(!/^https:\/\//i.test(host)){showToast('Server address must start with https:// — a browser cannot call an insecure server from this app','var(--red)');return;}
+  showToast('Connecting to Endurain…','var(--acc)');
+  try{
+    const body=new URLSearchParams({username:user,password:pass,grant_type:'password'});
+    const r=await fetch(host+'/api/v1/auth/login',{method:'POST',
+      headers:{'Content-Type':'application/x-www-form-urlencoded','X-Client-Type':'mobile'},body});
+    if(!r.ok){
+      let d='';try{d=(await r.text()).slice(0,160);}catch(_){}
+      showToast(r.status===401?'Endurain rejected that username or password':`Endurain login failed (${r.status}) ${d}`,'var(--red)');
+      return;
+    }
+    const data=await r.json();
+    const token=data.access_token||data.token;
+    if(!token){showToast('Endurain did not return a token — check the server version','var(--red)');return;}
+    DB.set('endurain_url',host);
+    DB.set('endurain_token',token);          // password itself is never stored
+    if(data.refresh_token)DB.set('endurain_refresh',data.refresh_token);
+    DB.set('endurain_last_error',null);
+    showToast('🏠 Endurain connected — syncing…','var(--grn)');
+    endurainFetchActivities(true);
+  }catch(e){
+    // A browser reports a blocked cross-origin request as a bare network error,
+    // so name the most likely cause rather than showing "Failed to fetch".
+    DB.set('endurain_last_error',{status:0,detail:String(e&&e.message||e).slice(0,200),at:new Date().toISOString()});
+    showToast('Could not reach that server. If it is running, its CORS settings must allow '+location.origin,'var(--red)');
+    render();
+  }
+}
+function endurainDisconnect(){
+  if(!confirm('Disconnect Endurain? Rides already synced stay in the app.'))return;
+  ['endurain_url','endurain_token','endurain_refresh','endurain_last_sync','endurain_last_error'].forEach(k=>DB.set(k,null));
+  render();showToast('Endurain disconnected','var(--t2)');
+}
+// Endurain activity_type is a numeric id, so resolve the id→name map and treat
+// anything named like cycling as a ride (mirrors the Garmin CSV approach).
+async function _endurainRideTypeIds(host){
+  try{
+    const r=await fetch(host+'/api/v1/activities/types',{headers:_endHeaders()});
+    if(!r.ok)return null;
+    const types=await r.json();
+    const ids=new Set();
+    const scan=(id,label)=>{if(/cycl|bik|ride/i.test(String(label)))ids.add(Number(id));};
+    if(Array.isArray(types))types.forEach(t=>scan(t.id??t.value,t.name??t.label??t));
+    else Object.entries(types||{}).forEach(([k,v])=>scan(isNaN(+k)?v:k,isNaN(+k)?k:v));
+    return ids.size?ids:null;
+  }catch(_){return null;}
+}
+function _endurainToActivity(a,rideIds){
+  if(!a)return null;
+  const start=a.start_time_tz_applied||a.start_time;
+  if(!start)return null;
+  const dur=Math.round(a.total_timer_time||a.total_elapsed_time||0);
+  if(!dur||dur<60)return null;
+  if(rideIds&&!rideIds.has(Number(a.activity_type)))return null;
+  const avgW=a.average_power!=null?Math.round(a.average_power):null;
+  const dist=Math.round(a.distance||0);
+  return{
+    start_date_local:String(start).replace(' ','T'),
+    moving_time:dur,elapsed_time:Math.round(a.total_elapsed_time||dur),
+    distance:dist,
+    average_heartrate:a.average_hr!=null?Math.round(a.average_hr):null,
+    max_heartrate:a.max_hr!=null?Math.round(a.max_hr):null,
+    average_watts:avgW,
+    weighted_average_watts:a.normalized_power!=null?Math.round(a.normalized_power):avgW,
+    max_watts:a.max_power!=null?Math.round(a.max_power):null,
+    device_watts:avgW!=null,
+    total_elevation_gain:Math.round(a.elevation_gain||0),
+    average_cadence:a.average_cadence!=null?Math.round(a.average_cadence):null,
+    average_speed:dist&&dur?+(dist/dur).toFixed(2):null,
+    kilojoules:a.calories!=null?Math.round(a.calories):(avgW?Math.round(avgW*dur/1000):null),
+    suffer_score:null,perceived_exertion:null,pr_count:null,workout_type:null,
+    name:a.name||'Ride',type:'Ride',sport_type:'Ride',_endurain:true,
+  };
+}
+async function endurainFetchActivities(manual=false){
+  const host=_endHost(),token=DB.get('endurain_token',null);
+  if(!host||!token||S.guest)return;
+  try{
+    const uid=await(async()=>{
+      try{
+        const r=await fetch(host+'/api/v1/profile',{headers:_endHeaders()});
+        if(r.ok){const p=await r.json();return p.id||p.user_id||1;}
+      }catch(_){}
+      return 1;
+    })();
+    const rideIds=await _endurainRideTypeIds(host);
+    const r=await fetch(`${host}/api/v1/activities/user/${uid}/page_number/1/num_records/200`,{headers:_endHeaders()});
+    if(!r.ok){
+      let d='';try{d=(await r.text()).slice(0,200);}catch(_){}
+      DB.set('endurain_last_error',{status:r.status,detail:d,at:new Date().toISOString()});
+      if(manual)showToast(r.status===401
+        ?'Endurain session expired — reconnect in Settings'
+        :`Endurain sync failed (${r.status})`,'var(--red)');
+      render();return;
+    }
+    const rows=await r.json();
+    const mapped=(Array.isArray(rows)?rows:[]).map(a=>_endurainToActivity(a,rideIds)).filter(Boolean);
+    const existing=(DB.get('strava_activities',[])||[]).filter(a=>{
+      const d=(a.start_date_local||'').slice(0,10);
+      return !mapped.some(m=>(m.start_date_local||'').slice(0,10)===d
+        &&Math.abs((m.moving_time||0)-(a.moving_time||0))<120);
+    });
+    const all=[...mapped,...existing].sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
+    DB.set('strava_activities',all);
+    const ftp=DB.get('user_profile',{})?.ftp||null;
+    _annotateRideLoad(all,ftp);
+    DB.set('strava_activities',all);
+    const curve=computeFitnessCurve(all);
+    if(curve)DB.set('bike_fitness_curve',curve);
+    DB.set('endurain_last_sync',new Date().toISOString());
+    DB.set('endurain_last_error',null);
+    syncUp();render();
+    if(manual)showToast(`✅ Endurain synced · ${mapped.length} ride${mapped.length!==1?'s':''}`,'var(--grn)');
+  }catch(e){
+    DB.set('endurain_last_error',{status:0,detail:String(e&&e.message||e).slice(0,200),at:new Date().toISOString()});
+    if(manual)showToast('Endurain unreachable. Check the server is running and its CORS settings allow '+location.origin,'var(--red)');
+    render();
+  }
+}
+function rEndurainCard(){
+  const host=_endHost(),tok=DB.get('endurain_token',null);
+  const last=DB.get('endurain_last_sync',null);
+  const err=DB.get('endurain_last_error',null);
+  const n=(DB.get('strava_activities',[])||[]).filter(a=>a._endurain).length;
+  const errBox=err?`<details style="margin-top:8px"><summary style="cursor:pointer;font-size:10px;color:var(--t2);font-weight:700">Last error</summary>
+    <div style="font-size:10px;color:var(--red);line-height:1.5;font-family:monospace;word-break:break-word;margin-top:5px">${err.status?'HTTP '+err.status+' — ':''}${_esc(err.detail||'')}</div></details>`:'';
+  if(host&&tok)return`<div style="background:var(--s2);border:1px solid rgba(16,185,129,.3);border-radius:12px;padding:11px 13px;margin-bottom:8px">
+  <div style="font-size:12px;font-weight:700;margin-bottom:3px">🏠 Endurain connected</div>
+  <div style="font-size:11px;color:var(--t2);margin-bottom:9px;word-break:break-all">${_esc(host.replace(/^https:\/\//,''))} · ${n} ride${n!==1?'s':''}${last?` · ${_relTime(last)}`:''}</div>
+  <div style="display:flex;gap:6px">
+    <button class="btn btn-s" onclick="endurainFetchActivities(true)" style="flex:1;font-size:12px;padding:8px">Sync</button>
+    <button class="btn btn-s" onclick="endurainDisconnect()" style="flex:1;font-size:12px;padding:8px">Remove</button>
+  </div>${errBox}
+</div>`;
+  if(S.guest)return'';
+  return`<details style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;margin-bottom:8px">
+  <summary style="cursor:pointer;padding:11px 13px;font-size:12px;font-weight:700;color:var(--al)">🏠 Endurain (self-hosted)</summary>
+  <div style="padding:0 13px 13px">
+    <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Pull rides from your own <strong style="color:var(--txt)">Endurain</strong> server — no third party involved. Your server must be reachable over <strong style="color:var(--txt)">https</strong> and configured to allow requests from <code style="font-size:10px">${_esc(location.origin)}</code>.</div>
+    <input id="end-url" type="url" placeholder="https://endurain.yourdomain.com" autocomplete="off" spellcheck="false"
+      style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:12px;padding:9px 11px;outline:none;margin-bottom:6px;font-family:monospace">
+    <input id="end-user" type="text" placeholder="Endurain username" autocomplete="username" spellcheck="false"
+      style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:12px;padding:9px 11px;outline:none;margin-bottom:6px">
+    <input id="end-pass" type="password" placeholder="Endurain password" autocomplete="current-password"
+      style="width:100%;background:var(--s1);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:12px;padding:9px 11px;outline:none;margin-bottom:8px">
+    <button class="btn btn-s" onclick="endurainLogin()" style="width:100%;font-size:12px;padding:9px">Connect Endurain</button>
+    <div style="font-size:10px;color:var(--t2);margin-top:7px;line-height:1.5">Only the access token is saved — your password isn't stored.</div>
+    ${errBox}
+  </div>
+</details>`;
 }
 
 /* ── RIDE FILE IMPORT (.TCX / .GPX) ────────────────────────────────────────
@@ -3527,7 +3719,7 @@ const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-  'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','icu_key','icu_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
+  'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -10962,6 +11154,11 @@ function init(){
   if(DB.get('icu_key',null)&&!S.guest){
     const _icuLast=DB.get('icu_last_sync',null);
     if(!_icuLast||new Date(_icuLast).getTime()<Date.now()-60*60*1000)icuFetchActivities();
+  }
+  // Endurain auto-sync — same hourly rule; silent on failure like the others.
+  if(DB.get('endurain_token',null)&&!S.guest){
+    const _endLast=DB.get('endurain_last_sync',null);
+    if(!_endLast||new Date(_endLast).getTime()<Date.now()-60*60*1000)endurainFetchActivities();
   }
   // Register service worker for cache-first loading (instant on return visits)
   if('serviceWorker' in navigator){
