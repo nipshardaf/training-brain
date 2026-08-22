@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.03';
+const APP_VERSION='3.04';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.04',d:'Automatic Garmin ride sync is back — for free, via intervals.icu',det:'Strava putting API access behind a subscription broke automatic ride syncing. Rather than settle for manual file imports, the app now uses intervals.icu as the bridge instead: Garmin Connect syncs your activities into intervals.icu automatically, and the app pulls from its free API on every open — exactly the hands-off flow you had before, at no cost. Setup is one-time: sign up free at intervals.icu, connect Garmin under Settings → Connections, copy your API key from Developer Settings, and paste it into Settings here. Rides arrive with distance, time, heart rate, power, cadence and elevation, plus training load and intensity calculated by intervals.icu from your full power stream — which is actually more accurate than the estimate the app derived from Strava data, so your Fitness/Fatigue/Form numbers improve. Existing rides from Strava or file imports are kept and merged, never duplicated. Strava remains supported if you ever subscribe, and file import stays as a fallback.'},
   {v:'3.03',d:'Import rides straight from a Garmin file — no Strava, no subscription needed',det:'Strava now requires a paid subscription for API access, which switched off automatic ride syncing. This makes the app independent of it. In Garmin Connect, open a ride → ⚙ → Export to TCX (or GPX), then in Settings → "📁 Import a ride file" pick the file — you can select several at once. Distance, moving time, heart rate (average and max), power, cadence and elevation gain are read directly from the file, and Normalized Power is calculated properly (30-second rolling average) so training load and your fitness curve match previously synced rides exactly. Imported rides behave like any other: they appear on your day cards and in History, count toward Fitness/Fatigue/Form, and feed the AI coach. Re-importing the same ride is detected and skipped, so you cannot create duplicates. TCX carries the most data (power and heart rate); GPX works too but usually has no power.'},
   {v:'3.02',d:'Identifies the real Strava problem: Strava deactivated the app\'s API access',det:'The diagnostics added in v3.01 revealed the actual cause of rides not syncing, and it was not what the earlier versions guessed. Strava replies: {"resource":"Application","field":"Status","code":"Inactive"} — Strava has marked the whole API application inactive, which it does when the Strava account owning the app\'s API key has no active Strava subscription (a Developer Program requirement). Signing in still works, which is why the app looked connected while every ride request was refused. Crucially, reconnecting can never fix this, yet v3.00/v3.01 told you to reconnect and tick a permissions box — wrong advice for this error. The app now recognises this specific response and says plainly what it is: Strava API access is deactivated, it needs a subscription on the owning account plus reactivation at strava.com/settings/api, and reconnecting will not help. Manual ride logging still works on any ride day, and nothing else in the app is affected.'},
   {v:'3.01',d:'Strava errors now show what Strava actually said, instead of just a number',det:'Chasing a stubborn "activities 403", the app was throwing away the most useful information it had: Strava sends a description of what is wrong with every rejected request, and the app discarded it and displayed only the status code. Now the exact response from Strava is captured and shown in Settings → Strava, alongside the app version and a timestamp, so a failure can be diagnosed instead of guessed at. It stays on screen rather than vanishing with the toast, and clears automatically after a successful sync. Also added a "🔁 Reconnect" button to the normal connected card (previously reconnecting meant disconnecting first), and refreshed the offline cache so updates land promptly rather than a version behind.'},
@@ -2191,6 +2192,9 @@ function _annotateRideLoad(rides,ftp){
   const lthr=obsMaxHr>=120?obsMaxHr*0.9:null;
   for(const a of rides){
     if(!a.moving_time)continue;
+    // intervals.icu already supplied training load from the full power stream —
+    // more accurate than our NP-based estimate, so don't overwrite it. v3.04.
+    if(a._tssFromIcu)continue;
     const np=a.weighted_average_watts||a.average_watts;
     if(np){
       a._if=+(np/ftp).toFixed(2);
@@ -2440,6 +2444,147 @@ function getRideDuration(which){
 function stravaRideOnDate(dateStr){
   const acts=DB.get('strava_activities',[])||[];
   return acts.find(a=>(a.start_date_local||'').slice(0,10)===dateStr)||null;
+}
+
+/* ── INTERVALS.ICU SYNC (automatic Garmin ride data, no Strava) ────────────
+   Strava put API access behind a paid subscription, breaking the
+   Garmin → Strava → app chain. intervals.icu replaces Strava as the bridge:
+   Garmin Connect auto-syncs activities into intervals.icu, and intervals.icu
+   has a free self-serve API (Basic auth with an API key from its settings,
+   5000 req/day) that permits browser CORS — so the app can pull rides directly
+   with no proxy and no subscription. Its activity fields mirror Strava's, and
+   it additionally supplies icu_training_load / icu_intensity computed from the
+   full power stream, which is more accurate than deriving TSS ourselves. v3.04. */
+const ICU_API='https://intervals.icu/api/v1';
+
+function _icuAuthHeader(key){return'Basic '+btoa('API_KEY:'+key);}
+
+// Map an intervals.icu activity onto the Strava-shaped object the whole app
+// already understands, so nothing downstream needs to change.
+function _icuToActivity(a){
+  if(!a||!a.start_date_local)return null;
+  const dur=a.moving_time||a.elapsed_time;
+  if(!dur)return null;
+  const avgW=a.average_watts!=null?Math.round(a.average_watts):null;
+  // icu_intensity is a percentage (e.g. 75 => IF 0.75); older rows may already be a ratio.
+  let ifv=a.icu_intensity!=null?(a.icu_intensity>3?a.icu_intensity/100:a.icu_intensity):null;
+  return{
+    start_date_local:a.start_date_local,
+    moving_time:dur,elapsed_time:a.elapsed_time||dur,
+    distance:Math.round(a.distance||0),
+    average_heartrate:a.average_heartrate!=null?Math.round(a.average_heartrate):null,
+    max_heartrate:a.max_heartrate!=null?Math.round(a.max_heartrate):null,
+    average_watts:avgW,
+    weighted_average_watts:a.icu_weighted_avg_watts!=null?Math.round(a.icu_weighted_avg_watts):avgW,
+    max_watts:a.max_watts!=null?Math.round(a.max_watts):null,
+    device_watts:avgW!=null,
+    total_elevation_gain:Math.round(a.total_elevation_gain||0),
+    average_cadence:a.average_cadence!=null?Math.round(a.average_cadence):null,
+    average_speed:a.distance&&dur?+(a.distance/dur).toFixed(2):null,
+    kilojoules:a.calories!=null?Math.round(a.calories):(avgW?Math.round(avgW*dur/1000):null),
+    suffer_score:null,perceived_exertion:null,pr_count:null,workout_type:null,
+    name:a.name||'Ride',type:a.type||'Ride',sport_type:a.type||'Ride',
+    _icu:true,
+    // Training load straight from intervals.icu — computed from the whole power
+    // stream, so prefer it over our own NP-based estimate (_tssFromIcu tells
+    // _annotateRideLoad to leave it alone).
+    ...(a.icu_training_load!=null?{_tss:Math.round(a.icu_training_load),_tssFromIcu:true,_tssEst:false}:{}),
+    ...(ifv!=null?{_if:+ifv.toFixed(2)}:{}),
+  };
+}
+
+async function icuFetchActivities(manual=false){
+  const key=DB.get('icu_key',null);
+  if(!key){if(manual)showToast('⚠️ Add your intervals.icu API key first','var(--amb)');return;}
+  if(S.guest)return;
+  try{
+    const newest=fd(addDays(new Date(),1));
+    const oldest=fd(addDays(new Date(),-180));
+    const r=await fetch(`${ICU_API}/athlete/0/activities?oldest=${oldest}&newest=${newest}`,
+      {headers:{Authorization:_icuAuthHeader(key)}});
+    if(!r.ok){
+      let detail='';try{detail=(await r.text()).slice(0,200);}catch(_){}
+      DB.set('icu_last_error',{status:r.status,detail,at:new Date().toISOString()});
+      if(manual)showToast(r.status===401
+        ?'⚠️ intervals.icu rejected that API key — check Settings'
+        :`⚠️ intervals.icu sync failed (${r.status})`,'var(--red)');
+      render();return;
+    }
+    const rows=await r.json();
+    if(!Array.isArray(rows))throw new Error('unexpected response');
+    const mapped=rows.map(_icuToActivity).filter(Boolean)
+      .filter(a=>RIDE_TYPE_SET.has(a.type)||RIDE_TYPE_SET.has(a.sport_type));
+    // Merge with anything already stored (Strava-era rides, imported files),
+    // preferring the intervals.icu copy for the same day+duration.
+    const existing=(DB.get('strava_activities',[])||[]).filter(a=>{
+      const d=(a.start_date_local||'').slice(0,10);
+      return !mapped.some(m=>(m.start_date_local||'').slice(0,10)===d
+        &&Math.abs((m.moving_time||0)-(a.moving_time||0))<120);
+    });
+    const all=[...mapped,...existing]
+      .sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
+    DB.set('strava_activities',all);
+    const ftp=DB.get('user_profile',{})?.ftp||null;
+    _annotateRideLoad(all,ftp);
+    DB.set('strava_activities',all);
+    const curve=computeFitnessCurve(all);
+    if(curve)DB.set('bike_fitness_curve',curve);
+    DB.set('icu_last_sync',new Date().toISOString());
+    DB.set('icu_last_error',null);
+    syncUp();render();
+    if(manual)showToast(`✅ intervals.icu synced · ${mapped.length} ride${mapped.length!==1?'s':''}`,'var(--grn)');
+  }catch(e){
+    DB.set('icu_last_error',{status:0,detail:String(e&&e.message||e).slice(0,200),at:new Date().toISOString()});
+    if(manual)showToast(`⚠️ intervals.icu sync failed: ${e?.message||e}`,'var(--red)');
+    console.warn('[icu sync]',e);render();
+  }
+}
+
+function saveIcuKey(){
+  const el=document.getElementById('icu-key-input');
+  const v=(el?.value||'').trim();
+  if(!v){showToast('Paste your API key first','var(--amb)');return;}
+  DB.set('icu_key',v);DB.set('icu_last_error',null);
+  showToast('🔑 Key saved — syncing…','var(--acc)');
+  icuFetchActivities(true);
+}
+function icuDisconnect(){
+  if(!confirm('Disconnect intervals.icu? Your already-synced rides stay.'))return;
+  DB.set('icu_key',null);DB.set('icu_last_sync',null);DB.set('icu_last_error',null);
+  render();showToast('intervals.icu disconnected','var(--t2)');
+}
+
+function rIcuCard(){
+  const key=DB.get('icu_key',null);
+  const last=DB.get('icu_last_sync',null);
+  const err=DB.get('icu_last_error',null);
+  const n=(DB.get('strava_activities',[])||[]).filter(a=>a._icu).length;
+  if(key)return`<div style="background:var(--s1);border:1px solid rgba(16,185,129,.3);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="font-size:26px;line-height:1">🔗</div>
+    <div><div style="font-size:14px;font-weight:700">intervals.icu connected</div>
+    <div style="font-size:11px;color:var(--t2)">${n} ride${n!==1?'s':''} synced${last?` · last ${last.slice(0,16).replace('T',' ')}`:''}</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Your Garmin rides reach the app automatically — Garmin syncs to intervals.icu, and the app pulls from there on every open. No Strava, no subscription.</div>
+  ${err?`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:var(--red);font-family:monospace;word-break:break-word">HTTP ${err.status} — ${_esc(err.detail||'')}</div>`:''}
+  <div class="data-btns">
+    <button class="btn btn-s" onclick="icuFetchActivities(true)">🔄 Sync now</button>
+    <button class="btn btn-s" onclick="icuDisconnect()">Disconnect</button>
+  </div>
+</div>`;
+  return`<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">🔗 Automatic Garmin sync via intervals.icu</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Free alternative to Strava for getting your rides in automatically. Garmin Connect syncs to intervals.icu, and the app reads from there — power, heart rate, cadence, elevation and training load included.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.9;margin-bottom:10px">
+    <span style="display:block">1. Sign up free at <strong style="color:var(--al)">intervals.icu</strong> (log in with Strava or email)</span>
+    <span style="display:block">2. In intervals.icu: <strong style="color:var(--txt)">Settings → Connections → Garmin</strong> and connect it</span>
+    <span style="display:block">3. Still in Settings, scroll to <strong style="color:var(--txt)">Developer Settings</strong> and copy your <strong style="color:var(--txt)">API key</strong></span>
+    <span style="display:block">4. Paste it below</span>
+  </div>
+  <input id="icu-key-input" type="text" placeholder="Paste your intervals.icu API key" autocomplete="off" spellcheck="false"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--txt);font-size:13px;padding:11px 13px;outline:none;font-family:monospace;margin-bottom:9px">
+  <button class="btn btn-p" onclick="saveIcuKey()" style="width:100%">🔗 Connect intervals.icu</button>
+</div>`;
 }
 
 /* ── RIDE FILE IMPORT (.TCX / .GPX) ────────────────────────────────────────
@@ -3144,7 +3289,7 @@ const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-  'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
+  'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','icu_key','icu_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -9510,6 +9655,7 @@ ${(()=>{
   ${rGarminHelp()}
 </div>`;
 })()}
+${rIcuCard()}
 ${rRideImportCard()}
 
 <div class="sec-hdr">📖 About the app</div>
@@ -10556,6 +10702,12 @@ function init(){
     if(!_lastSync||new Date(_lastSync).getTime()<_hourAgo){
       stravaFetchActivities();
     }
+  }
+  // intervals.icu auto-sync — same hourly rule, independent of Strava. This is
+  // the automatic path now that Strava's API needs a paid subscription. v3.04.
+  if(DB.get('icu_key',null)&&!S.guest){
+    const _icuLast=DB.get('icu_last_sync',null);
+    if(!_icuLast||new Date(_icuLast).getTime()<Date.now()-60*60*1000)icuFetchActivities();
   }
   // Register service worker for cache-first loading (instant on return visits)
   if('serviceWorker' in navigator){
