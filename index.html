@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.06';
+const APP_VERSION='3.07';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.07',d:'Ride settings tidied into one section — and rides now say where they actually came from',det:'Three fixes. (1) SETTINGS were sprawling: Strava, intervals.icu and file import each had their own full-height card stacked down the page, even when two of them weren\'t in use. They\'re now a single "Ride sync" section — one compact line telling you sync is working and when it last ran, with setup, alternatives and any dead connection folded behind a "Ride sources & setup" toggle (flagged if something needs attention). (2) LABELS: rides were tagged "Strava" everywhere regardless of origin, so a ride imported from Garmin still claimed to be from Strava. Each ride now shows its real source — intervals.icu, Garmin, or Strava — on day cards, the week list, ride details and History. (3) AVERAGE POWER is now its own figure on the ride card next to Normalized Power, instead of small print underneath it. Also added glossary entries explaining Sweet Spot and the Build/Peak/Recovery week cycle.'},
   {v:'3.06',d:'Import your whole ride history from one Garmin CSV file',det:'Garmin Connect\'s Activities page has an "Export CSV" button that downloads every activity in a single file — the app now accepts it. One file brings in your entire history at once, complete with Garmin\'s own Normalized Power and Training Stress Score, which are used directly rather than re-estimated. Rides are matched to the right type (road, mountain, e-MTB, gravel, indoor), non-cycling activities and aborted zero-second entries are skipped, and anything already in the app is detected and not duplicated — so you can re-import the same file safely. This is the quickest way to backfill after a break, or if you\'d rather not connect anything at all. Single-ride TCX and GPX files still work for maximum detail on one session.'},
   {v:'3.05',d:'"You rode on a gym day" now asks you on the home screen — plus readable errors and the missing Disconnect button',det:'Three fixes. (1) RIDE ON A GYM DAY: when a ride landed on a day planned as Push/Pull/Legs, the app offered to swap the day and push the gym session forward — but that choice only appeared once you tapped into the day, so from the home screen it looked like the ride had been ignored. The prompt now appears on the week view itself: it names the ride, says what was planned, and gives you three options — make it a ride day (cascading the gym workout forward through the week), keep both, or decide later. It hides once handled, and never appears for rest days, future days, or days where you did the gym anyway. (2) ERROR MESSAGES: long messages were set to never wrap, so they ran off both edges of the screen and were unreadable — exactly when you most needed to read them. They now wrap, stay within the screen, and stay visible longer the longer they are. (3) The Disconnect button had gone missing from the Strava card when Strava had deactivated API access, leaving no way to remove a dead connection. Restored.'},
   {v:'3.04',d:'Automatic Garmin ride sync is back — for free, via intervals.icu',det:'Strava putting API access behind a subscription broke automatic ride syncing. Rather than settle for manual file imports, the app now uses intervals.icu as the bridge instead: Garmin Connect syncs your activities into intervals.icu automatically, and the app pulls from its free API on every open — exactly the hands-off flow you had before, at no cost. Setup is one-time: sign up free at intervals.icu, connect Garmin under Settings → Connections, copy your API key from Developer Settings, and paste it into Settings here. Rides arrive with distance, time, heart rate, power, cadence and elevation, plus training load and intensity calculated by intervals.icu from your full power stream — which is actually more accurate than the estimate the app derived from Strava data, so your Fitness/Fatigue/Form numbers improve. Existing rides from Strava or file imports are kept and merged, never duplicated. Strava remains supported if you ever subscribe, and file import stays as a fallback.'},
@@ -2443,6 +2444,21 @@ function getRideDuration(which){
   return[55,60,55,35][wk]||50; // short ride durations by phase week
 }
 
+// Rides can now arrive from Strava, intervals.icu or a Garmin file import, but
+// every label in the UI said "Strava" — confusing once Strava is disconnected.
+// Report where the ride actually came from. v3.07.
+function rideSourceLabel(a){
+  if(!a)return'Logged';
+  if(a._icu)return'intervals.icu';
+  if(a._imported)return'Garmin';
+  return'Strava';
+}
+function rideSourceIcon(a){
+  if(!a)return'🚴';
+  if(a._icu)return'🔗';
+  if(a._imported)return'⌚';
+  return'🟠';
+}
 function stravaRideOnDate(dateStr){
   const acts=DB.get('strava_activities',[])||[];
   return acts.find(a=>(a.start_date_local||'').slice(0,10)===dateStr)||null;
@@ -2554,6 +2570,104 @@ function icuDisconnect(){
   if(!confirm('Disconnect intervals.icu? Your already-synced rides stay.'))return;
   DB.set('icu_key',null);DB.set('icu_last_sync',null);DB.set('icu_last_error',null);
   render();showToast('intervals.icu disconnected','var(--t2)');
+}
+
+// One "Ride sync" section instead of three tall stacked cards. Shows a compact
+// status line for whatever is actually feeding rides in, and tucks the setup,
+// alternatives and any dead connection behind a disclosure — a Strava account
+// you've moved off shouldn't occupy half the settings page. v3.07.
+function rRideSyncSection(){
+  const icuKey=DB.get('icu_key',null);
+  const icuLast=DB.get('icu_last_sync',null);
+  const tok=DB.get('strava_token',null);
+  const stravaDead=!!tok&&(DB.get('strava_app_inactive',false)||DB.get('strava_auth_expired',false));
+  const stravaLive=!!tok&&!stravaDead;
+  const acts=DB.get('strava_activities',[])||[];
+  const nIcu=acts.filter(a=>a._icu).length;
+  const nFile=acts.filter(a=>a._imported).length;
+  const active=icuKey?'icu':stravaLive?'strava':null;
+
+  const statusCard=active==='icu'
+    ?`<div style="background:var(--s1);border:1px solid rgba(16,185,129,.3);border-radius:14px;padding:12px 14px;margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px;line-height:1">🔗</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700">Rides sync automatically</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">Garmin → intervals.icu → app · ${acts.length} ride${acts.length!==1?'s':''}${icuLast?` · ${_relTime(icuLast)}`:''}</div>
+    </div>
+    <button onclick="icuFetchActivities(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;flex-shrink:0">🔄</button>
+  </div>
+</div>`
+    :active==='strava'
+    ?`<div style="background:var(--s1);border:1px solid rgba(252,76,2,.25);border-radius:14px;padding:12px 14px;margin-bottom:8px">
+  <div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:20px;line-height:1">🟠</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700">Rides sync via Strava</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">${acts.length} ride${acts.length!==1?'s':''} synced</div>
+    </div>
+    <button onclick="stravaFetchActivities()" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;flex-shrink:0">🔄</button>
+  </div>
+</div>`
+    :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 14px;margin-bottom:8px">
+  <div style="font-size:13px;font-weight:700;margin-bottom:4px">🚴 No automatic ride sync yet</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.55">Connect intervals.icu below to get Garmin rides in automatically — free, no Strava needed.</div>
+</div>`;
+
+  // Everything else lives behind one collapsed disclosure
+  return`<div class="sec-hdr">🚴 Ride sync</div>
+${statusCard}
+<details style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;margin-bottom:10px">
+  <summary style="cursor:pointer;padding:11px 14px;font-size:12px;font-weight:700;color:var(--al);list-style:none">⚙️ Ride sources &amp; setup${stravaDead?' <span style="font-size:9px;font-weight:800;padding:1px 6px;border-radius:5px;background:rgba(239,68,68,.15);color:var(--red);margin-left:4px">1 issue</span>':''}</summary>
+  <div style="padding:0 12px 12px">
+    ${icuKey?'':rIcuCard()}
+    ${rRideImportCard(nFile)}
+    ${rStravaCard(tok,stravaDead)}
+  </div>
+</details>`;
+}
+// Compact Strava card, shown inside the "Ride sources" disclosure. Kept short
+// on purpose: for anyone on intervals.icu, Strava is now a legacy option rather
+// than the headline feature it used to be. v3.07.
+function rStravaCard(tok,dead){
+  const acts=DB.get('strava_activities',[])||[];
+  const err=DB.get('strava_last_error',null);
+  const inactive=DB.get('strava_app_inactive',false);
+  const errBox=err?`<details style="margin-top:8px"><summary style="cursor:pointer;font-size:10px;color:var(--t2);font-weight:700">Last error from Strava · app v${APP_VERSION}</summary>
+    <div style="font-size:10px;color:var(--red);line-height:1.5;font-family:monospace;word-break:break-word;margin-top:5px">HTTP ${err.status} — ${_esc(err.detail||'(no detail)')}</div></details>`:'';
+  if(tok&&dead)return`<div style="background:var(--s2);border:1px solid ${inactive?'rgba(239,68,68,.3)':'rgba(245,158,11,.3)'};border-radius:12px;padding:11px 13px;margin-bottom:8px">
+  <div style="font-size:12px;font-weight:700;color:${inactive?'var(--red)':'var(--amb)'};margin-bottom:4px">${inactive?'🚫 Strava API deactivated':'⚠️ Strava needs reconnecting'}</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">${inactive
+    ?'Strava now requires a paid subscription on the account owning the API key. Not needed — intervals.icu covers this for free.'
+    :'Strava stopped accepting the saved access.'}</div>
+  <div style="display:flex;gap:6px">
+    ${inactive?'':`<button class="btn btn-s" onclick="stravaConnect()" style="flex:1;font-size:12px;padding:8px">Reconnect</button>`}
+    <button class="btn btn-s" onclick="stravaDisconnect()" style="flex:1;font-size:12px;padding:8px">Remove</button>
+  </div>${errBox}
+</div>`;
+  if(tok)return`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin-bottom:8px">
+  <div style="font-size:12px;font-weight:700;margin-bottom:3px">🟠 Strava connected</div>
+  <div style="font-size:11px;color:var(--t2);margin-bottom:9px">${_esc(tok.athlete?.name||'Athlete')} · ${acts.length} ride${acts.length!==1?'s':''}</div>
+  <div style="display:flex;gap:6px">
+    <button class="btn btn-s" onclick="stravaFetchActivities()" style="flex:1;font-size:12px;padding:8px">Sync</button>
+    <button class="btn btn-s" onclick="stravaDisconnect()" style="flex:1;font-size:12px;padding:8px">Remove</button>
+  </div>${errBox}
+</div>`;
+  if(S.guest)return'';
+  return`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin-bottom:8px">
+  <div style="font-size:12px;font-weight:700;margin-bottom:3px">🟠 Strava</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Optional, and now needs a paid Strava subscription for API access. intervals.icu does the same job for free.</div>
+  <button class="btn btn-s" onclick="stravaConnect()" style="width:100%;font-size:12px;padding:8px">Connect Strava anyway</button>
+</div>`;
+}
+function _relTime(iso){
+  try{
+    const s=Math.round((Date.now()-new Date(iso).getTime())/1000);
+    if(s<90)return'just now';
+    if(s<5400)return Math.round(s/60)+'m ago';
+    if(s<172800)return Math.round(s/3600)+'h ago';
+    return Math.round(s/86400)+'d ago';
+  }catch(_){return'';}
 }
 
 function rIcuCard(){
@@ -2897,8 +3011,8 @@ async function importRideFiles(input){
   if(errs.length)console.warn('[ride import]',errs);
 }
 
-function rRideImportCard(){
-  return`<div class="card">
+function rRideImportCard(nFile){
+  return`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin-bottom:8px">
   <div style="font-size:13px;font-weight:700;margin-bottom:6px">📁 Import a ride file</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">No Strava needed. Two ways from <strong style="color:var(--txt)">Garmin Connect</strong>:</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.75;margin-bottom:10px">
@@ -5450,7 +5564,7 @@ function rDayRow(day,today){
 <div class="dr-r">
   <div class="dr-weather">${wIcon(w.code,w.rain)} ${w.tmax}°${w.rain>0?`<span class="dr-rain">${w.rain}mm</span>`:''}</div>
   ${isRide&&!stravaRide?`<div class="vtag ${v.c}">${v.t}</div>`:''}
-  ${stravaRide?'<div class="done-tag" style="background:rgba(252,76,2,.12);color:#fc4c02;border:1px solid rgba(252,76,2,.3)">🟠 Logged · Strava</div>':gymDone?'<div class="done-tag">✓ Done</div>':''}
+  ${stravaRide?`<div class="done-tag" style="background:rgba(252,76,2,.12);color:#fc4c02;border:1px solid rgba(252,76,2,.3)">${rideSourceIcon(stravaRide)} Logged · ${rideSourceLabel(stravaRide)}</div>`:gymDone?'<div class="done-tag">✓ Done</div>':''}
   ${isToday&&!done?'<div class="today-tag">Today</div>':''}
   <button class="swap-btn" onclick="event.stopPropagation();openSwap('${day.date}')">Swap ↕</button>
 </div>
@@ -5500,7 +5614,7 @@ ${rideAlongsideAck?(()=>{
   const min=Math.round((a.moving_time||0)/60);
   return`<div style="display:flex;align-items:center;gap:10px;padding:9px 13px;background:rgba(252,76,2,.08);border:1px solid rgba(252,76,2,.25);border-radius:11px;margin-bottom:12px">
   <span style="font-size:14px">🚴</span>
-  <div style="flex:1;min-width:0;font-size:11px;color:#fc4c02;font-weight:600">Strava ride logged: ${km} km · ${min} min · also doing gym today</div>
+  <div style="flex:1;min-width:0;font-size:11px;color:#fc4c02;font-weight:600">Ride logged (${rideSourceLabel(a)}): ${km} km · ${min} min · also doing gym today</div>
 </div>`;
 })():''}
 ${stravaRideOnThisDay?(()=>{
@@ -5514,7 +5628,7 @@ ${stravaRideOnThisDay?(()=>{
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
     <div style="font-size:22px;line-height:1">🚴</div>
     <div style="flex:1;min-width:0">
-      <div style="font-size:12px;font-weight:700;color:#fc4c02">🟠 Strava ride logged today</div>
+      <div style="font-size:12px;font-weight:700;color:#fc4c02">${rideSourceIcon(a)} Ride logged today · ${rideSourceLabel(a)}</div>
       <div style="font-size:11px;color:var(--t2);margin-top:1px">${a.name?_esc(a.name)+' · ':''}${km} km · ${min} min${hr?' · ❤️ '+hr+'bpm':''}${np?' · ⚡ '+np+'W NP':''}</div>
     </div>
   </div>
@@ -5631,7 +5745,7 @@ function rLoggedRideCard(actual){
   return `
 <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ Strava · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
+    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ ${rideSourceLabel(actual)} · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
     ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 Load ${actual._tssEst?'~':''}${actual._tss}${actual._if?` · Intensity ${actual._tssEst?'~':''}${actual._if}`:''}</span>`:''}
     ${_glossBtn('tss',12)}
     ${actual.suffer_score?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">⚡ Load ${actual.suffer_score}</span>`:''}
@@ -5641,7 +5755,9 @@ function rLoggedRideCard(actual){
     <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${(actual.distance/1000).toFixed(1)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">km</div></div>
     <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.moving_time/60)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">min</div></div>
     ${actual.average_heartrate?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_heartrate)}${actual.max_heartrate?`<span style="font-size:13px;font-weight:600;color:var(--t2)"> /${Math.round(actual.max_heartrate)}</span>`:''}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">${actual.max_heartrate?'avg/max ':'avg '}bpm</div></div>`:''}
-    ${(actual.weighted_average_watts||actual.average_watts)?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.weighted_average_watts||actual.average_watts)}</div>${actual.weighted_average_watts&&actual.average_watts?`<div style="font-size:10px;color:var(--t2);margin-top:0">${Math.round(actual.average_watts)}W avg</div>`:''}  <div style="font-size:10px;color:var(--t2);margin-top:2px">${actual.weighted_average_watts?'NP (W)':'avg W'}</div></div>`:''}
+    ${actual.average_watts?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg watts</div></div>`:''}
+    ${actual.weighted_average_watts&&actual.weighted_average_watts!==actual.average_watts?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.weighted_average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">NP (W)</div></div>`:''}
+    ${!actual.average_watts&&actual.weighted_average_watts?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.weighted_average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">NP (W)</div></div>`:''}
     <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>
     ${actual.average_cadence?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_cadence)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">rpm</div></div>`:''}
   </div>
@@ -9333,6 +9449,7 @@ function rPRs(){
       wtype:a.workout_type||null,
       tss:a._tss||null,
       intf:a._if||null,
+      _srcLabel:rideSourceLabel(a),_srcIcon:rideSourceIcon(a),
       type:a.sport_type||a.type});
   });
   history.sort((a,b)=>b.date.localeCompare(a.date));
@@ -9505,7 +9622,7 @@ ${!history.length
         return rows.map(r=>`<div style="font-size:12px;color:var(--t2);margin-bottom:5px;line-height:1.5">${r}</div>`).join('');
       })();
       return`<div class="hist-row" onclick="togHist(${hi})">
-  <div class="hist-date">${log.date} · 🟠 Strava${wtLabel?` · <span style="background:rgba(8,145,178,.15);color:#0891b2;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px">${wtLabel}</span>`:''}</div>
+  <div class="hist-date">${log.date} · ${log._srcIcon||'🟠'} ${log._srcLabel||'Strava'}${wtLabel?` · <span style="background:rgba(8,145,178,.15);color:#0891b2;font-size:10px;font-weight:700;padding:1px 6px;border-radius:6px">${wtLabel}</span>`:''}</div>
   <div class="hist-type" style="color:#0891b2">${_icon('ride-day.png','🚴',16)} ${log.name||'Ride'}</div>
   <div class="hist-exs">${summaryLine||'No data'}${_sec?`<br><span style="font-size:11px;color:var(--t2)">${_sec}</span>`:''}</div>
   <div class="hist-detail" id="hd${hi}">${_detail}</div>
@@ -9754,81 +9871,7 @@ ${(()=>{
 </div>`;
 })()}
 
-<div class="sec-hdr">${_T('strava')}</div>
-${(()=>{
-  const tok=DB.get('strava_token',null);
-  const acts=DB.get('strava_activities')||[];
-  const lastSync=DB.get('strava_last_sync',null);
-  // A stored token can be dead (revoked on Strava's side, or expired past
-  // refresh). The card used to still say "Strava connected" with no way back —
-  // show the real state and a one-tap reconnect instead. v2.99.
-  const authDead=DB.get('strava_auth_expired',false);
-  // Last raw error from Strava, shown verbatim so a failure can be diagnosed
-  // without guessing from a status code. v3.01.
-  const _lastErr=DB.get('strava_last_error',null);
-  const _errBox=_lastErr?`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:9px 11px;margin-top:10px">
-    <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Last error from Strava · app v${APP_VERSION}</div>
-    <div style="font-size:11px;color:var(--red);line-height:1.5;font-family:monospace;word-break:break-word">HTTP ${_lastErr.status} — ${_esc(_lastErr.detail||'(no detail)')}</div>
-    <div style="font-size:10px;color:var(--t2);margin-top:4px">${_lastErr.at?_lastErr.at.slice(0,16).replace('T',' '):''}</div>
-  </div>`:'';
-  // Strava deactivated the API application itself (owner has no Strava
-  // subscription). Distinct from a dead token: sign-in works, data calls don't,
-  // and reconnecting is futile — so don't offer it. v3.02.
-  if(tok&&DB.get('strava_app_inactive',false))return`<div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <div style="font-size:28px;line-height:1">🚫</div>
-    <div><div style="font-size:14px;font-weight:700;color:var(--red)">Strava API access deactivated</div>
-    <div style="font-size:11px;color:var(--t2)">Signing in works — Strava is blocking data requests.</div></div>
-  </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Strava requires an active <strong style="color:var(--txt)">Strava subscription on the account that owns this app's API key</strong> (their Developer Program rule). Without it Strava marks the app "Inactive" and refuses every data request — so <strong style="color:var(--txt)">reconnecting will not help</strong>.</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">To restore it: subscribe on that Strava account, then reactivate the app at <strong style="color:var(--al)">strava.com/settings/api</strong>. Until then you can still log rides by hand on any ride day — nothing else in the app is affected.</div>
-  <div class="data-btns">
-    <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Check again</button>
-    <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
-  </div>
-  ${_errBox}
-  ${rGarminHelp()}</div>`;
-  if(tok&&authDead)return`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <div style="font-size:28px;line-height:1">⚠️</div>
-    <div><div style="font-size:14px;font-weight:700;color:var(--amb)">Strava needs reconnecting</div>
-    <div style="font-size:11px;color:var(--t2)">Your ${acts.length} synced ride${acts.length!==1?'s':''} are safe — new ones just aren't coming in.</div></div>
-  </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Strava stopped accepting the app's saved access. This happens if access was revoked in your Strava settings, or after a long spell without opening the app. Reconnecting takes one tap and won't lose any history.</div>
-  <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000);width:100%">🟠 Reconnect Strava</button>
-  <button class="btn btn-s" onclick="stravaDisconnect()" style="width:100%;margin-top:8px">Disconnect instead</button>
-  ${_errBox}
-  ${rGarminHelp()}</div>`;
-  if(tok)return`<div style="background:var(--s1);border:1px solid rgba(252,76,2,.25);border-radius:14px;padding:14px 15px;margin-bottom:10px">
-  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-    <div style="font-size:28px;line-height:1">🟠</div>
-    <div><div style="font-size:14px;font-weight:700">Strava connected</div>
-    <div style="font-size:11px;color:var(--t2)">${tok.athlete?.name||'Athlete'} · ${acts.length} ride${acts.length!==1?'s':''} synced</div></div>
-  </div>
-  ${lastSync?`<div style="font-size:11px;color:var(--t2);margin-bottom:10px">Last sync: ${lastSync.slice(0,16).replace('T',' ')}</div>`:''}
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Ride data (distance, HR, power) appears automatically on your ride day cards. Garmin activities sync to Strava, then here.</div>
-  <div class="data-btns">
-    <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Sync rides</button>
-    <button class="btn btn-s" onclick="stravaConnect()">🔁 Reconnect</button>
-    <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
-  </div>
-  ${_errBox}
-  ${rGarminHelp()}</div>`;
-  return`<div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-    <div style="font-size:13px;font-weight:700">Connect Strava</div>
-    ${S.guest?`<span style="font-size:9px;font-weight:800;padding:2px 7px;border-radius:6px;background:rgba(245,158,11,.15);color:#f59e0b;letter-spacing:.4px">🔒 SIGN IN</span>`:''}
-  </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Your Garmin auto-syncs to Strava. Once connected, actual ride data (distance, HR, power) shows up right on your ride day cards — no manual logging.</div>
-  ${S.guest
-    ?`<button onclick="lockApp()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:10px 16px;cursor:pointer">🔓 Sign in to connect Strava</button>`
-    :`<button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000)">🟠 Connect Strava</button>`
-  }
-  ${rGarminHelp()}
-</div>`;
-})()}
-${rIcuCard()}
-${rRideImportCard()}
+${rRideSyncSection()}
 
 <div class="sec-hdr">📖 About the app</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
@@ -10301,6 +10344,8 @@ const GLOSSARY=[
   {k:'ctl',i:'🏔️',t:'Fitness (CTL)',d:'Your training load averaged over the last 42 days — a slow-moving measure of how much training your body is used to. It climbs a few points per week with consistent riding and drops when you stop. Higher = bigger engine.'},
   {k:'atl',i:'🥵',t:'Fatigue (ATL)',d:'Your training load averaged over just the last 7 days. It spikes quickly after hard days and fades within a week — it\'s the "how tired are your legs right now" number.'},
   {k:'tsb',i:'🔋',t:'Form (TSB)',d:'Fitness minus Fatigue — your freshness today. Above +5: recovered and ready to push. Around 0 to −10: productive training. Below −10: carrying real fatigue. Below −25: deep hole, prioritise recovery. You get faster by training at slightly negative TSB, then recovering into positive for big days.'},
+  {k:'sweetspot',i:'🎯',t:'Sweet Spot',d:'A pace at roughly 88-93% of your FTP — hard but controlled, the "comfortably uncomfortable" zone just below threshold. It\'s called the sweet spot because it gives close to the fitness gain of all-out threshold work for noticeably less fatigue, so it\'s the best return on a limited training week. A typical session is 3 × 10 minutes with easy spinning between; you should finish the last block, not crawl home.'},
+  {k:'block',i:'📆',t:'Build / Peak / Recovery weeks',d:'Your rides run on a repeating 4-week cycle: Build week 1, Build week 2, Peak week, then Recovery week. Each week gets a different quality session — Tempo, then Sweet Spot, then Hills, then an easy Recovery ride — so you hit different systems instead of repeating the same ride. Long rides get progressively longer through the block and drop back in the recovery week, which is when the fitness you built actually gets absorbed.'},
   {k:'zone2',i:'🫁',t:'Zone 2',d:'The easy-but-not-trivial endurance pace — roughly 56-75% of FTP, where you could still hold a conversation. It feels too easy to matter, but it\'s where most aerobic fitness is built. The bulk of your riding should live here.'},
   {k:'rpe',i:'🌡️',t:'RPE — Rate of Perceived Exertion',d:'How hard a set feels, from 1 to 10. RPE 7 means you had about 3 clean reps left in the tank; RPE 9 means barely one. The app prescribes RPE so the weight adapts to how you feel on the day.'},
   {k:'e1rm',i:'🧮',t:'Estimated 1RM',d:'Your estimated one-rep max, calculated from a weight × reps set (e.g. 80kg×8 ≈ 101kg single). Lets the app track strength across different rep ranges without you ever maxing out.'},
