@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.05';
+const APP_VERSION='3.06';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.06',d:'Import your whole ride history from one Garmin CSV file',det:'Garmin Connect\'s Activities page has an "Export CSV" button that downloads every activity in a single file — the app now accepts it. One file brings in your entire history at once, complete with Garmin\'s own Normalized Power and Training Stress Score, which are used directly rather than re-estimated. Rides are matched to the right type (road, mountain, e-MTB, gravel, indoor), non-cycling activities and aborted zero-second entries are skipped, and anything already in the app is detected and not duplicated — so you can re-import the same file safely. This is the quickest way to backfill after a break, or if you\'d rather not connect anything at all. Single-ride TCX and GPX files still work for maximum detail on one session.'},
   {v:'3.05',d:'"You rode on a gym day" now asks you on the home screen — plus readable errors and the missing Disconnect button',det:'Three fixes. (1) RIDE ON A GYM DAY: when a ride landed on a day planned as Push/Pull/Legs, the app offered to swap the day and push the gym session forward — but that choice only appeared once you tapped into the day, so from the home screen it looked like the ride had been ignored. The prompt now appears on the week view itself: it names the ride, says what was planned, and gives you three options — make it a ride day (cascading the gym workout forward through the week), keep both, or decide later. It hides once handled, and never appears for rest days, future days, or days where you did the gym anyway. (2) ERROR MESSAGES: long messages were set to never wrap, so they ran off both edges of the screen and were unreadable — exactly when you most needed to read them. They now wrap, stay within the screen, and stay visible longer the longer they are. (3) The Disconnect button had gone missing from the Strava card when Strava had deactivated API access, leaving no way to remove a dead connection. Restored.'},
   {v:'3.04',d:'Automatic Garmin ride sync is back — for free, via intervals.icu',det:'Strava putting API access behind a subscription broke automatic ride syncing. Rather than settle for manual file imports, the app now uses intervals.icu as the bridge instead: Garmin Connect syncs your activities into intervals.icu automatically, and the app pulls from its free API on every open — exactly the hands-off flow you had before, at no cost. Setup is one-time: sign up free at intervals.icu, connect Garmin under Settings → Connections, copy your API key from Developer Settings, and paste it into Settings here. Rides arrive with distance, time, heart rate, power, cadence and elevation, plus training load and intensity calculated by intervals.icu from your full power stream — which is actually more accurate than the estimate the app derived from Strava data, so your Fitness/Fatigue/Form numbers improve. Existing rides from Strava or file imports are kept and merged, never duplicated. Strava remains supported if you ever subscribe, and file import stays as a fallback.'},
   {v:'3.03',d:'Import rides straight from a Garmin file — no Strava, no subscription needed',det:'Strava now requires a paid subscription for API access, which switched off automatic ride syncing. This makes the app independent of it. In Garmin Connect, open a ride → ⚙ → Export to TCX (or GPX), then in Settings → "📁 Import a ride file" pick the file — you can select several at once. Distance, moving time, heart rate (average and max), power, cadence and elevation gain are read directly from the file, and Normalized Power is calculated properly (30-second rolling average) so training load and your fitness curve match previously synced rides exactly. Imported rides behave like any other: they appear on your day cards and in History, count toward Fitness/Fatigue/Form, and feed the AI coach. Re-importing the same ride is detected and skipped, so you cannot create duplicates. TCX carries the most data (power and heart rate); GPX works too but usually has no power.'},
@@ -2195,7 +2196,7 @@ function _annotateRideLoad(rides,ftp){
     if(!a.moving_time)continue;
     // intervals.icu already supplied training load from the full power stream —
     // more accurate than our NP-based estimate, so don't overwrite it. v3.04.
-    if(a._tssFromIcu)continue;
+    if(a._tssFromIcu||a._tssExternal)continue;
     const np=a.weighted_average_watts||a.average_watts;
     if(np){
       a._if=+(np/ftp).toFixed(2);
@@ -2745,6 +2746,112 @@ function parseGPXRide(text,fallbackName){
     totalDistance:null,totalTimeSec:null});
 }
 
+/* Garmin Connect "Export CSV" support — the activity-list export, not a single
+   ride file. One file carries the whole history with Garmin's own Normalized
+   Power and Training Stress Score, so it's the fastest way to backfill. v3.06. */
+// RFC-ish CSV field splitter: fields are quoted and some values contain commas
+// as thousand separators ("1,049"), so naive split(',') corrupts the row.
+function _csvSplit(line){
+  const out=[];let cur='',q=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(q){
+      if(c==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}
+      else cur+=c;
+    }else{
+      if(c==='"')q=true;
+      else if(c===','){out.push(cur);cur='';}
+      else cur+=c;
+    }
+  }
+  out.push(cur);return out;
+}
+function _csvNum(v){
+  if(v==null)return null;
+  const s=String(v).replace(/,/g,'').replace(/[^\d.\-]/g,'').trim();
+  if(!s||s==='-')return null;
+  const n=parseFloat(s);
+  return isFinite(n)?n:null;
+}
+function _hmsToSec(v){
+  if(!v)return null;
+  const s=String(v).trim();
+  if(!s||s==='--')return null;
+  const p=s.split(':').map(x=>parseFloat(x));
+  if(p.some(x=>!isFinite(x)))return null;
+  if(p.length===3)return Math.round(p[0]*3600+p[1]*60+p[2]);
+  if(p.length===2)return Math.round(p[0]*60+p[1]);
+  return Math.round(p[0]);
+}
+// Garmin activity-type label -> Strava-style type the app already understands
+function _garminTypeToRide(label){
+  const s=String(label||'').toLowerCase();
+  if(!/cycl|bik/.test(s))return null; // not a ride — skip (runs, walks, etc.)
+  if(/emountain|e-mountain/.test(s))return'EMountainBikeRide';
+  if(/mountain/.test(s))return'MountainBikeRide';
+  if(/gravel|unpaved/.test(s))return'GravelRide';
+  if(/indoor|virtual|trainer/.test(s))return'VirtualRide';
+  return'Ride';
+}
+function parseGarminCSV(text){
+  const lines=text.split(/\r?\n/).filter(l=>l.trim().length);
+  if(lines.length<2)throw new Error('CSV has no rows');
+  const hdr=_csvSplit(lines[0]).map(h=>h.trim().toLowerCase());
+  const col=(...names)=>{
+    for(const n of names){
+      let i=hdr.indexOf(n);
+      if(i<0)i=hdr.findIndex(h=>h.startsWith(n));
+      if(i>=0)return i;
+    }
+    return -1;
+  };
+  const iType=col('activity type'),iDate=col('date'),iTitle=col('title'),iDist=col('distance');
+  if(iType<0||iDate<0)throw new Error('not a Garmin activities CSV');
+  const iCal=col('calories'),iAvgHr=col('avg hr'),iMaxHr=col('max hr'),iAsc=col('total ascent'),
+    iCad=col('avg bike cadence','avg cadence'),iNp=col('normalized power'),iTss=col('training stress score'),
+    iAvgW=col('avg power'),iMaxW=col('max power'),iMov=col('moving time'),iEl=col('elapsed time'),iTime=col('time');
+  const out=[];
+  for(let r=1;r<lines.length;r++){
+    const f=_csvSplit(lines[r]);
+    if(f.length<3)continue;
+    const type=_garminTypeToRide(f[iType]);
+    if(!type)continue;
+    const rawDate=(f[iDate]||'').trim();
+    if(!/^\d{4}-\d{2}-\d{2}/.test(rawDate))continue;
+    const dur=_hmsToSec(iMov>=0?f[iMov]:null)||_hmsToSec(iTime>=0?f[iTime]:null)||_hmsToSec(iEl>=0?f[iEl]:null);
+    if(!dur||dur<60)continue; // drop aborted/0-second entries
+    const km=iDist>=0?_csvNum(f[iDist]):null;
+    const dist=km!=null?Math.round(km*1000):0;
+    const avgW=iAvgW>=0?_csvNum(f[iAvgW]):null;
+    const np=iNp>=0?_csvNum(f[iNp]):null;
+    const tss=iTss>=0?_csvNum(f[iTss]):null;
+    const cal=iCal>=0?_csvNum(f[iCal]):null;
+    out.push({
+      start_date_local:rawDate.replace(' ','T'),
+      moving_time:dur,
+      elapsed_time:_hmsToSec(iEl>=0?f[iEl]:null)||dur,
+      distance:dist,
+      average_heartrate:iAvgHr>=0?_csvNum(f[iAvgHr]):null,
+      max_heartrate:iMaxHr>=0?_csvNum(f[iMaxHr]):null,
+      average_watts:avgW,
+      weighted_average_watts:np||avgW,
+      max_watts:iMaxW>=0?_csvNum(f[iMaxW]):null,
+      device_watts:avgW!=null,
+      total_elevation_gain:iAsc>=0?(_csvNum(f[iAsc])||0):0,
+      average_cadence:iCad>=0?_csvNum(f[iCad]):null,
+      average_speed:dist&&dur?+(dist/dur).toFixed(2):null,
+      kilojoules:cal!=null?Math.round(cal):(avgW?Math.round(avgW*dur/1000):null),
+      suffer_score:null,perceived_exertion:null,pr_count:null,workout_type:null,
+      name:(iTitle>=0?(f[iTitle]||'').trim():'')||'Imported ride',
+      type,sport_type:type,_imported:true,
+      // Garmin's own TSS is computed from the full ride — trust it over our estimate
+      ...(tss!=null&&tss>0?{_tss:Math.round(tss),_tssExternal:true,_tssEst:false}:{}),
+    });
+  }
+  if(!out.length)throw new Error('no cycling activities found in CSV');
+  return out;
+}
+
 async function importRideFiles(input){
   const files=[...(input?.files||[])];
   if(!files.length)return;
@@ -2754,15 +2861,19 @@ async function importRideFiles(input){
   for(const f of files){
     try{
       const text=await f.text();
-      const nm=f.name.replace(/\.(tcx|gpx|xml)$/i,'');
-      const act=/\.gpx$/i.test(f.name)?parseGPXRide(text,nm):parseTCXRide(text,nm);
-      if(!act){errs.push(`${f.name}: couldn't read ride data`);continue;}
-      const day=(act.start_date_local||'').slice(0,10);
-      // Don't duplicate a ride already present for that day with a similar duration
-      const clash=existing.find(a=>(a.start_date_local||'').slice(0,10)===day
-        &&Math.abs((a.moving_time||0)-act.moving_time)<120);
-      if(clash){dupes++;continue;}
-      existing.push(act);added++;
+      const nm=f.name.replace(/\.(tcx|gpx|xml|csv)$/i,'');
+      // A Garmin CSV export holds MANY activities; TCX/GPX hold one.
+      const acts=/\.csv$/i.test(f.name)?parseGarminCSV(text)
+        :[/\.gpx$/i.test(f.name)?parseGPXRide(text,nm):parseTCXRide(text,nm)];
+      for(const act of acts){
+        if(!act){errs.push(`${f.name}: couldn't read ride data`);continue;}
+        const day=(act.start_date_local||'').slice(0,10);
+        // Don't duplicate a ride already present for that day with a similar duration
+        const clash=existing.find(a=>(a.start_date_local||'').slice(0,10)===day
+          &&Math.abs((a.moving_time||0)-act.moving_time)<120);
+        if(clash){dupes++;continue;}
+        existing.push(act);added++;
+      }
     }catch(e){errs.push(`${f.name}: ${e.message||'could not be read'}`);}
   }
   input.value='';
@@ -2789,8 +2900,12 @@ async function importRideFiles(input){
 function rRideImportCard(){
   return`<div class="card">
   <div style="font-size:13px;font-weight:700;margin-bottom:6px">📁 Import a ride file</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">No Strava needed. In <strong style="color:var(--txt)">Garmin Connect</strong> open a ride → <strong style="color:var(--txt)">⚙ → Export to TCX</strong> (or GPX), then pick the file here. Distance, time, heart rate, power, elevation and cadence are read straight from the file, and training load is calculated the same way as a synced ride.</div>
-  <input id="ride-file-input" type="file" accept=".tcx,.gpx,.xml" multiple onchange="importRideFiles(this)" style="display:none">
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">No Strava needed. Two ways from <strong style="color:var(--txt)">Garmin Connect</strong>:</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.75;margin-bottom:10px">
+    <span style="display:block"><strong style="color:var(--al)">Whole history at once</strong> — Activities page → <strong style="color:var(--txt)">Export CSV</strong> (top right). Every ride in one file, with Garmin's own power and training-load numbers.</span>
+    <span style="display:block;margin-top:5px"><strong style="color:var(--al)">One ride</strong> — open it → <strong style="color:var(--txt)">⚙ → Export to TCX</strong> (or GPX). Richest detail for a single session.</span>
+  </div>
+  <input id="ride-file-input" type="file" accept=".tcx,.gpx,.xml,.csv" multiple onchange="importRideFiles(this)" style="display:none">
   <button class="btn btn-p" onclick="document.getElementById('ride-file-input').click()" style="width:100%">📁 Choose ride file(s)</button>
   <div style="font-size:11px;color:var(--t2);margin-top:8px;line-height:1.5">TCX keeps the most data (power + heart rate). Re-importing the same ride is ignored, so you can't create duplicates.</div>
 </div>`;
