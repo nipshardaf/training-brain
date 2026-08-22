@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.02';
+const APP_VERSION='3.03';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.03',d:'Import rides straight from a Garmin file — no Strava, no subscription needed',det:'Strava now requires a paid subscription for API access, which switched off automatic ride syncing. This makes the app independent of it. In Garmin Connect, open a ride → ⚙ → Export to TCX (or GPX), then in Settings → "📁 Import a ride file" pick the file — you can select several at once. Distance, moving time, heart rate (average and max), power, cadence and elevation gain are read directly from the file, and Normalized Power is calculated properly (30-second rolling average) so training load and your fitness curve match previously synced rides exactly. Imported rides behave like any other: they appear on your day cards and in History, count toward Fitness/Fatigue/Form, and feed the AI coach. Re-importing the same ride is detected and skipped, so you cannot create duplicates. TCX carries the most data (power and heart rate); GPX works too but usually has no power.'},
   {v:'3.02',d:'Identifies the real Strava problem: Strava deactivated the app\'s API access',det:'The diagnostics added in v3.01 revealed the actual cause of rides not syncing, and it was not what the earlier versions guessed. Strava replies: {"resource":"Application","field":"Status","code":"Inactive"} — Strava has marked the whole API application inactive, which it does when the Strava account owning the app\'s API key has no active Strava subscription (a Developer Program requirement). Signing in still works, which is why the app looked connected while every ride request was refused. Crucially, reconnecting can never fix this, yet v3.00/v3.01 told you to reconnect and tick a permissions box — wrong advice for this error. The app now recognises this specific response and says plainly what it is: Strava API access is deactivated, it needs a subscription on the owning account plus reactivation at strava.com/settings/api, and reconnecting will not help. Manual ride logging still works on any ride day, and nothing else in the app is affected.'},
   {v:'3.01',d:'Strava errors now show what Strava actually said, instead of just a number',det:'Chasing a stubborn "activities 403", the app was throwing away the most useful information it had: Strava sends a description of what is wrong with every rejected request, and the app discarded it and displayed only the status code. Now the exact response from Strava is captured and shown in Settings → Strava, alongside the app version and a timestamp, so a failure can be diagnosed instead of guessed at. It stays on screen rather than vanishing with the toast, and clears automatically after a successful sync. Also added a "🔁 Reconnect" button to the normal connected card (previously reconnecting meant disconnecting first), and refreshed the offline cache so updates land promptly rather than a version behind.'},
   {v:'3.00',d:'Fixes the Strava "403" after authorising — the permission screen now always appears',det:'Reconnecting Strava could fail with a bare "403" straight after you authorised it. Cause: the app asked Strava for approval with "auto", which tells Strava to silently reuse whatever permissions you granted it previously instead of showing the permission screen. If that earlier grant didn\'t include activity access — or the "View data about your activities" box was left unticked — Strava handed back a token that isn\'t allowed to read your rides, so every sync answered 403 with nothing explaining why. Three fixes: (1) the app now always shows Strava\'s permission screen when you connect, so activity access can actually be granted; (2) it reads the permissions Strava reports back and, if activity access is missing, tells you exactly which box to tick instead of saving a token that can\'t work; (3) a 403 or 401 from Strava now produces a plain-English message and flags the connection for reconnecting, rather than printing a status code.'},
@@ -2439,6 +2440,214 @@ function getRideDuration(which){
 function stravaRideOnDate(dateStr){
   const acts=DB.get('strava_activities',[])||[];
   return acts.find(a=>(a.start_date_local||'').slice(0,10)===dateStr)||null;
+}
+
+/* ── RIDE FILE IMPORT (.TCX / .GPX) ────────────────────────────────────────
+   Strava now gates API access behind a paid subscription, which deactivates the
+   app's API application and blocks all ride syncing. This is the escape hatch:
+   export a ride from Garmin Connect (or anywhere) and drop the file in. Parsed
+   activities are written into the SAME strava_activities store in the same
+   shape, so every downstream feature — day cards, history, TSS/fitness curve,
+   AI context — works with no further changes. v3.03. */
+
+// Namespace-agnostic element lookup: Garmin files use ns3:/gpxtpx: prefixes that
+// vary by exporter, so match on localName rather than the qualified tag.
+function _xmlEls(root,localName){
+  const out=[];const want=localName.toLowerCase();
+  const walk=n=>{
+    for(let c=n.firstElementChild;c;c=c.nextElementSibling){
+      if((c.localName||c.nodeName).toLowerCase()===want)out.push(c);
+      walk(c);
+    }
+  };
+  walk(root);return out;
+}
+function _xmlText(node,localName){
+  const e=_xmlEls(node,localName)[0];
+  return e?(e.textContent||'').trim():'';
+}
+function _num(v){const n=parseFloat(v);return isFinite(n)?n:null;}
+
+// Normalized Power: 30-second rolling average, raised to the 4th power, meaned,
+// 4th root. Same definition Strava/TrainingPeaks use, so the resulting TSS lines
+// up with previously synced rides.
+function _computeNP(samples){
+  if(!samples||samples.length<30)return null;
+  const roll=[];let sum=0;
+  for(let i=0;i<samples.length;i++){
+    sum+=samples[i];
+    if(i>=30)sum-=samples[i-30];
+    if(i>=29)roll.push(sum/30);
+  }
+  if(!roll.length)return null;
+  const mean4=roll.reduce((a,p)=>a+Math.pow(p,4),0)/roll.length;
+  return Math.round(Math.pow(mean4,0.25));
+}
+function _avg(a){return a.length?a.reduce((x,y)=>x+y,0)/a.length:null;}
+function _haversine(a,b){
+  const R=6371000,toR=d=>d*Math.PI/180;
+  const dLat=toR(b.lat-a.lat),dLon=toR(b.lon-a.lon);
+  const h=Math.sin(dLat/2)**2+Math.cos(toR(a.lat))*Math.cos(toR(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+
+// Build a Strava-shaped activity from parsed track samples.
+function _buildActivity({name,startISO,samples,totalDistance,totalTimeSec}){
+  if(!startISO)return null;
+  const hrs=samples.map(s=>s.hr).filter(v=>v!=null);
+  const watts=samples.map(s=>s.w).filter(v=>v!=null);
+  const cads=samples.map(s=>s.cad).filter(v=>v!=null);
+  // Elevation gain via hysteresis against a moving reference, NOT per-sample
+  // deltas: on a steady climb sampled every 1-5s each step is only centimetres,
+  // so a per-sample threshold discards every increment and reports ~0 gain.
+  // Here rises accumulate until they clear 1m from the reference (committing the
+  // gain), while any dip resets the reference — so gradual climbs count fully
+  // and GPS jitter still doesn't inflate the total.
+  let elev=0,refAlt=null;
+  for(const s of samples){
+    if(s.alt==null)continue;
+    if(refAlt==null){refAlt=s.alt;continue;}
+    const d=s.alt-refAlt;
+    if(d>=1){elev+=d;refAlt=s.alt;}
+    else if(d<0){refAlt=s.alt;}
+  }
+  // Distance: prefer the recorded cumulative value, else integrate GPS points.
+  let dist=totalDistance;
+  if(dist==null){
+    dist=0;let prev=null;
+    for(const s of samples){
+      if(s.lat==null||s.lon==null)continue;
+      if(prev)dist+=_haversine(prev,s);
+      prev=s;
+    }
+  }
+  // Duration: prefer the file's own total, else first→last timestamp.
+  let dur=totalTimeSec;
+  if(!dur&&samples.length>1&&samples[0].t&&samples[samples.length-1].t){
+    dur=Math.round((samples[samples.length-1].t-samples[0].t)/1000);
+  }
+  if(!dur||dur<=0)return null;
+  const avgW=watts.length?Math.round(_avg(watts)):null;
+  return{
+    start_date_local:startISO,
+    moving_time:Math.round(dur),elapsed_time:Math.round(dur),
+    distance:Math.round(dist||0),
+    average_heartrate:hrs.length?Math.round(_avg(hrs)):null,
+    max_heartrate:hrs.length?Math.round(Math.max(...hrs)):null,
+    average_watts:avgW,
+    weighted_average_watts:_computeNP(watts)||avgW,
+    max_watts:watts.length?Math.round(Math.max(...watts)):null,
+    device_watts:watts.length>0,
+    total_elevation_gain:Math.round(elev),
+    average_cadence:cads.length?Math.round(_avg(cads)):null,
+    average_speed:dist&&dur?+(dist/dur).toFixed(2):null,
+    kilojoules:avgW?Math.round(avgW*dur/1000):null,
+    suffer_score:null,perceived_exertion:null,pr_count:null,workout_type:null,
+    name:name||'Imported ride',type:'Ride',sport_type:'Ride',
+    _imported:true,
+  };
+}
+
+function parseTCXRide(text,fallbackName){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.querySelector('parsererror'))throw new Error('not valid XML');
+  const act=_xmlEls(doc,'Activity')[0]||doc.documentElement;
+  const startISO=_xmlText(act,'Id')||_xmlEls(act,'Lap')[0]?.getAttribute('StartTime')||'';
+  let totalTime=0,totalDist=null;
+  for(const lap of _xmlEls(act,'Lap')){
+    const t=_num(_xmlText(lap,'TotalTimeSeconds'));if(t)totalTime+=t;
+    const d=_num(_xmlText(lap,'DistanceMeters'));if(d!=null)totalDist=(totalDist||0)+d;
+  }
+  const samples=_xmlEls(act,'Trackpoint').map(tp=>{
+    const hrEl=_xmlEls(tp,'HeartRateBpm')[0];
+    const pos=_xmlEls(tp,'Position')[0];
+    const tstr=_xmlText(tp,'Time');
+    return{
+      t:tstr?Date.parse(tstr):null,
+      alt:_num(_xmlText(tp,'AltitudeMeters')),
+      hr:hrEl?_num(_xmlText(hrEl,'Value')):null,
+      cad:_num(_xmlText(tp,'Cadence')),
+      w:_num(_xmlText(tp,'Watts')),
+      lat:pos?_num(_xmlText(pos,'LatitudeDegrees')):null,
+      lon:pos?_num(_xmlText(pos,'LongitudeDegrees')):null,
+    };
+  });
+  if(!samples.length)throw new Error('no trackpoints found');
+  return _buildActivity({name:_xmlText(act,'Notes')||fallbackName,startISO,samples,
+    totalDistance:totalDist,totalTimeSec:totalTime});
+}
+
+function parseGPXRide(text,fallbackName){
+  const doc=new DOMParser().parseFromString(text,'application/xml');
+  if(doc.querySelector('parsererror'))throw new Error('not valid XML');
+  const trk=_xmlEls(doc,'trk')[0]||doc.documentElement;
+  const pts=_xmlEls(trk,'trkpt');
+  if(!pts.length)throw new Error('no track points found');
+  const samples=pts.map(p=>{
+    const tstr=_xmlText(p,'time');
+    return{
+      t:tstr?Date.parse(tstr):null,
+      alt:_num(_xmlText(p,'ele')),
+      hr:_num(_xmlText(p,'hr')),
+      cad:_num(_xmlText(p,'cad')),
+      w:_num(_xmlText(p,'power'))??_num(_xmlText(p,'watts')),
+      lat:_num(p.getAttribute('lat')),lon:_num(p.getAttribute('lon')),
+    };
+  });
+  const startISO=_xmlText(pts[0],'time')||'';
+  return _buildActivity({name:_xmlText(trk,'name')||fallbackName,startISO,samples,
+    totalDistance:null,totalTimeSec:null});
+}
+
+async function importRideFiles(input){
+  const files=[...(input?.files||[])];
+  if(!files.length)return;
+  if(S.guest){showToast('🔒 Sign in to import rides','var(--amb)');input.value='';return;}
+  const existing=DB.get('strava_activities',[])||[];
+  let added=0,dupes=0;const errs=[];
+  for(const f of files){
+    try{
+      const text=await f.text();
+      const nm=f.name.replace(/\.(tcx|gpx|xml)$/i,'');
+      const act=/\.gpx$/i.test(f.name)?parseGPXRide(text,nm):parseTCXRide(text,nm);
+      if(!act){errs.push(`${f.name}: couldn't read ride data`);continue;}
+      const day=(act.start_date_local||'').slice(0,10);
+      // Don't duplicate a ride already present for that day with a similar duration
+      const clash=existing.find(a=>(a.start_date_local||'').slice(0,10)===day
+        &&Math.abs((a.moving_time||0)-act.moving_time)<120);
+      if(clash){dupes++;continue;}
+      existing.push(act);added++;
+    }catch(e){errs.push(`${f.name}: ${e.message||'could not be read'}`);}
+  }
+  input.value='';
+  if(added){
+    existing.sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
+    DB.set('strava_activities',existing);
+    // Run the same post-sync pipeline Strava uses so load/fitness data matches
+    const ftp=DB.get('user_profile',{})?.ftp||null;
+    _annotateRideLoad(existing,ftp);
+    DB.set('strava_activities',existing);
+    const curve=computeFitnessCurve(existing);
+    if(curve)DB.set('bike_fitness_curve',curve);
+    syncUp();
+  }
+  render();
+  const bits=[];
+  if(added)bits.push(`${added} ride${added!==1?'s':''} imported`);
+  if(dupes)bits.push(`${dupes} already logged`);
+  if(errs.length)bits.push(`${errs.length} failed`);
+  showToast((added?'✅ ':'⚠️ ')+(bits.join(' · ')||'nothing imported'),added?'var(--grn)':'var(--amb)');
+  if(errs.length)console.warn('[ride import]',errs);
+}
+
+function rRideImportCard(){
+  return`<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">📁 Import a ride file</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">No Strava needed. In <strong style="color:var(--txt)">Garmin Connect</strong> open a ride → <strong style="color:var(--txt)">⚙ → Export to TCX</strong> (or GPX), then pick the file here. Distance, time, heart rate, power, elevation and cadence are read straight from the file, and training load is calculated the same way as a synced ride.</div>
+  <input id="ride-file-input" type="file" accept=".tcx,.gpx,.xml" multiple onchange="importRideFiles(this)" style="display:none">
+  <button class="btn btn-p" onclick="document.getElementById('ride-file-input').click()" style="width:100%">📁 Choose ride file(s)</button>
+  <div style="font-size:11px;color:var(--t2);margin-top:8px;line-height:1.5">TCX keeps the most data (power + heart rate). Re-importing the same ride is ignored, so you can't create duplicates.</div>
+</div>`;
 }
 
 function stravaDisconnect(){
@@ -9301,6 +9510,7 @@ ${(()=>{
   ${rGarminHelp()}
 </div>`;
 })()}
+${rRideImportCard()}
 
 <div class="sec-hdr">📖 About the app</div>
 <div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
