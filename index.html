@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.99';
+const APP_VERSION='3.00';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.00',d:'Fixes the Strava "403" after authorising — the permission screen now always appears',det:'Reconnecting Strava could fail with a bare "403" straight after you authorised it. Cause: the app asked Strava for approval with "auto", which tells Strava to silently reuse whatever permissions you granted it previously instead of showing the permission screen. If that earlier grant didn\'t include activity access — or the "View data about your activities" box was left unticked — Strava handed back a token that isn\'t allowed to read your rides, so every sync answered 403 with nothing explaining why. Three fixes: (1) the app now always shows Strava\'s permission screen when you connect, so activity access can actually be granted; (2) it reads the permissions Strava reports back and, if activity access is missing, tells you exactly which box to tick instead of saving a token that can\'t work; (3) a 403 or 401 from Strava now produces a plain-English message and flags the connection for reconnecting, rather than printing a status code.'},
   {v:'2.99',d:'Strava reconnect fix — a dead connection now says so instead of failing silently',det:'If Strava stopped accepting the app\'s saved access — revoked in your Strava settings, or gone stale over a long break — the app handled it badly. It kept using the expired token, sync failed with a cryptic "activities 401", and Settings still cheerfully showed "Strava connected" with no way to fix it. Now: (1) the app recognises when Strava has rejected its access and stops retrying a dead token; (2) Settings shows a clear amber "Strava needs reconnecting" card with a one-tap Reconnect button, and reassures you that rides already synced are safe; (3) if a background sync finds the connection dead, a toast tells you — so you\'re not left wondering why new rides stopped appearing; (4) fixed a latent bug where a refresh response without a new refresh token would overwrite the stored one with nothing, permanently breaking every future refresh. Reconnecting never deletes ride history.'},
   {v:'2.98',d:'Comeback mode fixes — the eased return now actually ramps over both weeks',det:'Four fixes found by walking through what happens when you open the app after a long break. (1) VOLUME RAMP: the comeback block reduced your training days in week 1, but week 2 jumped straight back to a full 4-5 day week — the exact volume spike a graded return exists to prevent. Week 2 now steps up by one day instead (e.g. 2 easy days → 3), then normal service resumes. (2) STALE DETECTION: the "welcome back" check ran once on the first screen draw, before Strava had finished syncing — so if you\'d actually ridden during your break, the app could still greet you as detrained until you reloaded. The check now refreshes whenever new workout or Strava data arrives. (3) Extra gym sessions logged on ride days now count as training for that check (they were invisible to it). (4) Tapping "Start comeback plan" announced "plan ready" instantly, even though building the week needs your location and can fail or be declined — the message now says what it\'s doing rather than claiming a result it doesn\'t have yet.'},
   {v:'2.97',d:'New ⓘ buttons explain the training jargon — TSS, FTP, TSB and friends in plain English',det:'The coach and charts use sports-science shorthand (Load/TSS, Fitness/CTL, Fatigue/ATL, Form/TSB, FTP, NP, Intensity, RPE, Zone 2, tonnage, estimated 1RM…) and nothing in the app explained them. Small ⓘ buttons now sit wherever the jargon is densest — the Ask Coach header, the day-screen coach card, the logged-ride detail card, and the Cycling Performance and Gym Progress sections in My Training. Tapping one opens a plain-English glossary of all 16 terms, scrolled to and highlighting the most relevant entry for where you tapped (e.g. the ride card jumps to Load/TSS). Each explanation is 2-3 friendly sentences with practical reference points — like "an easy hour is ~40-50 TSS" or "RPE 7 = about 3 clean reps left in the tank" — plus why assisted-machine numbers run backwards.'},
@@ -1999,9 +2000,20 @@ function openGoalsSetup(isEdit=false,startStep=1){
 
 /* ── STRAVA INTEGRATION ── */
 function stravaConnect(){
-  const url=`https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT)}&response_type=code&scope=activity:read_all&approval_prompt=auto`;
+  // approval_prompt=force (was 'auto'): with 'auto' Strava silently reuses an
+  // EXISTING grant instead of showing the permission screen. If that old grant
+  // lacked activity scope (or the athlete left the "View data about your
+  // activities" box unticked), the exchange succeeds but every activities call
+  // then returns 403 — which looked like a broken connection with no
+  // explanation. Forcing the prompt lets the athlete actually grant the scope.
+  // v3.00.
+  const url=`https://www.strava.com/oauth/authorize?client_id=${STRAVA_CLIENT_ID}&redirect_uri=${encodeURIComponent(STRAVA_REDIRECT)}&response_type=code&scope=activity:read_all&approval_prompt=force`;
   window.location.href=url;
 }
+// Strava returns the granted scopes on the callback (e.g. "read,activity:read_all").
+// Without activity read permission the token is useless for syncing rides, so
+// detect it up front rather than failing later with a bare 403. v3.00.
+function _stravaScopeOk(scope){return !!scope&&/activity:read/.test(scope);}
 
 async function stravaExchangeCode(code){
   try{
@@ -2248,7 +2260,20 @@ async function stravaFetchActivities(){
       const r=await fetch(`https://www.strava.com/api/v3/athlete/activities?after=${after}&per_page=200&page=${page}`,{
         headers:{Authorization:'Bearer '+token}
       });
-      if(!r.ok){if(page===1)throw new Error('activities '+r.status);break;}
+      if(!r.ok){
+        if(page===1){
+          // 403 here means the token is valid but lacks activity read scope —
+          // a permissions problem, not a connection problem. Flag it so the
+          // Settings card offers Reconnect rather than showing a bare code. v3.00.
+          if(r.status===403){
+            DB.set('strava_auth_expired',true);
+            throw new Error('no permission to read your activities — reconnect and tick "View data about your activities"');
+          }
+          if(r.status===401){DB.set('strava_auth_expired',true);throw new Error('access expired — reconnect Strava in Settings');}
+          throw new Error('activities '+r.status);
+        }
+        break;
+      }
       const batch=await r.json();
       if(!Array.isArray(batch)||!batch.length)break;
       acts.push(...batch);
@@ -10240,7 +10265,15 @@ function init(){
   const _stravaCode=_qp.get('code');
   if(_stravaCode&&!_qp.get('error')){
     S.authed=true; // auto-unlock so user lands on the app
-    stravaExchangeCode(_stravaCode);
+    // Strava reports the granted scopes here. If activity read wasn't granted,
+    // the token cannot list rides — say so now instead of exchanging it and
+    // failing later with an unexplained 403. v3.00.
+    if(!_stravaScopeOk(_qp.get('scope'))){
+      window.history.replaceState({},'',window.location.pathname);
+      setTimeout(()=>showToast('⚠️ Strava didn\'t grant activity access. Tap Reconnect and make sure "View data about your activities" is ticked.','var(--red)'),600);
+    } else {
+      stravaExchangeCode(_stravaCode);
+    }
   }
   render();
   loadGifDb();
