@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.01';
+const APP_VERSION='3.02';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.02',d:'Identifies the real Strava problem: Strava deactivated the app\'s API access',det:'The diagnostics added in v3.01 revealed the actual cause of rides not syncing, and it was not what the earlier versions guessed. Strava replies: {"resource":"Application","field":"Status","code":"Inactive"} — Strava has marked the whole API application inactive, which it does when the Strava account owning the app\'s API key has no active Strava subscription (a Developer Program requirement). Signing in still works, which is why the app looked connected while every ride request was refused. Crucially, reconnecting can never fix this, yet v3.00/v3.01 told you to reconnect and tick a permissions box — wrong advice for this error. The app now recognises this specific response and says plainly what it is: Strava API access is deactivated, it needs a subscription on the owning account plus reactivation at strava.com/settings/api, and reconnecting will not help. Manual ride logging still works on any ride day, and nothing else in the app is affected.'},
   {v:'3.01',d:'Strava errors now show what Strava actually said, instead of just a number',det:'Chasing a stubborn "activities 403", the app was throwing away the most useful information it had: Strava sends a description of what is wrong with every rejected request, and the app discarded it and displayed only the status code. Now the exact response from Strava is captured and shown in Settings → Strava, alongside the app version and a timestamp, so a failure can be diagnosed instead of guessed at. It stays on screen rather than vanishing with the toast, and clears automatically after a successful sync. Also added a "🔁 Reconnect" button to the normal connected card (previously reconnecting meant disconnecting first), and refreshed the offline cache so updates land promptly rather than a version behind.'},
   {v:'3.00',d:'Fixes the Strava "403" after authorising — the permission screen now always appears',det:'Reconnecting Strava could fail with a bare "403" straight after you authorised it. Cause: the app asked Strava for approval with "auto", which tells Strava to silently reuse whatever permissions you granted it previously instead of showing the permission screen. If that earlier grant didn\'t include activity access — or the "View data about your activities" box was left unticked — Strava handed back a token that isn\'t allowed to read your rides, so every sync answered 403 with nothing explaining why. Three fixes: (1) the app now always shows Strava\'s permission screen when you connect, so activity access can actually be granted; (2) it reads the permissions Strava reports back and, if activity access is missing, tells you exactly which box to tick instead of saving a token that can\'t work; (3) a 403 or 401 from Strava now produces a plain-English message and flags the connection for reconnecting, rather than printing a status code.'},
   {v:'2.99',d:'Strava reconnect fix — a dead connection now says so instead of failing silently',det:'If Strava stopped accepting the app\'s saved access — revoked in your Strava settings, or gone stale over a long break — the app handled it badly. It kept using the expired token, sync failed with a cryptic "activities 401", and Settings still cheerfully showed "Strava connected" with no way to fix it. Now: (1) the app recognises when Strava has rejected its access and stops retrying a dead token; (2) Settings shows a clear amber "Strava needs reconnecting" card with a one-tap Reconnect button, and reassures you that rides already synced are safe; (3) if a background sync finds the connection dead, a toast tells you — so you\'re not left wondering why new rides stopped appearing; (4) fixed a latent bug where a refresh response without a new refresh token would overwrite the stored one with nothing, permanently breaking every future refresh. Reconnecting never deletes ride history.'},
@@ -2270,6 +2271,15 @@ async function stravaFetchActivities(){
           let detail='';
           try{const b=await r.text();if(b)detail=b.slice(0,300);}catch(_){}
           DB.set('strava_last_error',{status:r.status,detail,at:new Date().toISOString()});
+          // Strava marks the whole API application Inactive when the account that
+          // OWNS it has no active Strava subscription (Developer Program Standard
+          // Tier requirement). Auth still succeeds — only data calls are refused —
+          // so reconnecting can never fix it and must not be suggested. v3.02.
+          if(r.status===403&&/"resource"\s*:\s*"Application"/i.test(detail)&&/inactive/i.test(detail)){
+            DB.set('strava_app_inactive',true);
+            DB.set('strava_auth_expired',false);
+            throw new Error('Strava has deactivated this app\'s API access. It needs an active Strava subscription on the account that owns the API app — reconnecting won\'t help. See Settings → Strava.');
+          }
           // 403 = token valid but not allowed to read activities (missing scope).
           // 401 = token itself rejected. Both need a reconnect, not a retry.
           if(r.status===403||r.status===401){
@@ -2318,6 +2328,7 @@ async function stravaFetchActivities(){
     DB.set('strava_last_sync',new Date().toISOString());
     DB.set('strava_last_error',null); // a good sync clears the stale diagnostic
     DB.set('strava_auth_expired',false);
+    DB.set('strava_app_inactive',false);
     if(curve)DB.set('bike_fitness_curve',curve);
     if(autoFtpApplied)showToast(`📊 FTP estimated from rides: ${ftp}W (tap ✏️ to override)`,'var(--acc)');
     analyzeStravaAdapt(rides); // auto-adapt plan based on completion
@@ -9237,6 +9248,20 @@ ${(()=>{
     <div style="font-size:11px;color:var(--red);line-height:1.5;font-family:monospace;word-break:break-word">HTTP ${_lastErr.status} — ${_esc(_lastErr.detail||'(no detail)')}</div>
     <div style="font-size:10px;color:var(--t2);margin-top:4px">${_lastErr.at?_lastErr.at.slice(0,16).replace('T',' '):''}</div>
   </div>`:'';
+  // Strava deactivated the API application itself (owner has no Strava
+  // subscription). Distinct from a dead token: sign-in works, data calls don't,
+  // and reconnecting is futile — so don't offer it. v3.02.
+  if(tok&&DB.get('strava_app_inactive',false))return`<div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="font-size:28px;line-height:1">🚫</div>
+    <div><div style="font-size:14px;font-weight:700;color:var(--red)">Strava API access deactivated</div>
+    <div style="font-size:11px;color:var(--t2)">Signing in works — Strava is blocking data requests.</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Strava requires an active <strong style="color:var(--txt)">Strava subscription on the account that owns this app's API key</strong> (their Developer Program rule). Without it Strava marks the app "Inactive" and refuses every data request — so <strong style="color:var(--txt)">reconnecting will not help</strong>.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">To restore it: subscribe on that Strava account, then reactivate the app at <strong style="color:var(--al)">strava.com/settings/api</strong>. Until then you can still log rides by hand on any ride day — nothing else in the app is affected.</div>
+  <button class="btn btn-s" onclick="stravaFetchActivities()" style="width:100%">🔄 Check again</button>
+  ${_errBox}
+  ${rGarminHelp()}</div>`;
   if(tok&&authDead)return`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <div style="font-size:28px;line-height:1">⚠️</div>
