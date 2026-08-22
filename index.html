@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.04';
+const APP_VERSION='3.05';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.05',d:'"You rode on a gym day" now asks you on the home screen — plus readable errors and the missing Disconnect button',det:'Three fixes. (1) RIDE ON A GYM DAY: when a ride landed on a day planned as Push/Pull/Legs, the app offered to swap the day and push the gym session forward — but that choice only appeared once you tapped into the day, so from the home screen it looked like the ride had been ignored. The prompt now appears on the week view itself: it names the ride, says what was planned, and gives you three options — make it a ride day (cascading the gym workout forward through the week), keep both, or decide later. It hides once handled, and never appears for rest days, future days, or days where you did the gym anyway. (2) ERROR MESSAGES: long messages were set to never wrap, so they ran off both edges of the screen and were unreadable — exactly when you most needed to read them. They now wrap, stay within the screen, and stay visible longer the longer they are. (3) The Disconnect button had gone missing from the Strava card when Strava had deactivated API access, leaving no way to remove a dead connection. Restored.'},
   {v:'3.04',d:'Automatic Garmin ride sync is back — for free, via intervals.icu',det:'Strava putting API access behind a subscription broke automatic ride syncing. Rather than settle for manual file imports, the app now uses intervals.icu as the bridge instead: Garmin Connect syncs your activities into intervals.icu automatically, and the app pulls from its free API on every open — exactly the hands-off flow you had before, at no cost. Setup is one-time: sign up free at intervals.icu, connect Garmin under Settings → Connections, copy your API key from Developer Settings, and paste it into Settings here. Rides arrive with distance, time, heart rate, power, cadence and elevation, plus training load and intensity calculated by intervals.icu from your full power stream — which is actually more accurate than the estimate the app derived from Strava data, so your Fitness/Fatigue/Form numbers improve. Existing rides from Strava or file imports are kept and merged, never duplicated. Strava remains supported if you ever subscribe, and file import stays as a fallback.'},
   {v:'3.03',d:'Import rides straight from a Garmin file — no Strava, no subscription needed',det:'Strava now requires a paid subscription for API access, which switched off automatic ride syncing. This makes the app independent of it. In Garmin Connect, open a ride → ⚙ → Export to TCX (or GPX), then in Settings → "📁 Import a ride file" pick the file — you can select several at once. Distance, moving time, heart rate (average and max), power, cadence and elevation gain are read directly from the file, and Normalized Power is calculated properly (30-second rolling average) so training load and your fitness curve match previously synced rides exactly. Imported rides behave like any other: they appear on your day cards and in History, count toward Fitness/Fatigue/Form, and feed the AI coach. Re-importing the same ride is detected and skipped, so you cannot create duplicates. TCX carries the most data (power and heart rate); GPX works too but usually has no power.'},
   {v:'3.02',d:'Identifies the real Strava problem: Strava deactivated the app\'s API access',det:'The diagnostics added in v3.01 revealed the actual cause of rides not syncing, and it was not what the earlier versions guessed. Strava replies: {"resource":"Application","field":"Status","code":"Inactive"} — Strava has marked the whole API application inactive, which it does when the Strava account owning the app\'s API key has no active Strava subscription (a Developer Program requirement). Signing in still works, which is why the app looked connected while every ride request was refused. Crucially, reconnecting can never fix this, yet v3.00/v3.01 told you to reconnect and tick a permissions box — wrong advice for this error. The app now recognises this specific response and says plainly what it is: Strava API access is deactivated, it needs a subscription on the owning account plus reactivation at strava.com/settings/api, and reconnecting will not help. Manual ride logging still works on any ride day, and nothing else in the app is affected.'},
@@ -3683,6 +3684,53 @@ function applyAutoSkipShift(){
   return changed;
 }
 
+// "You rode on a planned gym day" prompt, surfaced on the WEEK view. The same
+// choice already existed inside the day screen, but it only appeared once you
+// tapped into that day — so a ride on a gym day looked like it had been ignored.
+// Shows the most recent unacknowledged case and offers the same two actions
+// (cascade the gym forward, or keep both). v3.05.
+function rRideOnGymDayBanner(){
+  if(S.guest)return'';
+  const plan=DB.get(DB.pk(S.weekStart),null);
+  if(!plan||!plan.length)return'';
+  // Only the types replaceGymWithRide can actually cascade
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const todayStr=fd(new Date());
+  const days=[...plan].sort((a,b)=>b.date.localeCompare(a.date));
+  for(const dp of days){
+    if(dp.date>todayStr)continue;              // not the future
+    if(!gymTypes.includes(dp.type))continue;   // not a planned gym day
+    if(dp.rideAlongside)continue;              // already chose "keep both"
+    if(DB.get('rideprompt_dismissed_'+dp.date,false))continue;
+    const ride=stravaRideOnDate(dp.date);
+    if(!ride)continue;                          // no ride that day
+    const log=DB.get('log_'+dp.date,null);
+    if(log?.completed)continue;                 // gym already done too — nothing to decide
+    const km=+((ride.distance||0)/1000).toFixed(1);
+    const min=Math.round((ride.moving_time||0)/60);
+    const wi=WI[dp.type]||{};
+    const gymLbl=typeof wi.l==='function'?wi.l():(wi.l||dp.type);
+    const isToday=dp.date===todayStr;
+    const whenTxt=isToday?'today':shortD(new Date(dp.date+'T12:00:00'));
+    return`<div style="background:rgba(252,76,2,.07);border:1px solid rgba(252,76,2,.35);border-radius:14px;padding:13px 14px;margin-bottom:12px">
+  <div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
+    <span style="font-size:20px;line-height:1">🚴</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:800;color:#fc4c02">You rode ${whenTxt}${km?` — ${km} km`:''}${min?` · ${min} min`:''}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">${_esc(ride.name||'Ride')}</div>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">${whenTxt==='today'?'Today':'That day'} was planned as <strong style="color:var(--al)">${gymLbl}</strong>. Want to make it a ride day instead and push the gym session forward?</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">
+    <button onclick="replaceGymWithRide('${dp.date}')" style="flex:1 1 140px;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:10px 8px;cursor:pointer;line-height:1.35">🔄 Make it a ride day<br><span style="font-size:9px;opacity:.85;font-weight:600">Push ${gymLbl} forward</span></button>
+    <button onclick="dismissRideOnGymPrompt('${dp.date}')" style="flex:1 1 120px;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:10px 8px;cursor:pointer;line-height:1.35">💪 I did both<br><span style="font-size:9px;opacity:.7;font-weight:600">Keep ${gymLbl} too</span></button>
+    <button onclick="DB.set('rideprompt_dismissed_${dp.date}',true);render()" style="flex:0 0 auto;background:none;border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:10px 12px;cursor:pointer">Later</button>
+  </div>
+</div>`;
+  }
+  return'';
+}
+
 function rCatchUpBanner(){
   // Only show on the CURRENT or future week (not historical weeks)
   const todayMon=getMon(new Date());
@@ -4483,12 +4531,17 @@ function guestLogBlock(){
 function showToast(msg,color='var(--acc)'){
   let t=document.getElementById('_toast');
   if(!t){t=document.createElement('div');t.id='_toast';
-    t.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 20px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;transition:all .25s;opacity:0;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.4)';
+    // white-space:nowrap with no max-width ran long messages off both edges of
+    // the screen — error text was unreadable. Wrap instead, cap the width to the
+    // viewport, and centre. v3.05.
+    t.style.cssText='position:fixed;bottom:100px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 16px;font-size:13px;font-weight:600;z-index:9999;pointer-events:none;transition:all .25s;opacity:0;box-shadow:0 4px 20px rgba(0,0,0,.4);max-width:min(92vw,420px);width:max-content;white-space:normal;overflow-wrap:anywhere;line-height:1.45;text-align:center;box-sizing:border-box';
     document.body.appendChild(t);}
   t.style.color=color;t.textContent=msg;
   t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';
   clearTimeout(t._tid);
-  t._tid=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(10px)';},2400);
+  // Long messages need longer on screen to actually be readable.
+  const _ms=Math.min(9000,Math.max(2400,String(msg).length*70));
+  t._tid=setTimeout(()=>{t.style.opacity='0';t.style.transform='translateX(-50%) translateY(10px)';},_ms);
 }
 
 function toggleExCollapse(i,isDone){
@@ -5162,6 +5215,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rAskCoach()}
+${rRideOnGymDayBanner()}
 ${rComebackBanner()}
 ${rReviewCard()}
 ${rWeeklyAdvisor()}
@@ -9613,7 +9667,10 @@ ${(()=>{
   </div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Strava requires an active <strong style="color:var(--txt)">Strava subscription on the account that owns this app's API key</strong> (their Developer Program rule). Without it Strava marks the app "Inactive" and refuses every data request — so <strong style="color:var(--txt)">reconnecting will not help</strong>.</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">To restore it: subscribe on that Strava account, then reactivate the app at <strong style="color:var(--al)">strava.com/settings/api</strong>. Until then you can still log rides by hand on any ride day — nothing else in the app is affected.</div>
-  <button class="btn btn-s" onclick="stravaFetchActivities()" style="width:100%">🔄 Check again</button>
+  <div class="data-btns">
+    <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Check again</button>
+    <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
+  </div>
   ${_errBox}
   ${rGarminHelp()}</div>`;
   if(tok&&authDead)return`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
@@ -10636,7 +10693,7 @@ function toggleHomeDay(dateStr){
 function pruneOldCacheKeys(){
   try{
     const cutoff=fd(addDays(new Date(),-30));
-    const cachePrefix=/^(coach_|excoach_|weather_|catchup_dismissed_|comeback_dismissed_|weekly_advisor_)/;
+    const cachePrefix=/^(coach_|excoach_|weather_|catchup_dismissed_|comeback_dismissed_|rideprompt_dismissed_|weekly_advisor_)/;
     const dateRe=/(\d{4}-\d{2}-\d{2})/;
     const del=[];
     for(let i=0;i<localStorage.length;i++){
