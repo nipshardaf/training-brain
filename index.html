@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.07';
+const APP_VERSION='3.08';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.08',d:'No more Strava error popping up every time you open the app',det:'If Strava had deactivated the app\'s API access, the automatic sync on every launch failed and threw the same red error on screen each time — for a sync you never asked for, about a service you may have deliberately stopped using. Background syncs are now silent when they fail: the app skips the Strava call entirely once it knows access is deactivated, and only reports failures when you actually tap a sync button yourself. Nothing is hidden — the current state and the exact error are still in Settings → Ride sync, and "Check again" re-tests whenever you want. You can leave Strava connected indefinitely without it nagging you.'},
   {v:'3.07',d:'Ride settings tidied into one section — and rides now say where they actually came from',det:'Three fixes. (1) SETTINGS were sprawling: Strava, intervals.icu and file import each had their own full-height card stacked down the page, even when two of them weren\'t in use. They\'re now a single "Ride sync" section — one compact line telling you sync is working and when it last ran, with setup, alternatives and any dead connection folded behind a "Ride sources & setup" toggle (flagged if something needs attention). (2) LABELS: rides were tagged "Strava" everywhere regardless of origin, so a ride imported from Garmin still claimed to be from Strava. Each ride now shows its real source — intervals.icu, Garmin, or Strava — on day cards, the week list, ride details and History. (3) AVERAGE POWER is now its own figure on the ride card next to Normalized Power, instead of small print underneath it. Also added glossary entries explaining Sweet Spot and the Build/Peak/Recovery week cycle.'},
   {v:'3.06',d:'Import your whole ride history from one Garmin CSV file',det:'Garmin Connect\'s Activities page has an "Export CSV" button that downloads every activity in a single file — the app now accepts it. One file brings in your entire history at once, complete with Garmin\'s own Normalized Power and Training Stress Score, which are used directly rather than re-estimated. Rides are matched to the right type (road, mountain, e-MTB, gravel, indoor), non-cycling activities and aborted zero-second entries are skipped, and anything already in the app is detected and not duplicated — so you can re-import the same file safely. This is the quickest way to backfill after a break, or if you\'d rather not connect anything at all. Single-ride TCX and GPX files still work for maximum detail on one session.'},
   {v:'3.05',d:'"You rode on a gym day" now asks you on the home screen — plus readable errors and the missing Disconnect button',det:'Three fixes. (1) RIDE ON A GYM DAY: when a ride landed on a day planned as Push/Pull/Legs, the app offered to swap the day and push the gym session forward — but that choice only appeared once you tapped into the day, so from the home screen it looked like the ride had been ignored. The prompt now appears on the week view itself: it names the ride, says what was planned, and gives you three options — make it a ride day (cascading the gym workout forward through the week), keep both, or decide later. It hides once handled, and never appears for rest days, future days, or days where you did the gym anyway. (2) ERROR MESSAGES: long messages were set to never wrap, so they ran off both edges of the screen and were unreadable — exactly when you most needed to read them. They now wrap, stay within the screen, and stay visible longer the longer they are. (3) The Disconnect button had gone missing from the Strava card when Strava had deactivated API access, leaving no way to remove a dead connection. Restored.'},
@@ -2249,7 +2250,10 @@ function computeFitnessCurve(rides){
   return curve;
 }
 
-async function stravaFetchActivities(){
+// manual=true only when the user actually tapped a sync button. Background syncs
+// (on app open) must stay silent on failure — a permanently-dead Strava app was
+// toasting the same error on every single launch. v3.08.
+async function stravaFetchActivities(manual=false){
   const token=await _stravaAccessToken();
   if(!token){
     // Distinguish "never connected" (silent) from "connection died" (tell them).
@@ -2343,11 +2347,14 @@ async function stravaFetchActivities(){
     await syncUp(); // persist to Firebase so data survives across sessions
     const kb=Math.round(JSON.stringify(rides).length/1024);
     const ftpNote=ftp?` · FTP ${ftp}W`:' · set FTP for TSS';
-    showToast(`🟠 Strava synced · ${rides.length} rides · ${kb}KB${ftpNote}`,'var(--grn)');
+    if(manual)showToast(`🟠 Strava synced · ${rides.length} rides · ${kb}KB${ftpNote}`,'var(--grn)');
     render();
   }catch(e){
     console.warn('Strava activities failed:',e);
-    showToast(`⚠️ Strava sync failed: ${e?.message||e}`,'var(--red)');
+    // Only surface failures the user asked for. The state is still recorded
+    // (strava_last_error / the Settings card), so nothing is hidden — it just
+    // stops shouting on every app open. v3.08.
+    if(manual)showToast(`⚠️ Strava sync failed: ${e?.message||e}`,'var(--red)');
   }
 }
 
@@ -2606,7 +2613,7 @@ function rRideSyncSection(){
       <div style="font-size:13px;font-weight:700">Rides sync via Strava</div>
       <div style="font-size:11px;color:var(--t2);margin-top:1px">${acts.length} ride${acts.length!==1?'s':''} synced</div>
     </div>
-    <button onclick="stravaFetchActivities()" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;flex-shrink:0">🔄</button>
+    <button onclick="stravaFetchActivities(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px 11px;cursor:pointer;flex-shrink:0">🔄</button>
   </div>
 </div>`
     :`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 14px;margin-bottom:8px">
@@ -2649,7 +2656,7 @@ function rStravaCard(tok,dead){
   <div style="font-size:12px;font-weight:700;margin-bottom:3px">🟠 Strava connected</div>
   <div style="font-size:11px;color:var(--t2);margin-bottom:9px">${_esc(tok.athlete?.name||'Athlete')} · ${acts.length} ride${acts.length!==1?'s':''}</div>
   <div style="display:flex;gap:6px">
-    <button class="btn btn-s" onclick="stravaFetchActivities()" style="flex:1;font-size:12px;padding:8px">Sync</button>
+    <button class="btn btn-s" onclick="stravaFetchActivities(true)" style="flex:1;font-size:12px;padding:8px">Sync</button>
     <button class="btn btn-s" onclick="stravaDisconnect()" style="flex:1;font-size:12px;padding:8px">Remove</button>
   </div>${errBox}
 </div>`;
@@ -5796,7 +5803,7 @@ function rRideCard(dp){
     <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.5px">⏳ Waiting for Strava</div>
     <div style="font-size:11px;color:var(--t2);margin-top:1px">Last sync: ${syncLabel}</div>
   </div>
-  <button onclick="stravaFetchActivities()" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.4);border-radius:9px;color:#fc4c02;font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;flex:0 0 auto">🟠 Sync now</button>
+  <button onclick="stravaFetchActivities(true)" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.4);border-radius:9px;color:#fc4c02;font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;flex:0 0 auto">🟠 Sync now</button>
   <button onclick="expandRideLog('${dp.date}')" title="Log this ride manually" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:11px;font-weight:700;padding:7px 9px;cursor:pointer;flex:0 0 auto">📝</button>
 </div>`;
     }else{
@@ -5808,7 +5815,7 @@ function rRideCard(dp){
       manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:13px 14px;margin-bottom:13px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.7px">📝 ${_T('rl_title')}</div>
-    ${stravaConnected?`<button onclick="stravaFetchActivities()" style="background:none;border:1px solid rgba(252,76,2,.4);border-radius:8px;color:#fc4c02;font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer">🟠 Sync now · ${syncLabel}</button>`:''}
+    ${stravaConnected?`<button onclick="stravaFetchActivities(true)" style="background:none;border:1px solid rgba(252,76,2,.4);border-radius:8px;color:#fc4c02;font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer">🟠 Sync now · ${syncLabel}</button>`:''}
   </div>
   <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:11px">${hint}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
@@ -10911,9 +10918,12 @@ function init(){
       }
     }
   }
-  // Auto-sync Strava if connected and last sync was >1 hour ago
+  // Auto-sync Strava if connected and last sync was >1 hour ago. Skipped once
+  // Strava has deactivated the API app — that call can only fail, so retrying it
+  // on every launch just burns a request. The Settings card still shows the
+  // state and "Check again" re-tests on demand. v3.08.
   const _stravaTok=DB.get('strava_token',null);
-  if(_stravaTok&&!_stravaCode){
+  if(_stravaTok&&!_stravaCode&&!DB.get('strava_app_inactive',false)){
     const _lastSync=DB.get('strava_last_sync',null);
     const _hourAgo=Date.now()-60*60*1000;
     if(!_lastSync||new Date(_lastSync).getTime()<_hourAgo){
