@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='2.98';
+const APP_VERSION='2.99';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'2.99',d:'Strava reconnect fix — a dead connection now says so instead of failing silently',det:'If Strava stopped accepting the app\'s saved access — revoked in your Strava settings, or gone stale over a long break — the app handled it badly. It kept using the expired token, sync failed with a cryptic "activities 401", and Settings still cheerfully showed "Strava connected" with no way to fix it. Now: (1) the app recognises when Strava has rejected its access and stops retrying a dead token; (2) Settings shows a clear amber "Strava needs reconnecting" card with a one-tap Reconnect button, and reassures you that rides already synced are safe; (3) if a background sync finds the connection dead, a toast tells you — so you\'re not left wondering why new rides stopped appearing; (4) fixed a latent bug where a refresh response without a new refresh token would overwrite the stored one with nothing, permanently breaking every future refresh. Reconnecting never deletes ride history.'},
   {v:'2.98',d:'Comeback mode fixes — the eased return now actually ramps over both weeks',det:'Four fixes found by walking through what happens when you open the app after a long break. (1) VOLUME RAMP: the comeback block reduced your training days in week 1, but week 2 jumped straight back to a full 4-5 day week — the exact volume spike a graded return exists to prevent. Week 2 now steps up by one day instead (e.g. 2 easy days → 3), then normal service resumes. (2) STALE DETECTION: the "welcome back" check ran once on the first screen draw, before Strava had finished syncing — so if you\'d actually ridden during your break, the app could still greet you as detrained until you reloaded. The check now refreshes whenever new workout or Strava data arrives. (3) Extra gym sessions logged on ride days now count as training for that check (they were invisible to it). (4) Tapping "Start comeback plan" announced "plan ready" instantly, even though building the week needs your location and can fail or be declined — the message now says what it\'s doing rather than claiming a result it doesn\'t have yet.'},
   {v:'2.97',d:'New ⓘ buttons explain the training jargon — TSS, FTP, TSB and friends in plain English',det:'The coach and charts use sports-science shorthand (Load/TSS, Fitness/CTL, Fatigue/ATL, Form/TSB, FTP, NP, Intensity, RPE, Zone 2, tonnage, estimated 1RM…) and nothing in the app explained them. Small ⓘ buttons now sit wherever the jargon is densest — the Ask Coach header, the day-screen coach card, the logged-ride detail card, and the Cycling Performance and Gym Progress sections in My Training. Tapping one opens a plain-English glossary of all 16 terms, scrolled to and highlighting the most relevant entry for where you tapped (e.g. the ride card jumps to Load/TSS). Each explanation is 2-3 friendly sentences with practical reference points — like "an easy hour is ~40-50 TSS" or "RPE 7 = about 3 clean reps left in the tank" — plus why assisted-machine numbers run backwards.'},
   {v:'2.96',d:'Smarter daily coaching — the AI now knows your FTP, fatigue, weather and today\'s targets',det:'Upgrade pass on what the AI coach actually sees before giving advice. (1) RIDE NOTES: the daily pre-ride coach was asked for "specific power targets" without ever being told your FTP — targets were guesses. It now gets your FTP with computed Zone 2 / threshold power bands (or is told to use HR/RPE targets if FTP isn\'t set), your current fitness/fatigue/form (CTL/ATL/TSB), yesterday\'s ride load, the planned session and duration, today\'s weather, and NP/TSS per ride in your history. (2) GYM NOTES: the daily pre-workout coach now sees today\'s actual prescription per exercise (sets×reps×RPE and the suggested weight from your card — comeback-aware), plus your current form so it can account for ride fatigue on lifting days. Assisted machines are tagged so it never suggests adding assistance as progression. (3) NEXT-WEEK WEIGHTS: the weekly suggestion prompt now carries an explicit assisted-machine exception (progress = LESS assistance). (4) LANGUAGE: daily coach notes now come back in Traditional Chinese when the app language is 繁體中文 (previously English-only). (5) RELIABILITY: the backup AI providers (used when Gemini hits quota) had a response cap that truncated weekly reviews and coach actions — raised to cover the largest responses (requires the Cloudflare worker update).'},
@@ -2016,6 +2017,7 @@ async function stravaExchangeCode(code){
       expires:data.expires_at,
       athlete:{name:data.athlete?.firstname,id:data.athlete?.id}
     });
+    DB.set('strava_auth_expired',false); // fresh grant clears any stale "needs reconnect" state
     // Clean the ?code= from the URL
     window.history.replaceState({},'',window.location.pathname);
     await stravaFetchActivities();
@@ -2032,15 +2034,26 @@ async function _stravaAccessToken(){
   const tok=DB.get('strava_token',null);
   if(!tok)return null;
   // Refresh if expiring within 5 minutes
-  if(Date.now()/1000<tok.expires-300)return tok.access;
+  if(Date.now()/1000<tok.expires-300){if(DB.get('strava_auth_expired',false))DB.set('strava_auth_expired',false);return tok.access;}
   try{
     const r=await fetch(GEMINI_PROXY+'/strava/token',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({grant_type:'refresh_token',refresh_token:tok.refresh})
     });
-    if(!r.ok)throw new Error('refresh '+r.status);
+    if(!r.ok){
+      // 400/401 = Strava rejected the refresh token itself (access revoked on
+      // Strava's side, or the token was rotated away). Retrying never fixes
+      // this — the user has to reconnect, so flag it for the UI instead of
+      // handing back a dead access token and failing with a cryptic 401. v2.99.
+      if(r.status===400||r.status===401){DB.set('strava_auth_expired',true);return null;}
+      throw new Error('refresh '+r.status); // 5xx / transient — fall through
+    }
     const data=await r.json();
-    DB.set('strava_token',{...tok,access:data.access_token,refresh:data.refresh_token,expires:data.expires_at});
+    if(!data.access_token){DB.set('strava_auth_expired',true);return null;}
+    // Keep the existing refresh token if Strava omits a new one — writing
+    // undefined here would permanently break every future refresh.
+    DB.set('strava_token',{...tok,access:data.access_token,refresh:data.refresh_token||tok.refresh,expires:data.expires_at});
+    DB.set('strava_auth_expired',false);
     return data.access_token;
   }catch(e){console.warn('Strava refresh failed:',e);return tok.access;}
 }
@@ -2216,7 +2229,14 @@ function computeFitnessCurve(rides){
 
 async function stravaFetchActivities(){
   const token=await _stravaAccessToken();
-  if(!token)return;
+  if(!token){
+    // Distinguish "never connected" (silent) from "connection died" (tell them).
+    if(DB.get('strava_token',null)&&DB.get('strava_auth_expired',false)){
+      showToast('🟠 Strava disconnected — tap Settings → Strava to reconnect','var(--amb)');
+      render();
+    }
+    return;
+  }
   try{
     // Pull athlete data (FTP/weight) in parallel — fail-soft, doesn't block activity sync
     stravaFetchAthlete().catch(()=>{});
@@ -2376,7 +2396,7 @@ function stravaRideOnDate(dateStr){
 }
 
 function stravaDisconnect(){
-  DB.set('strava_token',null);DB.set('strava_activities',null);DB.set('strava_last_sync',null);
+  DB.set('strava_token',null);DB.set('strava_auth_expired',false);DB.set('strava_activities',null);DB.set('strava_last_sync',null);
   DB.set('bike_fitness_curve',null);
   // Clear Strava-sourced FTP/weight (preserve manual overrides)
   const profile=DB.get('user_profile',{})||{};
@@ -2869,7 +2889,7 @@ const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-  'user_profile','weight_log','strava_token','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
+  'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -9170,6 +9190,20 @@ ${(()=>{
   const tok=DB.get('strava_token',null);
   const acts=DB.get('strava_activities')||[];
   const lastSync=DB.get('strava_last_sync',null);
+  // A stored token can be dead (revoked on Strava's side, or expired past
+  // refresh). The card used to still say "Strava connected" with no way back —
+  // show the real state and a one-tap reconnect instead. v2.99.
+  const authDead=DB.get('strava_auth_expired',false);
+  if(tok&&authDead)return`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="font-size:28px;line-height:1">⚠️</div>
+    <div><div style="font-size:14px;font-weight:700;color:var(--amb)">Strava needs reconnecting</div>
+    <div style="font-size:11px;color:var(--t2)">Your ${acts.length} synced ride${acts.length!==1?'s':''} are safe — new ones just aren't coming in.</div></div>
+  </div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Strava stopped accepting the app's saved access. This happens if access was revoked in your Strava settings, or after a long spell without opening the app. Reconnecting takes one tap and won't lose any history.</div>
+  <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000);width:100%">🟠 Reconnect Strava</button>
+  <button class="btn btn-s" onclick="stravaDisconnect()" style="width:100%;margin-top:8px">Disconnect instead</button>
+  ${rGarminHelp()}</div>`;
   if(tok)return`<div style="background:var(--s1);border:1px solid rgba(252,76,2,.25);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <div style="font-size:28px;line-height:1">🟠</div>
