@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.11';
+const APP_VERSION='3.12';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.12',d:'Proper backup and restore — your rides and weight history were never actually being saved',det:'A review turned up a real gap. The app contained a full backup function and a restore function, but neither was reachable from anywhere in the app — the only button available exported gym sets to CSV. Worse, the backup itself only covered workouts, plans and PRs: your entire ride history, weight log, profile, extra gym sessions and weekly reviews were excluded, so even a "full backup" would have quietly left most of your data behind. Fixed: the backup now saves everything the app treats as your data (it uses the same definition as cloud sync, so the two can\'t drift apart again), and both buttons now appear under Settings → Account as "Backup & restore". Restoring asks for confirmation first, shows when the backup was taken, and ignores anything unrecognised — previously it would have written every key in the file without warning. Temporary caches are deliberately left out, so backups stay small.'},
   {v:'3.11',d:'Ready for indoor season — Apple Watch and spin-bike workouts now come through properly',det:'Getting set up for winter training on a spin bike. (1) Indoor rides were at risk of being dropped entirely: the app only recognised a short list of activity names, and an Apple Watch "Indoor Cycle" (or a Peloton/spin session routed through Apple Health) can arrive under several different names depending on which app forwards it. All the common indoor and trainer names are now recognised. (2) Indoor sessions no longer show misleading empty stats — a spin-bike ride with no GPS used to display "0.0 km" and "0 m elevation"; those are now simply left out, so you see the numbers that exist (time, heart rate, and power if your bike reports it). (3) Rides are correctly labelled Indoor rather than Outdoor across all the indoor activity types. (4) Heart-rate-only indoor sessions still get a training-load estimate, so your Fitness and Form keep tracking through winter even without a power meter. Note: Apple Health has no web connection of its own — an iPhone app such as Intervals Companion or HealthFit forwards Apple Watch workouts to intervals.icu, and from there they reach this app automatically.'},
   {v:'3.10',d:'Connect your own Endurain server — plus honest wording about Strava',det:'Two changes. (1) ENDURAIN: if you self-host Endurain, the app can now pull rides straight from it — no third-party service in between. Add your server address and sign in under Settings → Ride sync → Ride sources; only the access token is kept, never your password. Rides arrive with power, normalized power, heart rate, elevation and calories, and are labelled as coming from Endurain. It syncs automatically on app open like the other sources, and non-cycling activities are filtered out. Two requirements: the server must be reachable over https, and it must be configured to allow requests from this app\'s web address — the app explains this if the connection is refused. (2) STRAVA WORDING: the app no longer states that Strava requires a paid subscription unless Strava has actually reported that to the app. If you have not connected Strava, it simply offers to connect; the subscription explanation appears only when Strava itself returns the "inactive application" response.'},
   {v:'3.09',d:'Ride sessions now explain themselves — and tell you the watts to aim for',det:'A heading like "Sweet Spot" means nothing on its own. Every ride session now carries a one-line explanation of what it is and why it\'s in your week, plus — if your FTP is set — the actual power range to target. For a 256W FTP, Sweet Spot reads "Aim for ~225-238W", Tempo "~195-223W", Recovery "~115-154W", and so on, so the session name turns into something you can act on. There\'s also an ⓘ next to the name opening a fuller explanation, including why the weeks rotate: your rides run a repeating 4-week cycle (Build 1 → Build 2 → Peak → Recovery), each week using a different session type — Tempo, Sweet Spot, Hills, then easy — so you develop different systems rather than repeating the same ride. If you haven\'t set an FTP, it says so instead of inventing numbers.'},
@@ -10139,6 +10140,14 @@ ${S.fbUser
         </div>
       </div>
     </div>
+    <div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin:10px 0 8px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px">💾 Backup &amp; restore</div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Save a complete copy of your training data — workouts, rides, PRs, weight and settings — to a file you keep. Restoring merges it back in.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-s" onclick="exportData()" style="flex:1 1 130px;font-size:12px;padding:8px">⬇️ Full backup (JSON)</button>
+        <button class="btn btn-s" onclick="importData()" style="flex:1 1 110px;font-size:12px;padding:8px">⬆️ Restore</button>
+      </div>
+    </div>
     <div class="data-btns">
       <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
       ${hasPIN?`<button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>`:`<button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>`}
@@ -10871,10 +10880,15 @@ function bindEnergy(){
 
 /* ── EXPORT / IMPORT ── */
 function exportData(){
-  const data={_exported:new Date().toISOString()};
+  // Back up everything the app treats as user data. This used to cover only
+  // log_/plan_/prs/recent_ex, which silently excluded the entire ride history,
+  // weight log, profile, extra gym sessions and weekly reviews — i.e. most of
+  // what you'd actually want back. _isSyncKey is the canonical definition
+  // (it's what cloud sync uses), so the backup can't drift from it again. v3.12.
+  const data={_exported:new Date().toISOString(),_version:APP_VERSION};
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
-    if(k.startsWith('log_')||k.startsWith('plan_')||k==='prs'||k==='recent_ex')data[k]=DB.get(k);
+    if(_isSyncKey(k))data[k]=DB.get(k);
   }
   const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   const url=URL.createObjectURL(blob);
@@ -10933,10 +10947,18 @@ function importData(){
       if(isCSV){importCSV(ev.target.result);return;}
       try{
         const data=JSON.parse(ev.target.result);
-        let count=0;
-        Object.entries(data).forEach(([k,v])=>{if(!k.startsWith('_')){DB.set(k,v);count++;}});
+        // Only restore keys the app recognises as user data, and confirm first —
+        // this overwrites whatever is currently there, including on your other
+        // devices once it syncs. Previously it wrote every key in the file
+        // unchecked, with no warning. v3.12.
+        const keys=Object.keys(data).filter(k=>!k.startsWith('_')&&_isSyncKey(k));
+        const skipped=Object.keys(data).filter(k=>!k.startsWith('_')&&!_isSyncKey(k)).length;
+        if(!keys.length){alert('❌ No Training Brain data found in that file.');return;}
+        const when=data._exported?data._exported.slice(0,10):'unknown date';
+        if(!confirm(`Restore ${keys.length} item${keys.length!==1?'s':''} from a backup taken ${when}?\n\nThis replaces matching data on this device and syncs to your other devices.`))return;
+        keys.forEach(k=>DB.set(k,data[k]));
         syncUp();
-        alert(`✅ Restored ${count} records successfully!`);
+        alert(`✅ Restored ${keys.length} item${keys.length!==1?'s':''}.${skipped?` (${skipped} unrecognised entr${skipped===1?'y':'ies'} ignored.)`:''}`);
         render();
       }catch{alert('❌ Could not read file — make sure it\'s a Training Brain backup (.json) or export (.csv).');}
     };
