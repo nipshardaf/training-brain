@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.00';
+const APP_VERSION='3.01';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.01',d:'Strava errors now show what Strava actually said, instead of just a number',det:'Chasing a stubborn "activities 403", the app was throwing away the most useful information it had: Strava sends a description of what is wrong with every rejected request, and the app discarded it and displayed only the status code. Now the exact response from Strava is captured and shown in Settings → Strava, alongside the app version and a timestamp, so a failure can be diagnosed instead of guessed at. It stays on screen rather than vanishing with the toast, and clears automatically after a successful sync. Also added a "🔁 Reconnect" button to the normal connected card (previously reconnecting meant disconnecting first), and refreshed the offline cache so updates land promptly rather than a version behind.'},
   {v:'3.00',d:'Fixes the Strava "403" after authorising — the permission screen now always appears',det:'Reconnecting Strava could fail with a bare "403" straight after you authorised it. Cause: the app asked Strava for approval with "auto", which tells Strava to silently reuse whatever permissions you granted it previously instead of showing the permission screen. If that earlier grant didn\'t include activity access — or the "View data about your activities" box was left unticked — Strava handed back a token that isn\'t allowed to read your rides, so every sync answered 403 with nothing explaining why. Three fixes: (1) the app now always shows Strava\'s permission screen when you connect, so activity access can actually be granted; (2) it reads the permissions Strava reports back and, if activity access is missing, tells you exactly which box to tick instead of saving a token that can\'t work; (3) a 403 or 401 from Strava now produces a plain-English message and flags the connection for reconnecting, rather than printing a status code.'},
   {v:'2.99',d:'Strava reconnect fix — a dead connection now says so instead of failing silently',det:'If Strava stopped accepting the app\'s saved access — revoked in your Strava settings, or gone stale over a long break — the app handled it badly. It kept using the expired token, sync failed with a cryptic "activities 401", and Settings still cheerfully showed "Strava connected" with no way to fix it. Now: (1) the app recognises when Strava has rejected its access and stops retrying a dead token; (2) Settings shows a clear amber "Strava needs reconnecting" card with a one-tap Reconnect button, and reassures you that rides already synced are safe; (3) if a background sync finds the connection dead, a toast tells you — so you\'re not left wondering why new rides stopped appearing; (4) fixed a latent bug where a refresh response without a new refresh token would overwrite the stored one with nothing, permanently breaking every future refresh. Reconnecting never deletes ride history.'},
   {v:'2.98',d:'Comeback mode fixes — the eased return now actually ramps over both weeks',det:'Four fixes found by walking through what happens when you open the app after a long break. (1) VOLUME RAMP: the comeback block reduced your training days in week 1, but week 2 jumped straight back to a full 4-5 day week — the exact volume spike a graded return exists to prevent. Week 2 now steps up by one day instead (e.g. 2 easy days → 3), then normal service resumes. (2) STALE DETECTION: the "welcome back" check ran once on the first screen draw, before Strava had finished syncing — so if you\'d actually ridden during your break, the app could still greet you as detrained until you reloaded. The check now refreshes whenever new workout or Strava data arrives. (3) Extra gym sessions logged on ride days now count as training for that check (they were invisible to it). (4) Tapping "Start comeback plan" announced "plan ready" instantly, even though building the week needs your location and can fail or be declined — the message now says what it\'s doing rather than claiming a result it doesn\'t have yet.'},
@@ -2262,15 +2263,22 @@ async function stravaFetchActivities(){
       });
       if(!r.ok){
         if(page===1){
-          // 403 here means the token is valid but lacks activity read scope —
-          // a permissions problem, not a connection problem. Flag it so the
-          // Settings card offers Reconnect rather than showing a bare code. v3.00.
-          if(r.status===403){
+          // Capture Strava's own error body — it names the actual problem
+          // (scope, rate limit, invalid token). Previously discarded, which left
+          // only a bare status code to guess from. Persisted so it stays visible
+          // in Settings instead of vanishing with the toast. v3.01.
+          let detail='';
+          try{const b=await r.text();if(b)detail=b.slice(0,300);}catch(_){}
+          DB.set('strava_last_error',{status:r.status,detail,at:new Date().toISOString()});
+          // 403 = token valid but not allowed to read activities (missing scope).
+          // 401 = token itself rejected. Both need a reconnect, not a retry.
+          if(r.status===403||r.status===401){
             DB.set('strava_auth_expired',true);
-            throw new Error('no permission to read your activities — reconnect and tick "View data about your activities"');
+            throw new Error(r.status===403
+              ?'Strava won\'t share your activities with the app (permission missing). Reconnect and tick "View data about your activities". ['+detail+']'
+              :'access expired — reconnect Strava in Settings. ['+detail+']');
           }
-          if(r.status===401){DB.set('strava_auth_expired',true);throw new Error('access expired — reconnect Strava in Settings');}
-          throw new Error('activities '+r.status);
+          throw new Error('activities '+r.status+' ['+detail+']');
         }
         break;
       }
@@ -2308,6 +2316,8 @@ async function stravaFetchActivities(){
     const curve=computeFitnessCurve(rides);
     DB.set('strava_activities',rides);
     DB.set('strava_last_sync',new Date().toISOString());
+    DB.set('strava_last_error',null); // a good sync clears the stale diagnostic
+    DB.set('strava_auth_expired',false);
     if(curve)DB.set('bike_fitness_curve',curve);
     if(autoFtpApplied)showToast(`📊 FTP estimated from rides: ${ftp}W (tap ✏️ to override)`,'var(--acc)');
     analyzeStravaAdapt(rides); // auto-adapt plan based on completion
@@ -9219,6 +9229,14 @@ ${(()=>{
   // refresh). The card used to still say "Strava connected" with no way back —
   // show the real state and a one-tap reconnect instead. v2.99.
   const authDead=DB.get('strava_auth_expired',false);
+  // Last raw error from Strava, shown verbatim so a failure can be diagnosed
+  // without guessing from a status code. v3.01.
+  const _lastErr=DB.get('strava_last_error',null);
+  const _errBox=_lastErr?`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:9px 11px;margin-top:10px">
+    <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px">Last error from Strava · app v${APP_VERSION}</div>
+    <div style="font-size:11px;color:var(--red);line-height:1.5;font-family:monospace;word-break:break-word">HTTP ${_lastErr.status} — ${_esc(_lastErr.detail||'(no detail)')}</div>
+    <div style="font-size:10px;color:var(--t2);margin-top:4px">${_lastErr.at?_lastErr.at.slice(0,16).replace('T',' '):''}</div>
+  </div>`:'';
   if(tok&&authDead)return`<div style="background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <div style="font-size:28px;line-height:1">⚠️</div>
@@ -9228,6 +9246,7 @@ ${(()=>{
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Strava stopped accepting the app's saved access. This happens if access was revoked in your Strava settings, or after a long spell without opening the app. Reconnecting takes one tap and won't lose any history.</div>
   <button class="btn btn-p" onclick="stravaConnect()" style="background:linear-gradient(135deg,#fc4c02,#e34000);width:100%">🟠 Reconnect Strava</button>
   <button class="btn btn-s" onclick="stravaDisconnect()" style="width:100%;margin-top:8px">Disconnect instead</button>
+  ${_errBox}
   ${rGarminHelp()}</div>`;
   if(tok)return`<div style="background:var(--s1);border:1px solid rgba(252,76,2,.25);border-radius:14px;padding:14px 15px;margin-bottom:10px">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
@@ -9239,8 +9258,10 @@ ${(()=>{
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Ride data (distance, HR, power) appears automatically on your ride day cards. Garmin activities sync to Strava, then here.</div>
   <div class="data-btns">
     <button class="btn btn-s" onclick="stravaFetchActivities()">🔄 Sync rides</button>
+    <button class="btn btn-s" onclick="stravaConnect()">🔁 Reconnect</button>
     <button class="btn btn-s" onclick="stravaDisconnect()">Disconnect</button>
   </div>
+  ${_errBox}
   ${rGarminHelp()}</div>`;
   return`<div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">

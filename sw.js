@@ -2,7 +2,7 @@
 // index.html → network-first (always fresh, fallback to cache when offline)
 // Exercise GIFs → cache-forever (immutable CDN assets)
 // Everything else → cache-first with background update
-const CACHE = 'tb-v5';
+const CACHE = 'tb-v6';
 const ASSETS = [
   '/training-brain/',
   '/training-brain/index.html',
