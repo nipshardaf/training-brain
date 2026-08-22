@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.08';
+const APP_VERSION='3.09';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.09',d:'Ride sessions now explain themselves — and tell you the watts to aim for',det:'A heading like "Sweet Spot" means nothing on its own. Every ride session now carries a one-line explanation of what it is and why it\'s in your week, plus — if your FTP is set — the actual power range to target. For a 256W FTP, Sweet Spot reads "Aim for ~225-238W", Tempo "~195-223W", Recovery "~115-154W", and so on, so the session name turns into something you can act on. There\'s also an ⓘ next to the name opening a fuller explanation, including why the weeks rotate: your rides run a repeating 4-week cycle (Build 1 → Build 2 → Peak → Recovery), each week using a different session type — Tempo, Sweet Spot, Hills, then easy — so you develop different systems rather than repeating the same ride. If you haven\'t set an FTP, it says so instead of inventing numbers.'},
   {v:'3.08',d:'No more Strava error popping up every time you open the app',det:'If Strava had deactivated the app\'s API access, the automatic sync on every launch failed and threw the same red error on screen each time — for a sync you never asked for, about a service you may have deliberately stopped using. Background syncs are now silent when they fail: the app skips the Strava call entirely once it knows access is deactivated, and only reports failures when you actually tap a sync button yourself. Nothing is hidden — the current state and the exact error are still in Settings → Ride sync, and "Check again" re-tests whenever you want. You can leave Strava connected indefinitely without it nagging you.'},
   {v:'3.07',d:'Ride settings tidied into one section — and rides now say where they actually came from',det:'Three fixes. (1) SETTINGS were sprawling: Strava, intervals.icu and file import each had their own full-height card stacked down the page, even when two of them weren\'t in use. They\'re now a single "Ride sync" section — one compact line telling you sync is working and when it last ran, with setup, alternatives and any dead connection folded behind a "Ride sources & setup" toggle (flagged if something needs attention). (2) LABELS: rides were tagged "Strava" everywhere regardless of origin, so a ride imported from Garmin still claimed to be from Strava. Each ride now shows its real source — intervals.icu, Garmin, or Strava — on day cards, the week list, ride details and History. (3) AVERAGE POWER is now its own figure on the ride card next to Normalized Power, instead of small print underneath it. Also added glossary entries explaining Sweet Spot and the Build/Peak/Recovery week cycle.'},
   {v:'3.06',d:'Import your whole ride history from one Garmin CSV file',det:'Garmin Connect\'s Activities page has an "Export CSV" button that downloads every activity in a single file — the app now accepts it. One file brings in your entire history at once, complete with Garmin\'s own Normalized Power and Training Stress Score, which are used directly rather than re-estimated. Rides are matched to the right type (road, mountain, e-MTB, gravel, indoor), non-cycling activities and aborted zero-second entries are skipped, and anything already in the app is detected and not duplicated — so you can re-import the same file safely. This is the quickest way to backfill after a break, or if you\'d rather not connect anything at all. Single-ride TCX and GPX files still work for maximum detail on one session.'},
@@ -5772,6 +5773,31 @@ function rLoggedRideCard(actual){
 </div>`;
 }
 
+/* Session-name explainers. A heading like "Sweet Spot" is jargon on its own —
+   these say in one line what the session is FOR and, when an FTP is known, the
+   actual watts to aim at, so the name means something. v3.09. */
+const SESSION_INFO={
+  'Sweet Spot':{k:'sweetspot',why:'Just below threshold — the best fitness gain per unit of fatigue, which is why it earns a whole week.',lo:0.88,hi:0.93},
+  'Tempo Intervals':{k:'zone2',why:'Comfortably hard — quicker than endurance pace but well short of all-out. Raises how long you can hold a strong effort.',lo:0.76,hi:0.87},
+  'Hill Repeats':{k:'sweetspot',why:'Strength for your legs — high force at low cadence, power that carries into every other ride.',lo:0.9,hi:1.05},
+  'Recovery Spin':{k:'zone2',why:'Deliberately easy. The point is blood flow and recovery, not training — going hard here costs you next week.',lo:0.45,hi:0.6},
+  'Endurance Ride':{k:'zone2',why:'Long and steady in Zone 2. The discipline is staying easy even when the legs feel great.',lo:0.56,hi:0.75},
+  'Race-Pace Sharpener':{k:'if',why:'Event-pace efforts to remind your legs what race intensity feels like, without digging a hole.',lo:0.95,hi:1.0},
+  'Event Prep Spin':{k:'tsb',why:'A shake-out, not a workout. Your legs are loaded from weeks of work — arrive fresh.',lo:0.5,hi:0.65},
+};
+function _sessionInfoBtn(name){
+  const m=SESSION_INFO[name];
+  return m?_glossBtn(m.k,13):'';
+}
+function _sessionExplainer(name){
+  const m=SESSION_INFO[name];
+  if(!m)return'';
+  const ftp=DB.get('user_profile',{})?.ftp;
+  const target=ftp?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-top:5px">🎯 Aim for ~${Math.round(ftp*m.lo)}–${Math.round(ftp*m.hi)}W${m.lo>=0.88&&m.hi<=0.93?' (your sweet spot)':''}</div>`
+    :`<div style="font-size:11px;color:var(--t2);margin-top:5px">Set your FTP in My Training to see this as a watts target.</div>`;
+  return`<div style="font-size:12px;color:var(--t2);line-height:1.55;margin:2px 14px 0;text-align:center">${m.why}${target}</div>`;
+}
+
 function rRideCard(dp){
   const indoor=dp.type.includes('INDOOR');
   const s=getRideSession(dp.type);
@@ -5835,7 +5861,8 @@ function rRideCard(dp){
   return`<div class="ride-card" style="text-align:left">
 <div style="text-align:center;margin-bottom:14px">
   <span class="ride-icon">${_icon('ride-day.png',indoor?'🚲':'🚴',52)}</span>
-  <div class="ride-lbl" style="margin-bottom:5px">${s.name}</div>
+  <div class="ride-lbl" style="margin-bottom:5px">${s.name}${_sessionInfoBtn(s.name)}</div>
+  ${_sessionExplainer(s.name)}
   <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">⏱ ${s.total} min</span>
