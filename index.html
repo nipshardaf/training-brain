@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.10';
+const APP_VERSION='3.11';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.11',d:'Ready for indoor season — Apple Watch and spin-bike workouts now come through properly',det:'Getting set up for winter training on a spin bike. (1) Indoor rides were at risk of being dropped entirely: the app only recognised a short list of activity names, and an Apple Watch "Indoor Cycle" (or a Peloton/spin session routed through Apple Health) can arrive under several different names depending on which app forwards it. All the common indoor and trainer names are now recognised. (2) Indoor sessions no longer show misleading empty stats — a spin-bike ride with no GPS used to display "0.0 km" and "0 m elevation"; those are now simply left out, so you see the numbers that exist (time, heart rate, and power if your bike reports it). (3) Rides are correctly labelled Indoor rather than Outdoor across all the indoor activity types. (4) Heart-rate-only indoor sessions still get a training-load estimate, so your Fitness and Form keep tracking through winter even without a power meter. Note: Apple Health has no web connection of its own — an iPhone app such as Intervals Companion or HealthFit forwards Apple Watch workouts to intervals.icu, and from there they reach this app automatically.'},
   {v:'3.10',d:'Connect your own Endurain server — plus honest wording about Strava',det:'Two changes. (1) ENDURAIN: if you self-host Endurain, the app can now pull rides straight from it — no third-party service in between. Add your server address and sign in under Settings → Ride sync → Ride sources; only the access token is kept, never your password. Rides arrive with power, normalized power, heart rate, elevation and calories, and are labelled as coming from Endurain. It syncs automatically on app open like the other sources, and non-cycling activities are filtered out. Two requirements: the server must be reachable over https, and it must be configured to allow requests from this app\'s web address — the app explains this if the connection is refused. (2) STRAVA WORDING: the app no longer states that Strava requires a paid subscription unless Strava has actually reported that to the app. If you have not connected Strava, it simply offers to connect; the subscription explanation appears only when Strava itself returns the "inactive application" response.'},
   {v:'3.09',d:'Ride sessions now explain themselves — and tell you the watts to aim for',det:'A heading like "Sweet Spot" means nothing on its own. Every ride session now carries a one-line explanation of what it is and why it\'s in your week, plus — if your FTP is set — the actual power range to target. For a 256W FTP, Sweet Spot reads "Aim for ~225-238W", Tempo "~195-223W", Recovery "~115-154W", and so on, so the session name turns into something you can act on. There\'s also an ⓘ next to the name opening a fuller explanation, including why the weeks rotate: your rides run a repeating 4-week cycle (Build 1 → Build 2 → Peak → Recovery), each week using a different session type — Tempo, Sweet Spot, Hills, then easy — so you develop different systems rather than repeating the same ride. If you haven\'t set an FTP, it says so instead of inventing numbers.'},
   {v:'3.08',d:'No more Strava error popping up every time you open the app',det:'If Strava had deactivated the app\'s API access, the automatic sync on every launch failed and threw the same red error on screen each time — for a sync you never asked for, about a service you may have deliberately stopped using. Background syncs are now silent when they fail: the app skips the Strava call entirely once it knows access is deactivated, and only reports failures when you actually tap a sync button yourself. Nothing is hidden — the current state and the exact error are still in Settings → Ride sync, and "Check again" re-tests whenever you want. You can leave Strava connected indefinitely without it nagging you.'},
@@ -1363,7 +1364,16 @@ function incrementAskQuota(){
 // This was previously copy-pasted in 6 places; the History copy had drifted and
 // was missing EBikeSport/EMountainBikeRide, so those rides showed on the week
 // view but silently vanished from the History list. v2.95.
-const RIDE_TYPE_SET=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile']);
+// Includes indoor/trainer aliases: an Apple Watch "Indoor Cycle" (or a Peloton /
+// spin-bike session routed through Apple Health) can arrive under several names
+// depending on the bridge, and anything not listed here is silently dropped. v3.11.
+const RIDE_TYPE_SET=new Set(['Ride','VirtualRide','EBikeRide','EBikeSport','EMountainBikeRide','GravelRide','MountainBikeRide','Handcycle','Velomobile',
+  'IndoorCycling','Indoor Cycling','Spinning','StationaryBike','Cycling','indoor_cycling','virtual_ride']);
+// Anything recorded on a trainer/spin bike — used to hide outdoor-only stats.
+function _isIndoorRide(a){
+  const t=String(a&&(a.type||a.sport_type)||'');
+  return /virtual|indoor|spin|stationary|trainer/i.test(t);
+}
 const STRAVA_CLIENT_ID='248514';
 const STRAVA_REDIRECT='https://nipshardaf.github.io/training-brain/';
 const _coachCache={};
@@ -5945,20 +5955,20 @@ function rLoggedRideCard(actual){
   return `
 <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.22);border-radius:14px;padding:13px 15px;margin-bottom:13px">
   <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:10px">
-    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ ${rideSourceLabel(actual)} · ${actual.type==='VirtualRide'?'Indoor':'Outdoor'}</div>
+    <div style="font-size:10px;font-weight:700;color:var(--grn);text-transform:uppercase;letter-spacing:.8px">✓ ${rideSourceLabel(actual)} · ${_isIndoorRide(actual)?'Indoor':'Outdoor'}</div>
     ${actual._tss?`<span class="bdg" style="background:rgba(124,58,237,.14);color:var(--acc);font-weight:800">📊 Load ${actual._tssEst?'~':''}${actual._tss}${actual._if?` · Intensity ${actual._tssEst?'~':''}${actual._if}`:''}</span>`:''}
     ${_glossBtn('tss',12)}
     ${actual.suffer_score?`<span class="bdg" style="background:rgba(251,146,60,.12);color:var(--amb)">⚡ Load ${actual.suffer_score}</span>`:''}
     ${actual.kilojoules?`<span class="bdg" style="background:rgba(59,130,246,.1);color:#60a5fa">🔋 ${Math.round(actual.kilojoules)}kJ</span>`:''}
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap">
-    <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${(actual.distance/1000).toFixed(1)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">km</div></div>
+    ${actual.distance>0?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${(actual.distance/1000).toFixed(1)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">km</div></div>`:''}
     <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.moving_time/60)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">min</div></div>
     ${actual.average_heartrate?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_heartrate)}${actual.max_heartrate?`<span style="font-size:13px;font-weight:600;color:var(--t2)"> /${Math.round(actual.max_heartrate)}</span>`:''}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">${actual.max_heartrate?'avg/max ':'avg '}bpm</div></div>`:''}
     ${actual.average_watts?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">avg watts</div></div>`:''}
     ${actual.weighted_average_watts&&actual.weighted_average_watts!==actual.average_watts?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.weighted_average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">NP (W)</div></div>`:''}
     ${!actual.average_watts&&actual.weighted_average_watts?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.weighted_average_watts)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">NP (W)</div></div>`:''}
-    <div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>
+    ${actual.total_elevation_gain>0?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.total_elevation_gain)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">m elev</div></div>`:''}
     ${actual.average_cadence?`<div style="flex:1;min-width:65px;text-align:center"><div style="font-size:20px;font-weight:800;line-height:1.1">${Math.round(actual.average_cadence)}</div><div style="font-size:10px;color:var(--t2);margin-top:2px">rpm</div></div>`:''}
   </div>
   ${actual.name?`<div style="font-size:11px;color:var(--t2);margin-top:9px;font-style:italic">"${_esc(actual.name)}"</div>`:''}
