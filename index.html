@@ -931,10 +931,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.13';
+const APP_VERSION='3.14';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.14',d:'Strength sessions now also arrive via intervals.icu — a second route in, no pairing code needed',det:'v3.13 brought Vitruvian workouts in through Apple Health and the worker inbox. This adds an independent second route: if a strength session lands in intervals.icu — via the Intervals.icu Companion app mirroring Apple Health, HealthFit, a watch strength workout, or a manual FIT upload — the app now pulls it in as well. Since intervals.icu is already connected for rides, this route needs no extra setup at all. The pull is deliberately kept out of icuFetchActivities(): that one appends to the ride list, which feeds the bike fitness curve, so a gym session in there would have quietly inflated your cycling CTL. Strength sessions go to the day log instead, down the same path as the Health bridge. Both routes now share duplicate detection matched within a 15-minute window rather than on the exact instant, because the two sources clock the same workout slightly differently — an exact compare would have had them overwrite each other on every app open. The day card names which route delivered the session, and Check now drains both. The limit is unchanged and applies to both: neither Apple Health nor a FIT file carries sets, reps or weight, so the lifts themselves still come from pasting your summary into Ask Coach.'},
   {v:'3.13',d:'Vitruvian workouts now log themselves — finish on the Trainer+ and the session is already here',det:'Vitruvian publishes no API, so this doesn\'t connect to Vitruvian at all — it rides the trail Vitruvian already leaves. Vitruvian writes each finished workout to Apple Health; a one-time iOS Shortcut automation ("When Vitruvian is closed") reads that workout and posts it to the app\'s Cloudflare worker, where it waits in a small inbox; the app drains that inbox every time it opens. Your phone and the app are never awake together, which is why the queue exists. Sessions land on the day they happened — on extralog_ if a ride already owns that day, matching the extra-gym convention — and are marked complete, so the layoff scan and streaks count them. Crucially a session is only cleared from the inbox once it is safely stored, because the cloud pull overwrites local days outright; anything unconfirmed is simply re-delivered next open and recognised as already logged. WHAT IT CANNOT DO: Apple Health has no field for sets, reps or weight, so those never leave the Vitruvian app. The day card says so plainly rather than staying quiet about it, and offers an "Add my sets" button that jumps to Ask Coach primed with the right date — paste your Vitruvian summary and the existing log_gym_sets tool structures the lifts onto the same day, PRs and all. Pairing is one code in Settings → Vitruvian auto-log; that code only ever unlocks the workout inbox, never Firebase or Strava. Worker v11 adds /vitruvian/session, /pending and /ack, and needs a KV namespace bound as TB_INBOX plus a TB_INGEST_TOKEN secret.'},
   {v:'3.12',d:'Proper backup and restore — your rides and weight history were never actually being saved',det:'A review turned up a real gap. The app contained a full backup function and a restore function, but neither was reachable from anywhere in the app — the only button available exported gym sets to CSV. Worse, the backup itself only covered workouts, plans and PRs: your entire ride history, weight log, profile, extra gym sessions and weekly reviews were excluded, so even a "full backup" would have quietly left most of your data behind. Fixed: the backup now saves everything the app treats as your data (it uses the same definition as cloud sync, so the two can\'t drift apart again), and both buttons now appear under Settings → Account as "Backup & restore". Restoring asks for confirmation first, shows when the backup was taken, and ignores anything unrecognised — previously it would have written every key in the file without warning. Temporary caches are deliberately left out, so backups stay small.'},
   {v:'3.11',d:'Ready for indoor season — Apple Watch and spin-bike workouts now come through properly',det:'Getting set up for winter training on a spin bike. (1) Indoor rides were at risk of being dropped entirely: the app only recognised a short list of activity names, and an Apple Watch "Indoor Cycle" (or a Peloton/spin session routed through Apple Health) can arrive under several different names depending on which app forwards it. All the common indoor and trainer names are now recognised. (2) Indoor sessions no longer show misleading empty stats — a spin-bike ride with no GPS used to display "0.0 km" and "0 m elevation"; those are now simply left out, so you see the numbers that exist (time, heart rate, and power if your bike reports it). (3) Rides are correctly labelled Indoor rather than Outdoor across all the indoor activity types. (4) Heart-rate-only indoor sessions still get a training-load estimate, so your Fitness and Form keep tracking through winter even without a power meter. Note: Apple Health has no web connection of its own — an iPhone app such as Intervals Companion or HealthFit forwards Apple Watch workouts to intervals.icu, and from there they reach this app automatically.'},
@@ -3304,14 +3305,21 @@ function _vitruvianApply(sess){
   const isRideDay=dp&&VIT_RIDE_TYPES.includes(dp.type);
   const key=(isRideDay?'extralog_':'log_')+ds;
   const log=DB.get(key,null)||{date:ds,type:(isRideDay?dp.extraGym?.type:dp?.type)||'PUSH',exercises:[]};
-  // Same workout arriving twice — nothing new to write.
-  if(log.vitruvian&&log.vitruvian.start===sess.start)return null;
+  // Same workout arriving twice — nothing new to write. Matched with a window
+  // rather than on the exact instant because the two sources clock a session
+  // slightly differently (Health's start vs the FIT file's), and an exact
+  // compare would have them overwrite each other on every single open.
+  const prev=log.vitruvian;
+  if(prev&&prev.start&&Math.abs(new Date(prev.start).getTime()-when.getTime())<15*60*1000)return null;
   log.vitruvian={
     start:sess.start,
     dur:sess.duration_min!=null?sess.duration_min:null,
     cal:sess.calories!=null?sess.calories:null,
     hr:sess.avg_hr!=null?sess.avg_hr:null,
     name:sess.name||'Vitruvian',
+    // Which pipe delivered it — the day card names the source, and it tells the
+    // two routes apart when both are live.
+    src:sess.src||'health',
     logged:new Date().toISOString(),
   };
   // Marks the day as trained so the layoff scan and streaks see it even though
@@ -3334,6 +3342,62 @@ function vitruvianAddSets(ds){
     el.value='Log my Vitruvian workout on '+ds+': ';
     el.focus();
   },260);
+}
+
+// A gym session can also reach intervals.icu — via the Intervals.icu Companion
+// app mirroring Apple Health, HealthFit, a watch strength workout, or a manual
+// FIT upload. Pull those too, so the day is covered whichever route is working.
+//
+// Deliberately NOT folded into icuFetchActivities(): that one appends to
+// strava_activities, which feeds _annotateRideLoad and computeFitnessCurve —
+// the BIKE fitness curve. A gym session in there would inflate cycling CTL.
+// These go to the day log instead, through the same path as the Health bridge.
+const ICU_STRENGTH_TYPES=new Set(['WeightTraining','Strength','StrengthTraining']);
+
+async function icuFetchStrength(manual=false){
+  const key=DB.get('icu_key',null);
+  if(!key){if(manual)showToast('⚠️ Connect intervals.icu first','var(--amb)');return;}
+  if(S.guest)return;
+  try{
+    const newest=fd(addDays(new Date(),1));
+    const oldest=fd(addDays(new Date(),-60));
+    const r=await fetch(`${ICU_API}/athlete/0/activities?oldest=${oldest}&newest=${newest}`,
+      {headers:{Authorization:_icuAuthHeader(key)}});
+    if(!r.ok){
+      if(manual)showToast(r.status===401
+        ?'⚠️ intervals.icu rejected that API key — check Settings'
+        :`⚠️ intervals.icu strength sync failed (${r.status})`,'var(--red)');
+      return;
+    }
+    const rows=await r.json();
+    if(!Array.isArray(rows))throw new Error('unexpected response');
+    const applied=[];
+    rows.filter(a=>a&&a.start_date_local&&ICU_STRENGTH_TYPES.has(a.type))
+      .forEach(a=>{
+        const dur=a.moving_time||a.elapsed_time||null;
+        const k=_vitruvianApply({
+          start:a.start_date_local,
+          duration_sec:dur,
+          duration_min:dur?Math.round(dur/60*10)/10:null,
+          calories:a.calories!=null?Math.round(a.calories):null,
+          avg_hr:a.average_heartrate!=null?Math.round(a.average_heartrate):null,
+          name:a.name||'Strength',
+          src:'icu',
+        });
+        if(k)applied.push(k);
+      });
+    DB.set('icu_strength_last_sync',new Date().toISOString());
+    if(applied.length){
+      DB.set('vitruvian_sessions',(DB.get('vitruvian_sessions',0)||0)+applied.length);
+      syncUp();render();
+      showToast(`💪 ${applied.length} strength session${applied.length!==1?'s':''} from intervals.icu`,'var(--grn)');
+    }else if(manual){
+      render();showToast('✓ intervals.icu — no new strength sessions');
+    }
+  }catch(e){
+    if(manual)showToast(`⚠️ intervals.icu strength sync failed: ${e?.message||e}`,'var(--red)');
+    console.warn('[icu strength]',e);
+  }
 }
 
 async function vitruvianFetchSessions(manual=false){
@@ -3876,7 +3940,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -5201,6 +5265,9 @@ function initFirebase(){
           loadFromCloud().then(()=>{
             syncUp();render();
             if(vitruvianConnected())vitruvianFetchSessions();
+            // Same ordering reason as above: this writes day logs, so it has to
+            // follow the pull rather than race it.
+            if(DB.get('icu_key',null))icuFetchStrength();
           });
         }
       }
@@ -6062,11 +6129,11 @@ function rVitruvianCard(ds){
   <div style="display:flex;align-items:center;gap:9px">
     <div style="font-size:20px;line-height:1">💪</div>
     <div style="min-width:0;flex:1">
-      <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.6px">Vitruvian · auto-logged</div>
+      <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.6px">${v.src==='icu'?'Strength · via intervals.icu':'Vitruvian · auto-logged'}</div>
       <div style="font-size:12px;color:var(--t2);margin-top:2px">${bits.join(' · ')||'Session captured'}</div>
     </div>
   </div>
-  ${hasSets?'':`<div style="font-size:11px;color:var(--t2);line-height:1.55;margin-top:9px;padding-top:9px;border-top:1px solid rgba(139,92,246,.2)">Apple Health doesn't carry sets or reps — only the session. To record the lifts, paste your Vitruvian summary into Ask Coach.</div>
+  ${hasSets?'':`<div style="font-size:11px;color:var(--t2);line-height:1.55;margin-top:9px;padding-top:9px;border-top:1px solid rgba(139,92,246,.2)">${v.src==='icu'?'intervals.icu carries the session, not the lifts':"Apple Health doesn't carry sets or reps — only the session"}. To record what you lifted, paste your Vitruvian summary into Ask Coach.</div>
   <button onclick="vitruvianAddSets('${ds}')" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.4);border-radius:9px;color:var(--al);font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;margin-top:9px">🤖 Add my sets</button>`}
 </div>`;
 }
@@ -10300,6 +10367,7 @@ ${(()=>{
       <div style="margin-top:7px">1. Vitruvian writes each finished workout to <strong style="color:var(--txt)">Apple Health</strong>.</div>
       <div>2. A <strong style="color:var(--txt)">Shortcuts automation</strong> ("When Vitruvian is closed") reads that workout and posts it to the worker inbox.</div>
       <div>3. This app drains the inbox every time it opens.</div>
+      <div style="margin-top:7px;padding-top:7px;border-top:1px solid var(--bord)"><strong style="color:var(--txt)">Second route:</strong> if a strength session reaches intervals.icu instead — via the Intervals.icu Companion app, HealthFit, or a watch — the app picks it up from there too, no pairing code needed. Gym sessions go to the day log, never into your ride data, so your cycling fitness curve stays clean.</div>
       <div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bord)">Apple Health stores the session — duration, calories, heart rate — but has no field for sets, reps or weight. Those never leave the Vitruvian app, so to capture the lifts, paste the workout summary into <strong style="color:var(--txt)">Ask Coach</strong> and it will structure them onto the same day.</div>
     </div>
   </details>`;
@@ -10313,7 +10381,7 @@ ${(()=>{
        :`<div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Finished Vitruvian workouts appear on their day automatically. Sets and reps still come from you — paste the summary into Ask Coach.</div>`}
   ${lastSync?`<div style="font-size:11px;color:var(--t2);margin-bottom:10px">Last check: ${lastSync.slice(0,16).replace('T',' ')}</div>`:''}
   <div class="data-btns">
-    <button class="btn btn-s" onclick="vitruvianFetchSessions(true)">🔄 Check now</button>
+    <button class="btn btn-s" onclick="vitruvianFetchSessions(true);if(DB.get('icu_key',null))icuFetchStrength(true)">🔄 Check now</button>
     <button class="btn btn-s" onclick="vitruvianConnect()">🔑 Re-pair</button>
     <button class="btn btn-s" onclick="vitruvianDisconnect()">Disconnect</button>
   </div>
@@ -11412,6 +11480,7 @@ function init(){
   // race the drain and overwrite it, so the auth handler runs it after
   // loadFromCloud() instead.
   if(vitruvianConnected()&&!DB.get('fb_user',null))vitruvianFetchSessions();
+  if(DB.get('icu_key',null)&&!DB.get('fb_user',null))icuFetchStrength();
   // Register service worker for cache-first loading (instant on return visits)
   if('serviceWorker' in navigator){
     navigator.serviceWorker.register('/training-brain/sw.js')
