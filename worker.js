@@ -1,4 +1,5 @@
 // v11 — Vitruvian auto-ingest inbox (/vitruvian/*) fed by an iOS Shortcut
+//       accepts duration in either minutes or seconds
 // v10 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
 //       + Firebase Hosting origins (training-631c1.web.app / .firebaseapp.com)
 //       + fallback max_tokens raised 500 → 1500 (was truncating weekly reviews)
@@ -115,9 +116,15 @@ export default {
           const n = parseFloat(v);
           return (isNaN(n) || n <= 0 || n > max) ? null : Math.round(n * 10) / 10;
         };
+        // Health reports duration in seconds; a Shortcut can hand over either
+        // unit depending on how the value was pulled. Accept both rather than
+        // silently nulling a 2520-second workout for exceeding the minute cap.
+        const durMin = payload.duration_min != null ? num(payload.duration_min, 600)
+                     : payload.duration_sec != null ? num(parseFloat(payload.duration_sec) / 60, 600)
+                     : null;
         const session = {
           start,
-          duration_min: num(payload.duration_min, 600),
+          duration_min: durMin,
           calories:     num(payload.calories, 5000),
           avg_hr:       num(payload.avg_hr, 250),
           name:         String(payload.name || 'Vitruvian').slice(0, 80),
