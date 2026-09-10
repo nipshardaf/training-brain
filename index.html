@@ -283,6 +283,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .plt-chip .plt-lab b{display:block;font-size:12px;color:var(--txt)}
 .plt-chip .plt-lab span{font-size:10px;color:var(--al);font-weight:800}
 .plt-chip .wt-adj{width:28px;height:34px;font-size:16px}
+.plt-chip.plt-bar{outline:1px solid rgba(96,165,250,.35)}
 .plt-reps{display:flex;align-items:center;gap:8px;margin-top:8px}
 .plt-reps label{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
 .plt-reps .set-inp{max-width:90px}
@@ -950,10 +951,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.15';
+const APP_VERSION='3.16';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.16',d:'Plates mode now has a real Bar control — pick 45/35/25 lb or 20/15/10 kg',det:'Hugo pointed out that plates mode only showed plate chips; the bar was hard-coded at 45 lb / 20 kg and only mentioned in hint text. Each plates set card now has a Bar −/value/+ control (first chip) that cycles the common bar options for the current unit (lbs 45→35→25, kg 20→15→10). The chosen bar is stored on the set as set.bar, platesTotal and decomposePlates use it, and empty plates alone correctly yield exactly the bar weight as set.w. Unit toggle clears plates+bar and re-decomposes from the converted set.w, same as before. Assisted machines stay number-only.'},
   {v:'3.15',d:'Set-logger weight −/+ fixed, plus optional plates-per-side entry',det:'Two logging fixes. (1) WEIGHT −/+: the step buttons beside each set weight were effectively stuck on the kg step (2.5) even in lbs mode, because adjW compared the stored unit against "lb" with a "kg" default while the rest of the app uses "lbs"/"kg" (default lbs). They now step 5 lbs or 2.5 kg correctly, read the visible input first so they stay in sync after a unit toggle or mid-edit typing, and update both the main log rows and the day-modal rows. Toggling lbs↔kg also converts the saved set.w values (not just the on-screen inputs), so −/+ after a unit change no longer jumps back to the old number. (2) PLATES MODE: on the set logger you can toggle between number/step entry and plates-per-side. Plates mode lists common plates (lbs 45/35/25/10/5/2.5, kg 20/15/10/5/2.5/1.25), includes a standard bar (45 lb / 20 kg) in the running total, and writes that total into the same set.w field PRs and sync already use. Preference is remembered. Assisted-machine exercises stay on number entry only — plates do not apply to assistance weight.'},
   {v:'3.14',d:'Strength sessions now also arrive via intervals.icu — a second route in, no pairing code needed',det:'v3.13 brought Vitruvian workouts in through Apple Health and the worker inbox. This adds an independent second route: if a strength session lands in intervals.icu — via the Intervals.icu Companion app mirroring Apple Health, HealthFit, a watch strength workout, or a manual FIT upload — the app now pulls it in as well. Since intervals.icu is already connected for rides, this route needs no extra setup at all. The pull is deliberately kept out of icuFetchActivities(): that one appends to the ride list, which feeds the bike fitness curve, so a gym session in there would have quietly inflated your cycling CTL. Strength sessions go to the day log instead, down the same path as the Health bridge. Both routes now share duplicate detection matched within a 15-minute window rather than on the exact instant, because the two sources clock the same workout slightly differently — an exact compare would have had them overwrite each other on every app open. The day card names which route delivered the session, and Check now drains both. The limit is unchanged and applies to both: neither Apple Health nor a FIT file carries sets, reps or weight, so the lifts themselves still come from pasting your summary into Ask Coach.'},
   {v:'3.13',d:'Vitruvian workouts now log themselves — finish on the Trainer+ and the session is already here',det:'Vitruvian publishes no API, so this doesn\'t connect to Vitruvian at all — it rides the trail Vitruvian already leaves. Vitruvian writes each finished workout to Apple Health; a one-time iOS Shortcut automation ("When Vitruvian is closed") reads that workout and posts it to the app\'s Cloudflare worker, where it waits in a small inbox; the app drains that inbox every time it opens. Your phone and the app are never awake together, which is why the queue exists. Sessions land on the day they happened — on extralog_ if a ride already owns that day, matching the extra-gym convention — and are marked complete, so the layoff scan and streaks count them. Crucially a session is only cleared from the inbox once it is safely stored, because the cloud pull overwrites local days outright; anything unconfirmed is simply re-delivered next open and recognised as already logged. WHAT IT CANNOT DO: Apple Health has no field for sets, reps or weight, so those never leave the Vitruvian app. The day card says so plainly rather than staying quiet about it, and offers an "Add my sets" button that jumps to Ask Coach primed with the right date — paste your Vitruvian summary and the existing log_gym_sets tool structures the lifts onto the same day, PRs and all. Pairing is one code in Settings → Vitruvian auto-log; that code only ever unlocks the workout inbox, never Firebase or Strava. Worker v11 adds /vitruvian/session, /pending and /ack, and needs a KV namespace bound as TB_INBOX plus a TB_INGEST_TOKEN secret.'},
@@ -4862,14 +4864,21 @@ function setWeightEntryMode(m){
   DB.set('weight_entry',m==='plates'?'plates':'number');
   _refreshWeightEntryUI();
 }
-function barWeight(){return unit()==='lbs'?45:20;}
-function plateSizes(){return unit()==='lbs'?[45,35,25,10,5,2.5]:[20,15,10,5,2.5,1.25];}
-function platesTotal(counts){
-  const perSide=plateSizes().reduce((s,p)=>s+(Number(counts[p])||0)*p,0);
-  return Math.round((barWeight()+2*perSide)*10)/10;
+function barOptions(){return unit()==='lbs'?[45,35,25]:[20,15,10];}
+function barWeight(set){
+  if(set!=null&&set.bar!=null&&set.bar!==''){
+    const b=parseFloat(set.bar);
+    if(!isNaN(b)&&b>=0)return b;
+  }
+  return unit()==='lbs'?45:20;
 }
-function decomposePlates(total){
-  let rem=Math.max(0,((parseFloat(total)||0)-barWeight())/2);
+function plateSizes(){return unit()==='lbs'?[45,35,25,10,5,2.5]:[20,15,10,5,2.5,1.25];}
+function platesTotal(counts,set){
+  const perSide=plateSizes().reduce((s,p)=>s+(Number(counts[p])||0)*p,0);
+  return Math.round((barWeight(set)+2*perSide)*10)/10;
+}
+function decomposePlates(total,set){
+  let rem=Math.max(0,((parseFloat(total)||0)-barWeight(set))/2);
   rem=Math.round(rem*10)/10;
   const counts={};
   for(const p of plateSizes()){
@@ -4885,7 +4894,7 @@ function getSetPlates(set){
     for(const p of plateSizes())out[p]=Number(set.plates[p])||0;
     return out;
   }
-  return decomposePlates(set&&set.w);
+  return decomposePlates(set&&set.w,set);
 }
 function usePlatesEntry(ex){
   return !!(ex&&!ex.assist&&weightEntryMode()==='plates');
@@ -4907,6 +4916,7 @@ function toggleUnit(){
         if(!isNaN(v)&&v>0){
           set.w=_fmtW(_convertW(v,next));
           delete set.plates; // denominations differ per unit
+          delete set.bar;    // bar options differ per unit — re-decompose with default
         }
       });
     });
@@ -4943,7 +4953,8 @@ function weightNumberControls(ei,si,set,wPh){
 function platesSetCard(ei,si,set,opts){
   opts=opts||{};
   const counts=getSetPlates(set);
-  const tot=set.w!==''&&set.w!=null?set.w:_fmtW(platesTotal(counts));
+  const bar=barWeight(set);
+  const tot=set.w!==''&&set.w!=null?set.w:_fmtW(platesTotal(counts,set));
   const u=unit();
   const tog=opts.togFn||'togSet';
   const rowId=opts.rowId||(`sr${ei}_${si}`);
@@ -4953,8 +4964,13 @@ function platesSetCard(ei,si,set,opts){
     <div class="plt-total"><span id="plt-tot-${ei}-${si}">${tot}</span><small class="unit-lbl">${u}</small></div>
     <button class="set-ck${set.done?' on':''}" id="${opts.ckId||(`ck${ei}_${si}`)}" onclick="${tog}(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>
-  <div class="plt-bar-hint">Bar ${barWeight()}${u} + plates ×2 (per side)</div>
+  <div class="plt-bar-hint">Plates ×2 (per side)</div>
   <div class="plt-grid">
+    <div class="plt-chip plt-bar">
+      <button class="wt-adj" onclick="adjBar(${ei},${si},-1)">−</button>
+      <div class="plt-lab"><b>Bar</b><span id="plt-bar-${ei}-${si}">${bar}</span></div>
+      <button class="wt-adj" onclick="adjBar(${ei},${si},1)">+</button>
+    </div>
     ${plateSizes().map(p=>`<div class="plt-chip">
       <button class="wt-adj" onclick="adjPlate(${ei},${si},${p},-1)">−</button>
       <div class="plt-lab"><b>${p}</b><span id="plt-c-${ei}-${si}-${String(p).replace('.','')}">${counts[p]||0}</span></div>
@@ -4967,6 +4983,32 @@ function platesSetCard(ei,si,set,opts){
   </div>
 </div>`;
 }
+function adjBar(ei,si,dir){
+  if(!S.activeLog)return;
+  const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
+  const opts=barOptions();
+  const cur=barWeight(set);
+  let idx=opts.indexOf(cur);
+  if(idx<0){
+    // Snap to nearest common bar, then step
+    idx=opts.reduce((best,o,i)=>Math.abs(o-cur)<Math.abs(opts[best]-cur)?i:best,0);
+  }
+  // Cycle through common options
+  idx=(idx+dir+opts.length)%opts.length;
+  set.bar=opts[idx];
+  const counts=getSetPlates(set);
+  const clean={};
+  for(const sz of plateSizes())if(counts[sz])clean[sz]=counts[sz];
+  set.plates=clean;
+  set.w=_fmtW(platesTotal(counts,set));
+  set._edited=true;
+  _saveLog();
+  debouncedSync();
+  const tot=document.getElementById(`plt-tot-${ei}-${si}`);
+  if(tot)tot.textContent=set.w;
+  const barEl=document.getElementById(`plt-bar-${ei}-${si}`);
+  if(barEl)barEl.textContent=String(set.bar);
+}
 function adjPlate(ei,si,plate,dir){
   if(!S.activeLog)return;
   const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
@@ -4976,7 +5018,8 @@ function adjPlate(ei,si,plate,dir){
   const clean={};
   for(const sz of plateSizes())if(counts[sz])clean[sz]=counts[sz];
   set.plates=clean;
-  set.w=_fmtW(platesTotal(counts));
+  if(set.bar==null||set.bar==='')set.bar=barWeight(set);
+  set.w=_fmtW(platesTotal(counts,set));
   set._edited=true;
   _saveLog();
   debouncedSync();
@@ -8618,7 +8661,7 @@ function updSet(ei,si,field,val){
   const set=S.activeLog.exercises[ei]?.sets[si];
   if(!set)return;
   set[field]=val;
-  if(field==='w')delete set.plates;
+  if(field==='w'){delete set.plates;delete set.bar;}
   _saveLog();
   debouncedSync();
 }
@@ -8811,6 +8854,7 @@ function adjW(ei,si,dir){
   set.w=_fmtW(nw);
   set._edited=true;
   delete set.plates;
+  delete set.bar;
   _saveLog();
   if(inp){inp.value=set.w;inp.classList.remove('prefilled','ai-fill');}
   const tot=document.getElementById(`plt-tot-${ei}-${si}`);
