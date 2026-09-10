@@ -951,10 +951,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.16';
+const APP_VERSION='3.17';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.17',d:'Changing Rest to Push (etc.) auto-sets the later duplicate gym day to Rest',det:'Hugo: once today\'s Rest becomes Push, nothing cleared the later Push — the week ended with two Push days. No new Swap UI. Rule lives in doSwap (Change-workout sheet and Ask Coach change_day_type). When you change a day TO Push/Pull/Legs/Upper Pump/Full Body, any later same-type day in that week that is not completed and not locked is set to Rest. Past days are never touched. Completed gym logs are never touched. A later day with a partial in-progress log is left alone with an amber toast instead of a confirm dialog. Toast when cleared: "Friday set to Rest — already have Push on Wednesday." Also: Gym→Rest relocation skips if that gym type is already scheduled later, so cascade cannot invent a second copy.'},
   {v:'3.16',d:'Plates mode now has a real Bar control — pick 45/35/25 lb or 20/15/10 kg',det:'Hugo pointed out that plates mode only showed plate chips; the bar was hard-coded at 45 lb / 20 kg and only mentioned in hint text. Each plates set card now has a Bar −/value/+ control (first chip) that cycles the common bar options for the current unit (lbs 45→35→25, kg 20→15→10). The chosen bar is stored on the set as set.bar, platesTotal and decomposePlates use it, and empty plates alone correctly yield exactly the bar weight as set.w. Unit toggle clears plates+bar and re-decomposes from the converted set.w, same as before. Assisted machines stay number-only.'},
   {v:'3.15',d:'Set-logger weight −/+ fixed, plus optional plates-per-side entry',det:'Two logging fixes. (1) WEIGHT −/+: the step buttons beside each set weight were effectively stuck on the kg step (2.5) even in lbs mode, because adjW compared the stored unit against "lb" with a "kg" default while the rest of the app uses "lbs"/"kg" (default lbs). They now step 5 lbs or 2.5 kg correctly, read the visible input first so they stay in sync after a unit toggle or mid-edit typing, and update both the main log rows and the day-modal rows. Toggling lbs↔kg also converts the saved set.w values (not just the on-screen inputs), so −/+ after a unit change no longer jumps back to the old number. (2) PLATES MODE: on the set logger you can toggle between number/step entry and plates-per-side. Plates mode lists common plates (lbs 45/35/25/10/5/2.5, kg 20/15/10/5/2.5/1.25), includes a standard bar (45 lb / 20 kg) in the running total, and writes that total into the same set.w field PRs and sync already use. Preference is remembered. Assisted-machine exercises stay on number entry only — plates do not apply to assistance weight.'},
   {v:'3.14',d:'Strength sessions now also arrive via intervals.icu — a second route in, no pairing code needed',det:'v3.13 brought Vitruvian workouts in through Apple Health and the worker inbox. This adds an independent second route: if a strength session lands in intervals.icu — via the Intervals.icu Companion app mirroring Apple Health, HealthFit, a watch strength workout, or a manual FIT upload — the app now pulls it in as well. Since intervals.icu is already connected for rides, this route needs no extra setup at all. The pull is deliberately kept out of icuFetchActivities(): that one appends to the ride list, which feeds the bike fitness curve, so a gym session in there would have quietly inflated your cycling CTL. Strength sessions go to the day log instead, down the same path as the Health bridge. Both routes now share duplicate detection matched within a 15-minute window rather than on the exact instant, because the two sources clock the same workout slightly differently — an exact compare would have had them overwrite each other on every app open. The day card names which route delivered the session, and Check now drains both. The limit is unchanged and applies to both: neither Apple Health nor a FIT file carries sets, reps or weight, so the lifts themselves still come from pasting your summary into Ask Coach.'},
@@ -10834,45 +10835,81 @@ function doSwap(ds,newType){
   const plan=DB.get(pk,null);if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
   const oldType=plan[di].type;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','FULL_BODY'];
   const wasGym=gymTypes.includes(oldType);
   const goingToRest=newType==='REST';
+  const goingToGym=gymTypes.includes(newType);
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',FULL_BODY:'Full Body'};
+  const dayLong=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const dayName=d=>dayLong[new Date(d+'T12:00:00').getDay()];
   plan[di].type=newType;
-  plan[di].exercises=gymTypes.includes(newType)?genSession(newType):null;
+  plan[di].exercises=goingToGym?genSession(newType):null;
+
+  // v3.17: changing TO a gym type must not leave two of the same type later
+  // in the week (e.g. Rest→Push on Wed while Fri is still Push). Auto-set
+  // later duplicates to Rest. Never touch past days, completed logs, or locked
+  // days. Partial in-progress logs are skipped with a toast instead of a dialog.
+  if(goingToGym){
+    const laterSame=plan.filter(d=>d.date>ds&&d.type===newType&&!d.locked)
+      .sort((a,b)=>a.date.localeCompare(b.date));
+    const cleared=[];
+    let partialSkip=null;
+    for(const d of laterSame){
+      const log=DB.get('log_'+d.date,null);
+      if(log?.completed)continue;
+      if(log?.exercises?.some(e=>e.sets?.some(s=>s.done))){partialSkip=d.date;continue;}
+      const pi=plan.findIndex(p=>p.date===d.date);
+      if(pi!==-1){
+        plan[pi].type='REST';
+        plan[pi].exercises=null;
+        cleared.push(d.date);
+      }
+    }
+    DB.set(pk,plan);
+    closeSwap();syncUp();render();
+    if(partialSkip)showToast(`Kept ${dayName(partialSkip)} as ${tl[newType]||newType} — workout in progress`,'var(--amb)');
+    else if(cleared.length)showToast(`${cleared.map(dayName).join(', ')} set to Rest — already have ${tl[newType]||newType} on ${dayName(ds)}`,'var(--acc)');
+    return;
+  }
+
   // Gym day → REST: try to preserve the displaced workout. Two strategies:
   //  1. PREFERRED: place the displaced gym type into the next available REST
   //     day. This is non-destructive — no other workouts move or get dropped.
   //  2. FALLBACK: if no REST day available, shift everything forward (cascade).
   //     The LAST gym day's original type gets dropped (toast warns the user).
+  // Skip relocation entirely if that gym type is already scheduled later —
+  // otherwise we'd invent a duplicate (the reverse of the rule above).
   if(wasGym&&goingToRest){
-    const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump'};
-    // Strategy 1: find the next REST day to put the displaced workout in
-    const futureRest=plan.filter((d,i)=>i!==di&&d.date>ds&&d.type==='REST'&&!d.locked)
-      .sort((a,b)=>a.date.localeCompare(b.date));
-    if(futureRest.length>0){
-      const target=futureRest[0];
-      const pi=plan.findIndex(p=>p.date===target.date);
-      plan[pi].type=oldType;
-      plan[pi].exercises=genSession(oldType);
-      DB.set(pk,plan);
-      closeSwap();syncUp();render();
-      showToast(`${tl[oldType]||oldType} moved to ${target.date.slice(5)}`,'var(--grn)');
-      return;
-    }
-    // Strategy 2: fall back to cascade (might drop the last gym type)
-    const futureGym=plan.filter((d,i)=>i!==di&&d.date>ds&&gymTypes.includes(d.type)&&!d.locked)
-      .sort((a,b)=>a.date.localeCompare(b.date));
-    if(futureGym.length>0){
-      const cascadeTypes=[oldType,...futureGym.map(d=>d.type)];
-      const droppedType=cascadeTypes[cascadeTypes.length-1]; // last one falls off the end
-      futureGym.forEach((d,i)=>{
-        const pi=plan.findIndex(p=>p.date===d.date);
-        if(pi!==-1){plan[pi].type=cascadeTypes[i];plan[pi].exercises=genSession(cascadeTypes[i]);}
-      });
-      DB.set(pk,plan);
-      closeSwap();syncUp();render();
-      showToast(`Cascaded gym days forward — ${tl[droppedType]||droppedType} dropped (no slot available)`,'var(--amb)');
-      return;
+    const alreadyLater=plan.some(d=>d.date>ds&&d.type===oldType);
+    if(!alreadyLater){
+      // Strategy 1: find the next REST day to put the displaced workout in
+      const futureRest=plan.filter((d,i)=>i!==di&&d.date>ds&&d.type==='REST'&&!d.locked)
+        .sort((a,b)=>a.date.localeCompare(b.date));
+      if(futureRest.length>0){
+        const target=futureRest[0];
+        const pi=plan.findIndex(p=>p.date===target.date);
+        plan[pi].type=oldType;
+        plan[pi].exercises=genSession(oldType);
+        DB.set(pk,plan);
+        closeSwap();syncUp();render();
+        showToast(`${tl[oldType]||oldType} moved to ${target.date.slice(5)}`,'var(--grn)');
+        return;
+      }
+      // Strategy 2: fall back to cascade (might drop the last gym type)
+      const futureGym=plan.filter((d,i)=>i!==di&&d.date>ds&&gymTypes.includes(d.type)&&!d.locked)
+        .sort((a,b)=>a.date.localeCompare(b.date));
+      if(futureGym.length>0){
+        const cascadeTypes=[oldType,...futureGym.map(d=>d.type)];
+        const droppedType=cascadeTypes[cascadeTypes.length-1]; // last one falls off the end
+        futureGym.forEach((d,i)=>{
+          const pi=plan.findIndex(p=>p.date===d.date);
+          if(pi!==-1){plan[pi].type=cascadeTypes[i];plan[pi].exercises=genSession(cascadeTypes[i]);}
+        });
+        DB.set(pk,plan);
+        closeSwap();syncUp();render();
+        showToast(`Cascaded gym days forward — ${tl[droppedType]||droppedType} dropped (no slot available)`,'var(--amb)');
+        return;
+      }
     }
   }
   DB.set(pk,plan);
