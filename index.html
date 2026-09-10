@@ -267,6 +267,25 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .ex-busy-btn:active{background:var(--s3)}
 .unit-toggle{background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;-webkit-appearance:none}
 .unit-toggle:active{background:var(--s3)}
+.entry-tog{display:inline-flex;background:var(--s2);border:1px solid var(--bord);border-radius:8px;overflow:hidden}
+.entry-tog button{background:transparent;border:none;color:var(--t2);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;-webkit-appearance:none;font-family:inherit}
+.entry-tog button.on{background:rgba(124,58,237,.16);color:var(--acc)}
+.plt-card{background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px;margin-bottom:8px}
+.plt-card.s-done{opacity:.72;border-color:rgba(16,185,129,.35)}
+.plt-card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.plt-card-top .set-n{width:28px;text-align:center;font-weight:800;color:var(--t2);font-size:13px}
+.plt-total{flex:1;font-size:18px;font-weight:800;color:var(--txt)}
+.plt-total small{font-size:11px;font-weight:700;color:var(--t2);margin-left:4px}
+.plt-bar-hint{font-size:10px;color:var(--t2);margin:-2px 0 8px 36px}
+.plt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.plt-chip{display:flex;align-items:center;justify-content:space-between;gap:2px;background:var(--s3);border-radius:10px;padding:4px 4px}
+.plt-chip .plt-lab{flex:1;text-align:center;line-height:1.15;min-width:0}
+.plt-chip .plt-lab b{display:block;font-size:12px;color:var(--txt)}
+.plt-chip .plt-lab span{font-size:10px;color:var(--al);font-weight:800}
+.plt-chip .wt-adj{width:28px;height:34px;font-size:16px}
+.plt-reps{display:flex;align-items:center;gap:8px;margin-top:8px}
+.plt-reps label{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
+.plt-reps .set-inp{max-width:90px}
 
 /* lock screen */
 .lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:safe center;padding:calc(20px + var(--st)) calc(20px + var(--sr)) calc(20px + var(--sb)) calc(20px + var(--sl));text-align:center;background:var(--bg);overflow-y:auto}
@@ -931,10 +950,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.14';
+const APP_VERSION='3.15';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.15',d:'Set-logger weight −/+ fixed, plus optional plates-per-side entry',det:'Two logging fixes. (1) WEIGHT −/+: the step buttons beside each set weight were effectively stuck on the kg step (2.5) even in lbs mode, because adjW compared the stored unit against "lb" with a "kg" default while the rest of the app uses "lbs"/"kg" (default lbs). They now step 5 lbs or 2.5 kg correctly, read the visible input first so they stay in sync after a unit toggle or mid-edit typing, and update both the main log rows and the day-modal rows. Toggling lbs↔kg also converts the saved set.w values (not just the on-screen inputs), so −/+ after a unit change no longer jumps back to the old number. (2) PLATES MODE: on the set logger you can toggle between number/step entry and plates-per-side. Plates mode lists common plates (lbs 45/35/25/10/5/2.5, kg 20/15/10/5/2.5/1.25), includes a standard bar (45 lb / 20 kg) in the running total, and writes that total into the same set.w field PRs and sync already use. Preference is remembered. Assisted-machine exercises stay on number entry only — plates do not apply to assistance weight.'},
   {v:'3.14',d:'Strength sessions now also arrive via intervals.icu — a second route in, no pairing code needed',det:'v3.13 brought Vitruvian workouts in through Apple Health and the worker inbox. This adds an independent second route: if a strength session lands in intervals.icu — via the Intervals.icu Companion app mirroring Apple Health, HealthFit, a watch strength workout, or a manual FIT upload — the app now pulls it in as well. Since intervals.icu is already connected for rides, this route needs no extra setup at all. The pull is deliberately kept out of icuFetchActivities(): that one appends to the ride list, which feeds the bike fitness curve, so a gym session in there would have quietly inflated your cycling CTL. Strength sessions go to the day log instead, down the same path as the Health bridge. Both routes now share duplicate detection matched within a 15-minute window rather than on the exact instant, because the two sources clock the same workout slightly differently — an exact compare would have had them overwrite each other on every app open. The day card names which route delivered the session, and Check now drains both. The limit is unchanged and applies to both: neither Apple Health nor a FIT file carries sets, reps or weight, so the lifts themselves still come from pasting your summary into Ask Coach.'},
   {v:'3.13',d:'Vitruvian workouts now log themselves — finish on the Trainer+ and the session is already here',det:'Vitruvian publishes no API, so this doesn\'t connect to Vitruvian at all — it rides the trail Vitruvian already leaves. Vitruvian writes each finished workout to Apple Health; a one-time iOS Shortcut automation ("When Vitruvian is closed") reads that workout and posts it to the app\'s Cloudflare worker, where it waits in a small inbox; the app drains that inbox every time it opens. Your phone and the app are never awake together, which is why the queue exists. Sessions land on the day they happened — on extralog_ if a ride already owns that day, matching the extra-gym convention — and are marked complete, so the layoff scan and streaks count them. Crucially a session is only cleared from the inbox once it is safely stored, because the cloud pull overwrites local days outright; anything unconfirmed is simply re-delivered next open and recognised as already logged. WHAT IT CANNOT DO: Apple Health has no field for sets, reps or weight, so those never leave the Vitruvian app. The day card says so plainly rather than staying quiet about it, and offers an "Add my sets" button that jumps to Ask Coach primed with the right date — paste your Vitruvian summary and the existing log_gym_sets tool structures the lifts onto the same day, PRs and all. Pairing is one code in Settings → Vitruvian auto-log; that code only ever unlocks the workout inbox, never Firebase or Strava. Worker v11 adds /vitruvian/session, /pending and /ack, and needs a KV namespace bound as TB_INBOX plus a TB_INGEST_TOKEN secret.'},
   {v:'3.12',d:'Proper backup and restore — your rides and weight history were never actually being saved',det:'A review turned up a real gap. The app contained a full backup function and a restore function, but neither was reachable from anywhere in the app — the only button available exported gym sets to CSV. Worse, the backup itself only covered workouts, plans and PRs: your entire ride history, weight log, profile, extra gym sessions and weekly reviews were excluded, so even a "full backup" would have quietly left most of your data behind. Fixed: the backup now saves everything the app treats as your data (it uses the same definition as cloud sync, so the two can\'t drift apart again), and both buttons now appear under Settings → Account as "Backup & restore". Restoring asks for confirmation first, shows when the backup was taken, and ignores anything unrecognised — previously it would have written every key in the file without warning. Temporary caches are deliberately left out, so backups stay small.'},
@@ -4816,6 +4836,60 @@ function closeVid(){
 
 /* ── UNIT HELPERS ── */
 function unit(){return DB.get('unit','lbs');}
+function _convertW(v,to){
+  if(isNaN(v)||v<=0)return v;
+  return to==='kg'
+    ?Math.round(v/2.2046*2)/2        // lbs→kg, round to 0.5
+    :Math.round(v*2.2046/2.5)*2.5;   // kg→lbs, round to 2.5
+}
+function _fmtW(n){
+  const x=Math.round(n*10)/10;
+  return x%1===0?String(x):x.toFixed(1);
+}
+function weightEntryMode(){return DB.get('weight_entry','number');}
+function _refreshWeightEntryUI(){
+  const modal=document.getElementById('exlog-modal');
+  if(modal&&S.activeLog){
+    const ei=+modal.dataset.ei, ds=modal.dataset.ds;
+    if(!isNaN(ei)&&S.activeLog.exercises[ei]){
+      showExLogModal(S.activeLog.exercises[ei],ei,ds);
+      return;
+    }
+  }
+  render();
+}
+function setWeightEntryMode(m){
+  DB.set('weight_entry',m==='plates'?'plates':'number');
+  _refreshWeightEntryUI();
+}
+function barWeight(){return unit()==='lbs'?45:20;}
+function plateSizes(){return unit()==='lbs'?[45,35,25,10,5,2.5]:[20,15,10,5,2.5,1.25];}
+function platesTotal(counts){
+  const perSide=plateSizes().reduce((s,p)=>s+(Number(counts[p])||0)*p,0);
+  return Math.round((barWeight()+2*perSide)*10)/10;
+}
+function decomposePlates(total){
+  let rem=Math.max(0,((parseFloat(total)||0)-barWeight())/2);
+  rem=Math.round(rem*10)/10;
+  const counts={};
+  for(const p of plateSizes()){
+    const n=Math.floor((rem+1e-9)/p);
+    counts[p]=n;
+    rem=Math.round((rem-n*p)*10)/10;
+  }
+  return counts;
+}
+function getSetPlates(set){
+  if(set&&set.plates&&typeof set.plates==='object'){
+    const out={};
+    for(const p of plateSizes())out[p]=Number(set.plates[p])||0;
+    return out;
+  }
+  return decomposePlates(set&&set.w);
+}
+function usePlatesEntry(ex){
+  return !!(ex&&!ex.assist&&weightEntryMode()==='plates');
+}
 function toggleUnit(){
   const cur=unit();
   const next=cur==='lbs'?'kg':'lbs';
@@ -4823,21 +4897,94 @@ function toggleUnit(){
   // Convert all visible weight inputs
   document.querySelectorAll('.w-inp').forEach(inp=>{
     const v=parseFloat(inp.value);
-    if(!isNaN(v)&&v>0){
-      const c=next==='kg'
-        ?Math.round(v/2.2046*2)/2        // lbs→kg, round to 0.5
-        :Math.round(v*2.2046/2.5)*2.5;   // kg→lbs, round to 2.5
-      inp.value=c;
-    }
+    if(!isNaN(v)&&v>0)inp.value=_fmtW(_convertW(v,next));
   });
-  document.querySelectorAll('.unit-lbl').forEach(el=>el.textContent=next);
+  // Keep active-log set.w in sync (inputs alone were converted before — −/+ then jumped)
+  if(S.activeLog&&S.activeLog.exercises){
+    S.activeLog.exercises.forEach(le=>{
+      (le.sets||[]).forEach(set=>{
+        const v=parseFloat(set.w);
+        if(!isNaN(v)&&v>0){
+          set.w=_fmtW(_convertW(v,next));
+          delete set.plates; // denominations differ per unit
+        }
+      });
+    });
+    _saveLog();
+  }
+  document.querySelectorAll('.unit-lbl').forEach(el=>{
+    // Preserve an "assist " prefix if present on column headers
+    const assist=/^assist\s/i.test(el.textContent||'');
+    el.textContent=(assist?'assist ':'')+next;
+  });
   document.querySelectorAll('.unit-other').forEach(el=>el.textContent=next==='lbs'?'kg':'lbs');
+  // Plates UI uses different denominations — refresh keeps totals honest
+  if(weightEntryMode()==='plates')_refreshWeightEntryUI();
 }
-function unitBar(){
+function unitBar(ex){
   const u=unit();
-  return`<div style="display:flex;justify-content:flex-end;margin-bottom:6px">
+  const m=weightEntryMode();
+  const showPlates=!(ex&&ex.assist);
+  return`<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+    ${showPlates?`<div class="entry-tog" role="group" aria-label="Weight entry mode">
+      <button type="button" class="${m==='number'?'on':''}" onclick="setWeightEntryMode('number')">123</button>
+      <button type="button" class="${m==='plates'?'on':''}" onclick="setWeightEntryMode('plates')">Plates</button>
+    </div>`:''}
     <button class="unit-toggle" onclick="toggleUnit()"><span class="unit-lbl">${u}</span> → <span class="unit-other">${u==='lbs'?'kg':'lbs'}</span></button>
   </div>`;
+}
+function weightNumberControls(ei,si,set,wPh){
+  return`<div class="wt-wrap">
+      <button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button>
+      <input class="set-inp w-inp${set.w&&!set._edited?(set._ai?' ai-fill':' prefilled'):''}" type="text" inputmode="decimal" placeholder="${wPh||'—'}" value="${set.w||''}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
+      <button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button>
+    </div>`;
+}
+function platesSetCard(ei,si,set,opts){
+  opts=opts||{};
+  const counts=getSetPlates(set);
+  const tot=set.w!==''&&set.w!=null?set.w:_fmtW(platesTotal(counts));
+  const u=unit();
+  const tog=opts.togFn||'togSet';
+  const rowId=opts.rowId||(`sr${ei}_${si}`);
+  return`<div class="plt-card${set.done?' s-done':''}" id="${rowId}">
+  <div class="plt-card-top">
+    <span class="set-n">${opts.label||setLabel(si,set)}</span>
+    <div class="plt-total"><span id="plt-tot-${ei}-${si}">${tot}</span><small class="unit-lbl">${u}</small></div>
+    <button class="set-ck${set.done?' on':''}" id="${opts.ckId||(`ck${ei}_${si}`)}" onclick="${tog}(${ei},${si})">${set.done?'✓':'○'}</button>
+  </div>
+  <div class="plt-bar-hint">Bar ${barWeight()}${u} + plates ×2 (per side)</div>
+  <div class="plt-grid">
+    ${plateSizes().map(p=>`<div class="plt-chip">
+      <button class="wt-adj" onclick="adjPlate(${ei},${si},${p},-1)">−</button>
+      <div class="plt-lab"><b>${p}</b><span id="plt-c-${ei}-${si}-${String(p).replace('.','')}">${counts[p]||0}</span></div>
+      <button class="wt-adj" onclick="adjPlate(${ei},${si},${p},1)">+</button>
+    </div>`).join('')}
+  </div>
+  <div class="plt-reps">
+    <label>Reps</label>
+    <input class="set-inp" type="text" inputmode="numeric" placeholder="${opts.rPh||'—'}" value="${set.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
+  </div>
+</div>`;
+}
+function adjPlate(ei,si,plate,dir){
+  if(!S.activeLog)return;
+  const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
+  const p=parseFloat(plate);
+  const counts=getSetPlates(set);
+  counts[p]=Math.max(0,(counts[p]||0)+dir);
+  const clean={};
+  for(const sz of plateSizes())if(counts[sz])clean[sz]=counts[sz];
+  set.plates=clean;
+  set.w=_fmtW(platesTotal(counts));
+  set._edited=true;
+  _saveLog();
+  debouncedSync();
+  const tot=document.getElementById(`plt-tot-${ei}-${si}`);
+  if(tot)tot.textContent=set.w;
+  const cid='plt-c-'+ei+'-'+si+'-'+String(p).replace('.','');
+  const cnt=document.getElementById(cid);
+  if(cnt)cnt.textContent=String(counts[p]||0);
 }
 
 /* ── LOCK SCREEN ── */
@@ -8429,7 +8576,7 @@ function rLogEx(le,ei){
   <span class="log-ex-chev${isOpen?' open':''}" id="chev${ei}">▾</span>
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
-  ${unitBar()}
+  ${unitBar(ex)}
   ${_prog&&_prog.w!==''&&!allDone?`<div style="font-size:11px;margin-bottom:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px">
     <span style="color:var(--acc);font-weight:800">🎯 Target: ${_prog.w}${unit()} × ${_prog.r}</span>
     ${_prog.change&&_prog.change!=='hold'&&_prog.change!=='match last'?`<span style="font-size:10px;font-weight:800;color:${_prog.change.startsWith('↑')?'var(--grn)':'var(--acc)'};background:${_prog.change.startsWith('↑')?'rgba(16,185,129,.15)':'rgba(124,58,237,.12)'};padding:2px 7px;border-radius:6px">${_prog.change}</span>`:_prog.change==='hold'?`<span style="font-size:10px;font-weight:700;color:var(--t2)">hold</span>`:''}
@@ -8440,17 +8587,15 @@ function rLogEx(le,ei){
   ${_wSwap?`<div style="font-size:11px;font-weight:600;margin-bottom:8px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:8px"><span style="color:var(--amb);flex:1">💡 Try <strong>${EX[_wSwap.toId]?.n||_wSwap.suggested}</strong> — ${_wSwap.reason}</span><button onclick="event.stopPropagation();doExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}','${_wSwap.toId}')" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);border-radius:6px;color:var(--amb);font-size:10px;font-weight:700;padding:4px 9px;cursor:pointer;white-space:nowrap;-webkit-appearance:none">Swap →</button></div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
   ${ex.assist?`<div style="font-size:11px;color:var(--amb);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.45">⚖️ This is <strong>assistance weight</strong> — how much the machine helps. <strong>Lower = stronger.</strong> Your goal is to reduce it over time toward unassisted.</div>`:''}
-  <div class="sets-hdr"><span>#</span><span class="unit-lbl">${ex.assist?'assist '+unit():unit()}</span><span>Reps</span><span>✓</span></div>
+  ${usePlatesEntry(ex)
+    ? le.sets.map((set,si)=>platesSetCard(ei,si,set,{rPh})).join('')
+    : `<div class="sets-hdr"><span>#</span><span class="unit-lbl">${ex.assist?'assist '+unit():unit()}</span><span>Reps</span><span>✓</span></div>
   ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
     <span class="set-n">${setLabel(si,set)}</span>
-    <div class="wt-wrap">
-      <button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button>
-      <input class="set-inp w-inp${set.w&&!set._edited?(set._ai?' ai-fill':' prefilled'):''}" type="text" inputmode="decimal" placeholder="${wPh}" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
-      <button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button>
-    </div>
+    ${weightNumberControls(ei,si,set,wPh)}
     <input class="set-inp" type="text" inputmode="numeric" placeholder="${rPh}" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
-  </div>`).join('')}
+  </div>`).join('')}`}
   <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
   <button class="ex-busy-btn" style="margin-top:10px;width:100%;text-align:center" onclick="openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄 Swap exercise</button>
 </div>
@@ -8473,6 +8618,7 @@ function updSet(ei,si,field,val){
   const set=S.activeLog.exercises[ei]?.sets[si];
   if(!set)return;
   set[field]=val;
+  if(field==='w')delete set.plates;
   _saveLog();
   debouncedSync();
 }
@@ -8489,7 +8635,7 @@ function togSet(ei,si){
   // patch DOM
   const row=document.getElementById(`sr${ei}_${si}`);
   const ck=document.getElementById(`ck${ei}_${si}`);
-  if(row)row.className='set-row'+(set.done?' s-done':'');
+  if(row)row.className=(row.classList.contains('plt-card')?'plt-card':'set-row')+(set.done?' s-done':'');
   if(ck){ck.className='set-ck'+(set.done?' on':'');ck.textContent=set.done?'✓':'○';}
   const allDone=le.sets.every(s=>s.done);
   const doneSets=le.sets.filter(s=>s.done).length;
@@ -8529,17 +8675,26 @@ function addSet(ei){
   if(!S.activeLog)return;
   if(guestLogBlock())return;
   const le=S.activeLog.exercises[ei];if(!le)return;
+  const ex=EX[le.id];
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
-  le.sets.push({w:last.w||'',r:last.r||'',done:false});
+  const neu={w:last.w||'',r:last.r||'',done:false};
+  if(last.plates&&typeof last.plates==='object')neu.plates={...last.plates};
+  le.sets.push(neu);
   _saveLog();
   const body=document.getElementById('lbody'+ei);
   if(!body)return;
   const addBtn=body.querySelector('.add-set');
+  if(usePlatesEntry(ex)){
+    const wrap=document.createElement('div');
+    wrap.innerHTML=platesSetCard(ei,si,neu,{label:String(si+1),rPh:'—'});
+    body.insertBefore(wrap.firstChild,addBtn);
+    return;
+  }
   const div=document.createElement('div');
   div.className='set-row';div.id=`sr${ei}_${si}`;
   div.innerHTML=`<span class="set-n">${si+1}</span>
-    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button><input class="set-inp w-inp" type="text" inputmode="decimal" placeholder="—" value="${last.w||''}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
+    ${weightNumberControls(ei,si,neu,'—')}
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${last.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">○</button>`;
   body.insertBefore(div,addBtn);
@@ -8646,14 +8801,20 @@ function editPR(id){
 function adjW(ei,si,dir){
   if(!S.activeLog)return;
   const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
-  const step=DB.get('unit','kg')==='lb'?5:2.5;
-  const cur=parseFloat(set.w)||0;
+  // unit() stores 'lbs'/'kg' (default lbs). Old code checked ==='lb' with default 'kg',
+  // so the step was always 2.5 even when logging in pounds.
+  const step=unit()==='lbs'?5:2.5;
+  const inp=document.querySelector(`#sr${ei}_${si} .w-inp`)||document.querySelector(`#elr${ei}_${si} .w-inp`);
+  // Prefer visible input so −/+ stays correct after unit toggle or typing before blur
+  const cur=parseFloat(inp&&inp.value!==''?inp.value:set.w)||0;
   const nw=Math.max(0,Math.round((cur+dir*step)*10)/10);
-  set.w=nw%1===0?String(nw):nw.toFixed(1);
+  set.w=_fmtW(nw);
   set._edited=true;
+  delete set.plates;
   _saveLog();
-  const inp=document.querySelector(`#sr${ei}_${si} .w-inp`);
   if(inp){inp.value=set.w;inp.classList.remove('prefilled','ai-fill');}
+  const tot=document.getElementById(`plt-tot-${ei}-${si}`);
+  if(tot)tot.textContent=set.w;
   debouncedSync();
 }
 
@@ -11038,14 +11199,16 @@ function showExLogModal(le,ei,ds){
   const pr=DB.get('prs',{})[le.id];
   const modal=document.createElement('div');
   modal.className='swap-modal';modal.id='exlog-modal';
+  modal.dataset.ei=String(ei);modal.dataset.ds=ds;
   modal.innerHTML=`<div class="swap-ov" onclick="closeExLog('${ds}')"></div>
 <div class="swap-sheet">
   <div class="swap-title">${ex.n}</div>
   ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${pr.w}${unit()}×${pr.r}</span></div>`:''}
   <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
-  ${unitBar()}
-  <div class="sets-hdr"><span>#</span><span class="unit-lbl">${unit()}</span><span>Reps</span><span>✓</span></div>
-  <div id="exlog-rows">${le.sets.map((set,si)=>exLogRow(ei,si,set)).join('')}</div>
+  ${unitBar(ex)}
+  <div id="exlog-rows">${usePlatesEntry(ex)
+    ? le.sets.map((set,si)=>platesSetCard(ei,si,set,{rowId:`elr${ei}_${si}`,ckId:`elk${ei}_${si}`,togFn:'exLogTog',rPh:'—'})).join('')
+    : `<div class="sets-hdr"><span>#</span><span class="unit-lbl">${ex.assist?'assist '+unit():unit()}</span><span>Reps</span><span>✓</span></div>`+le.sets.map((set,si)=>exLogRow(ei,si,set)).join('')}</div>
   <button class="add-set" style="margin-top:6px" onclick="exLogAdd(${ei})">+ Add set</button>
   <button class="btn btn-p" style="margin-top:14px" onclick="closeExLog('${ds}')">Done</button>
 </div>`;
@@ -11056,7 +11219,7 @@ function showExLogModal(le,ei,ds){
 function exLogRow(ei,si,set){
   return`<div class="set-row${set.done?' s-done':''}" id="elr${ei}_${si}">
     <span class="set-n">${setLabel(si,set)}</span>
-    <div class="wt-wrap"><button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button><input class="set-inp w-inp${set.w&&!set._edited?' prefilled':''}" type="text" inputmode="decimal" placeholder="—" value="${set.w}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)"><button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button></div>
+    ${weightNumberControls(ei,si,set,'—')}
     <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="elk${ei}_${si}" onclick="exLogTog(${ei},${si})">${set.done?'✓':'○'}</button>
   </div>`;
@@ -11072,20 +11235,27 @@ function exLogTog(ei,si){
   debouncedSync();
   const row=document.getElementById(`elr${ei}_${si}`);
   const ck=document.getElementById(`elk${ei}_${si}`);
-  if(row)row.className='set-row'+(set.done?' s-done':'');
+  if(row)row.className=(row.classList.contains('plt-card')?'plt-card':'set-row')+(set.done?' s-done':'');
   if(ck){ck.className='set-ck'+(set.done?' on':'');ck.textContent=set.done?'✓':'○';}
 }
 
 function exLogAdd(ei){
   if(!S.activeLog)return;
   const le=S.activeLog.exercises[ei];if(!le)return;
+  const ex=EX[le.id];
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
-  le.sets.push({w:last.w||'',r:last.r||'',done:false});
+  const neu={w:last.w||'',r:last.r||'',done:false};
+  if(last.plates&&typeof last.plates==='object')neu.plates={...last.plates};
+  le.sets.push(neu);
   _saveLog();
   const rows=document.getElementById('exlog-rows');if(!rows)return;
   const div=document.createElement('div');
-  div.innerHTML=exLogRow(ei,si,{w:last.w||'',r:last.r||'',done:false});
+  if(usePlatesEntry(ex)){
+    div.innerHTML=platesSetCard(ei,si,neu,{rowId:`elr${ei}_${si}`,ckId:`elk${ei}_${si}`,togFn:'exLogTog',label:String(si+1),rPh:'—'});
+  }else{
+    div.innerHTML=exLogRow(ei,si,neu);
+  }
   rows.appendChild(div.firstElementChild);
 }
 
