@@ -951,10 +951,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.17';
+const APP_VERSION='3.18';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.18',d:'Swapping one gym day for another now rebalances the rest of your week',det:'Changing a planned gym day to a different gym session — say Push to Pull — used to make the Push simply disappear: the day became Pull, any later Pull was set to Rest, and nothing else in the week picked up the Push. Now it is a real swap. If another upcoming day already has Pull, that day takes the Push instead, with a freshly generated set of exercises. If no day has Pull, the Push moves to your next Rest day. Only if there is no free day left is it skipped, and the app says so. The swap menu also previews this before you choose — for example "↔ Thu becomes Push" — so you know what the rest of your week will look like. Past days, locked days and any day with sets already logged are never changed.'},
   {v:'3.17',d:'Changing Rest to Push (etc.) auto-sets the later duplicate gym day to Rest',det:'Hugo: once today\'s Rest becomes Push, nothing cleared the later Push — the week ended with two Push days. No new Swap UI. Rule lives in doSwap (Change-workout sheet and Ask Coach change_day_type). When you change a day TO Push/Pull/Legs/Upper Pump/Full Body, any later same-type day in that week that is not completed and not locked is set to Rest. Past days are never touched. Completed gym logs are never touched. A later day with a partial in-progress log is left alone with an amber toast instead of a confirm dialog. Toast when cleared: "Friday set to Rest — already have Push on Wednesday." Also: Gym→Rest relocation skips if that gym type is already scheduled later, so cascade cannot invent a second copy.'},
   {v:'3.16',d:'Plates mode now has a real Bar control — pick 45/35/25 lb or 20/15/10 kg',det:'Hugo pointed out that plates mode only showed plate chips; the bar was hard-coded at 45 lb / 20 kg and only mentioned in hint text. Each plates set card now has a Bar −/value/+ control (first chip) that cycles the common bar options for the current unit (lbs 45→35→25, kg 20→15→10). The chosen bar is stored on the set as set.bar, platesTotal and decomposePlates use it, and empty plates alone correctly yield exactly the bar weight as set.w. Unit toggle clears plates+bar and re-decomposes from the converted set.w, same as before. Assisted machines stay number-only.'},
   {v:'3.15',d:'Set-logger weight −/+ fixed, plus optional plates-per-side entry',det:'Two logging fixes. (1) WEIGHT −/+: the step buttons beside each set weight were effectively stuck on the kg step (2.5) even in lbs mode, because adjW compared the stored unit against "lb" with a "kg" default while the rest of the app uses "lbs"/"kg" (default lbs). They now step 5 lbs or 2.5 kg correctly, read the visible input first so they stay in sync after a unit toggle or mid-edit typing, and update both the main log rows and the day-modal rows. Toggling lbs↔kg also converts the saved set.w values (not just the on-screen inputs), so −/+ after a unit change no longer jumps back to the old number. (2) PLATES MODE: on the set logger you can toggle between number/step entry and plates-per-side. Plates mode lists common plates (lbs 45/35/25/10/5/2.5, kg 20/15/10/5/2.5/1.25), includes a standard bar (45 lb / 20 kg) in the running total, and writes that total into the same set.w field PRs and sync already use. Preference is remembered. Assisted-machine exercises stay on number entry only — plates do not apply to assistance weight.'},
@@ -10815,14 +10816,53 @@ function setShortWeek(n){
   genPlan();
 }
 
+// v3.18: what happens to the rest of the week when a gym day changes to a
+// DIFFERENT gym type (e.g. Push → Pull). Previously the replaced session just
+// vanished and a later Pull was set to Rest, so the week lost its Push. Now:
+//  swap — another upcoming day already has the new type → it takes the old one
+//  move — nobody has the new type → the old session goes to the next Rest day
+//  drop — no free day left → the old session is skipped this week
+//  none — the old type is still scheduled elsewhere, nothing to rehome
+// Past days, locked days, and days with logged work are never touched.
+// Shared by openSwap (preview) and doSwap (apply) so they can't disagree.
+function _swapCounterpart(plan,ds,newType){
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','FULL_BODY'];
+  const cur=plan&&plan.find(d=>d.date===ds);
+  if(!cur)return null;
+  const oldType=cur.type;
+  if(!gymTypes.includes(oldType)||!gymTypes.includes(newType)||oldType===newType)return null;
+  const todayStr=fd(new Date());
+  const free=d=>d.date!==ds&&d.date>=todayStr&&!d.locked&&!_dayWasDone(d);
+  // Prefer the nearest later day; otherwise the nearest earlier day still ahead of today
+  const cands=plan.filter(d=>free(d)&&d.type===newType).sort((a,b)=>{
+    const al=a.date>ds,bl=b.date>ds;
+    if(al!==bl)return al?-1:1;
+    return al?a.date.localeCompare(b.date):b.date.localeCompare(a.date);
+  });
+  if(cands.length)return{kind:'swap',date:cands[0].date,oldType};
+  if(plan.some(d=>d.date!==ds&&d.date>=todayStr&&d.type===oldType))return{kind:'none',oldType};
+  const rest=plan.filter(d=>free(d)&&d.date>ds&&d.type==='REST').sort((a,b)=>a.date.localeCompare(b.date))[0];
+  if(rest)return{kind:'move',date:rest.date,oldType};
+  return{kind:'drop',oldType};
+}
 function openSwap(ds){
+  const plan=DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null);
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',FULL_BODY:'Full Body'};
+  const dn=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T12:00:00').getDay()];
+  const preview=t=>{
+    const cp=_swapCounterpart(plan,ds,t);
+    if(!cp||cp.kind==='none')return'';
+    const o=tl[cp.oldType]||cp.oldType;
+    const txt=cp.kind==='swap'?`↔ ${dn(cp.date)} becomes ${o}`:cp.kind==='move'?`→ ${o} moves to ${dn(cp.date)}`:`${o} skipped this week — no free day`;
+    return`<em style="display:block;font-style:normal;font-size:11px;font-weight:700;color:${cp.kind==='drop'?'var(--amb)':'var(--al)'};margin-top:3px">${txt}</em>`;
+  };
   const modal=document.createElement('div');
   modal.className='swap-modal';
   modal.id='swap-modal';
   modal.innerHTML=`<div class="swap-ov" onclick="closeSwap()"></div>
 <div class="swap-sheet">
   <div class="swap-title">Change workout for this day</div>
-  ${Object.entries(WI).map(([t,w])=>`<button class="swap-opt" onclick="doSwap('${ds}','${t}')">${w.i} ${typeof w.l==='function'?w.l():w.l}<span>${typeof w.d==='function'?w.d():w.d}</span></button>`).join('')}
+  ${Object.entries(WI).map(([t,w])=>`<button class="swap-opt" onclick="doSwap('${ds}','${t}')">${w.i} ${typeof w.l==='function'?w.l():w.l}<span>${typeof w.d==='function'?w.d():w.d}</span>${preview(t)}</button>`).join('')}
   <button class="swap-cancel" onclick="closeSwap()">Cancel</button>
 </div>`;
   document.body.appendChild(modal);
@@ -10842,8 +10882,25 @@ function doSwap(ds,newType){
   const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',FULL_BODY:'Full Body'};
   const dayLong=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const dayName=d=>dayLong[new Date(d+'T12:00:00').getDay()];
+  // v3.18: work out where the replaced session goes BEFORE this day changes,
+  // then rebalance that other day with a freshly generated workout.
+  const cp=_swapCounterpart(plan,ds,newType);
   plan[di].type=newType;
   plan[di].exercises=goingToGym?genSession(newType):null;
+  let cpMsg='';
+  if(cp&&(cp.kind==='swap'||cp.kind==='move')){
+    const ci=plan.findIndex(p=>p.date===cp.date);
+    if(ci!==-1){
+      plan[ci].type=cp.oldType;
+      plan[ci].exercises=genSession(cp.oldType);
+      delete plan[ci].extraGym;
+      cpMsg=cp.kind==='swap'
+        ?`Swapped — ${dayName(cp.date)} is now ${tl[cp.oldType]||cp.oldType}`
+        :`${tl[cp.oldType]||cp.oldType} moved to ${dayName(cp.date)}`;
+    }
+  }else if(cp&&cp.kind==='drop'){
+    cpMsg=`${tl[cp.oldType]||cp.oldType} skipped this week — no free day to move it to`;
+  }
 
   // v3.17: changing TO a gym type must not leave two of the same type later
   // in the week (e.g. Rest→Push on Wed while Fri is still Push). Auto-set
@@ -10867,8 +10924,11 @@ function doSwap(ds,newType){
     }
     DB.set(pk,plan);
     closeSwap();syncUp();render();
-    if(partialSkip)showToast(`Kept ${dayName(partialSkip)} as ${tl[newType]||newType} — workout in progress`,'var(--amb)');
-    else if(cleared.length)showToast(`${cleared.map(dayName).join(', ')} set to Rest — already have ${tl[newType]||newType} on ${dayName(ds)}`,'var(--acc)');
+    const parts=[];
+    if(cpMsg)parts.push(cpMsg);
+    if(cleared.length)parts.push(`${cleared.map(dayName).join(', ')} set to Rest — already have ${tl[newType]||newType} on ${dayName(ds)}`);
+    if(partialSkip)parts.push(`kept ${dayName(partialSkip)} as ${tl[newType]||newType} — workout in progress`);
+    if(parts.length)showToast(parts.join(' · '),(partialSkip||cp?.kind==='drop')?'var(--amb)':'var(--acc)');
     return;
   }
 
