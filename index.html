@@ -951,10 +951,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.19';
+const APP_VERSION='3.20';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.20',d:'Fix: tapping Log sets could open a different exercise — and save your sets to it',det:'Reported with a screenshot: tapping Log sets on Glute Bridge (a Legs day) opened a sheet titled T-Bar Row, showing that exercise\'s PR and its already-logged sets. CAUSE: the day card and the set sheet disagreed about how to find an exercise. The card looks it up by ID — rExList does exercises.find(e=>e.id===id) — but openExLog was handed the ID and ignored it, reading log.exercises[planIndex] instead. Those two lists only line up while the log is a faithful copy of the plan. They drift apart as soon as the day\'s type is changed after logging has started (the plan becomes Legs while the log still holds the Pull exercises it was created with), the coach swaps an exercise, or the log arrives from a CSV import or an auto-logged session. Once drifted, position 1 in the plan (Glute Bridge) and position 1 in the log (T-Bar Row) are different exercises. This was not only a wrong title: exLogTog and exLogAdd write to that same index, so every set typed into the sheet was saved against the wrong exercise, and ticking one could set a PR on a lift you had not done. The same mistake sat in doExSwap, which replaced log.exercises[planIndex] when swapping — quietly destroying the logged sets of whichever exercise happened to occupy that slot. FIX: both now resolve the log entry by exercise ID, matching how the card already worked. If the tapped exercise is in the plan but missing from the log (day re-typed, or the log was created empty by an auto-logged session) it now gets a proper entry instead of the button doing nothing. Existing logs are left exactly as they are — sets recorded against the old day type are real training and stay in your history; they simply no longer sit in the way.'},
   {v:'3.19',d:'Fix — a gym workout logged on the same day as a ride no longer disappears',det:'If you rode and then did a gym session on the same day, the app could make the gym workout look erased. When the ride synced, it offered to "make it a ride day" even though you had already logged sets, and accepting turned the day into a ride day — which never displayed that day\'s gym log, and pushed the session you\'d just done onto a later day. Your sets were still saved, just hidden. Now: the app no longer offers to replace a gym day once you\'ve logged sets on it — it treats the day as "did both" and shows the ride alongside your workout. If a day was already converted, its logged sets now appear on the ride day under "logged this day". The AI coach follows the same rule.'},
   {v:'3.18',d:'Swapping one gym day for another now rebalances the rest of your week',det:'Changing a planned gym day to a different gym session — say Push to Pull — used to make the Push simply disappear: the day became Pull, any later Pull was set to Rest, and nothing else in the week picked up the Push. Now it is a real swap. If another upcoming day already has Pull, that day takes the Push instead, with a freshly generated set of exercises. If no day has Pull, the Push moves to your next Rest day. Only if there is no free day left is it skipped, and the app says so. The swap menu also previews this before you choose — for example "↔ Thu becomes Push" — so you know what the rest of your week will look like. Past days, locked days and any day with sets already logged are never changed.'},
   {v:'3.17',d:'Changing Rest to Push (etc.) auto-sets the later duplicate gym day to Rest',det:'Hugo: once today\'s Rest becomes Push, nothing cleared the later Push — the week ended with two Push days. No new Swap UI. Rule lives in doSwap (Change-workout sheet and Ask Coach change_day_type). When you change a day TO Push/Pull/Legs/Upper Pump/Full Body, any later same-type day in that week that is not completed and not locked is set to Rest. Past days are never touched. Completed gym logs are never touched. A later day with a partial in-progress log is left alone with an amber toast instead of a confirm dialog. Toast when cleared: "Friday set to Rest — already have Push on Wednesday." Also: Gym→Rest relocation skips if that gym type is already scheduled later, so cascade cannot invent a second copy.'},
@@ -11368,9 +11369,25 @@ function openExLog(exId,exIdx,ds){
     }),completed:false};
     DB.set(DB.lk(date),log);
   }
+  // Resolve the log entry by exercise ID, never by the plan's position.
+  // dp.exercises (the plan) and log.exercises (what's been logged) drift apart
+  // whenever the day's type is changed after logging starts, the coach swaps an
+  // exercise, or the log arrives from a CSV/auto-log rather than the plan. The
+  // card already matches on ID (see rExList), so indexing here opened a
+  // DIFFERENT exercise than the one tapped — and every set typed into that
+  // sheet was saved against it, PRs included.
+  let li=log.exercises.findIndex(e=>e.id===exId);
+  if(li===-1){
+    // In today's plan but absent from the log — the day was re-typed after the
+    // log existed, or the log was created empty by an auto-logged session.
+    // Give it a real entry rather than leaving the button dead.
+    log.exercises.push({id:exId,sets:makeSets(exId,S.energy||'okay',getLastLog(exId))});
+    li=log.exercises.length-1;
+    DB.set(DB.lk(date),log);
+  }
   S.activeLog=log;S.activeLogKey=DB.lk(date);
-  const le=log.exercises[exIdx];if(!le)return;
-  showExLogModal(le,exIdx,ds);
+  const le=log.exercises[li];if(!le)return;
+  showExLogModal(le,li,ds);
 }
 
 function showExLogModal(le,ei,ds){
@@ -11453,11 +11470,16 @@ function doExSwap(oldId,exIdx,ds,type,newId){
     const di=plan.findIndex(d=>d.date===ds);
     if(di!==-1&&plan[di].exercises){plan[di].exercises[exIdx]=newId;DB.set(pk,plan);}
   }
-  // Update active log if we're currently logging this day
+  // Update active log if we're currently logging this day. Matched on the
+  // outgoing exercise's ID for the same reason as openExLog: the plan index
+  // isn't the log index once the two lists diverge, and writing by position
+  // here overwrote an unrelated exercise's logged sets.
   if(S.activeLog&&S.activeLog.date===ds){
-    const ex=EX[newId];
     const last=getLastLog(newId);
-    S.activeLog.exercises[exIdx]={id:newId,sets:makeSets(newId,S.energy||'okay',last)};
+    const entry={id:newId,sets:makeSets(newId,S.energy||'okay',last)};
+    const li=S.activeLog.exercises.findIndex(e=>e.id===oldId);
+    if(li!==-1)S.activeLog.exercises[li]=entry;
+    else S.activeLog.exercises.push(entry);
     _saveLog();
   }
   closeExSwap();debouncedSync();render();
