@@ -951,10 +951,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.18';
+const APP_VERSION='3.19';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.19',d:'Fix — a gym workout logged on the same day as a ride no longer disappears',det:'If you rode and then did a gym session on the same day, the app could make the gym workout look erased. When the ride synced, it offered to "make it a ride day" even though you had already logged sets, and accepting turned the day into a ride day — which never displayed that day\'s gym log, and pushed the session you\'d just done onto a later day. Your sets were still saved, just hidden. Now: the app no longer offers to replace a gym day once you\'ve logged sets on it — it treats the day as "did both" and shows the ride alongside your workout. If a day was already converted, its logged sets now appear on the ride day under "logged this day". The AI coach follows the same rule.'},
   {v:'3.18',d:'Swapping one gym day for another now rebalances the rest of your week',det:'Changing a planned gym day to a different gym session — say Push to Pull — used to make the Push simply disappear: the day became Pull, any later Pull was set to Rest, and nothing else in the week picked up the Push. Now it is a real swap. If another upcoming day already has Pull, that day takes the Push instead, with a freshly generated set of exercises. If no day has Pull, the Push moves to your next Rest day. Only if there is no free day left is it skipped, and the app says so. The swap menu also previews this before you choose — for example "↔ Thu becomes Push" — so you know what the rest of your week will look like. Past days, locked days and any day with sets already logged are never changed.'},
   {v:'3.17',d:'Changing Rest to Push (etc.) auto-sets the later duplicate gym day to Rest',det:'Hugo: once today\'s Rest becomes Push, nothing cleared the later Push — the week ended with two Push days. No new Swap UI. Rule lives in doSwap (Change-workout sheet and Ask Coach change_day_type). When you change a day TO Push/Pull/Legs/Upper Pump/Full Body, any later same-type day in that week that is not completed and not locked is set to Rest. Past days are never touched. Completed gym logs are never touched. A later day with a partial in-progress log is left alone with an amber toast instead of a confirm dialog. Toast when cleared: "Friday set to Rest — already have Push on Wednesday." Also: Gym→Rest relocation skips if that gym type is already scheduled later, so cascade cannot invent a second copy.'},
   {v:'3.16',d:'Plates mode now has a real Bar control — pick 45/35/25 lb or 20/15/10 kg',det:'Hugo pointed out that plates mode only showed plate chips; the bar was hard-coded at 45 lb / 20 kg and only mentioned in hint text. Each plates set card now has a Bar −/value/+ control (first chip) that cycles the common bar options for the current unit (lbs 45→35→25, kg 20→15→10). The chosen bar is stored on the set as set.bar, platesTotal and decomposePlates use it, and empty plates alone correctly yield exactly the bar weight as set.w. Unit toggle clears plates+bar and re-decomposes from the converted set.w, same as before. Assisted machines stay number-only.'},
@@ -4379,7 +4380,7 @@ function rRideOnGymDayBanner(){
     const ride=stravaRideOnDate(dp.date);
     if(!ride)continue;                          // no ride that day
     const log=DB.get('log_'+dp.date,null);
-    if(log?.completed)continue;                 // gym already done too — nothing to decide
+    if(log?.completed||_gymSetsLogged(dp.date))continue; // gym already done/logged — nothing to decide (v3.19)
     const km=+((ride.distance||0)/1000).toFixed(1);
     const min=Math.round((ride.moving_time||0)/60);
     const wi=WI[dp.type]||{};
@@ -6211,8 +6212,9 @@ function rDay(){
   // decide whether to ALSO do the gym work, or cascade the gym forward and
   // count today as the ride day. v2.43. The prompt hides after the user has
   // chosen "Keep both" (dp.rideAlongside === true).
-  const stravaRideOnThisDay=isGym&&!dp.rideAlongside?stravaRideOnDate(ds):null;
-  const rideAlongsideAck=isGym&&dp.rideAlongside?stravaRideOnDate(ds):null;
+  // v3.19: never offer "replace gym with ride" once sets are logged — you did both.
+  const stravaRideOnThisDay=isGym&&!dp.rideAlongside&&!_gymSetsLogged(ds)?stravaRideOnDate(ds):null;
+  const rideAlongsideAck=isGym&&(dp.rideAlongside||_gymSetsLogged(ds))?stravaRideOnDate(ds):null;
   // A ride logged on a REST day — surface its details so tapping in shows the
   // ride, not just the mobility plan (the week row already overrides to it). v2.88.
   const restDayRide=dp.type==='REST'?stravaRideOnDate(ds):null;
@@ -6288,7 +6290,7 @@ ${(()=>{
 })()}
 ${rVitruvianCard(ds)}
 ${isGym&&dp.exercises?rExList(dp,log):''}
-${isRide?rRideCard(dp):''}
+${isRide?rRideCard(dp)+rLoggedGymOnRideDay(ds):''}
 ${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
 ${dp.type==='REST'?rRestCard():''}
 ${isGym?`<button class="btn btn-p mt12" onclick="startLog('${ds}')">${log&&log.completed?'✓ '+_T('view_log'):log?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button>`:''}
@@ -7524,7 +7526,8 @@ const COACH_TOOL_HANDLERS={
       const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
       if(!d||!gymTypes.includes(d.type))return{ok:false,msg:'Not a gym day'};
       if(!stravaRideOnDate(date))return{ok:false,msg:'No Strava ride on that date'};
-      replaceGymWithRide(date);
+      const res=replaceGymWithRide(date);
+      if(res==='kept')return{ok:true,msg:`Gym sets are already logged on ${date} — kept that workout and recorded the ride alongside instead of replacing it`};
       return{ok:true,msg:`Replaced ${date} gym with the ride`};
     }
   },
@@ -11073,12 +11076,47 @@ function addGymToRideDay(dateStr,gymType,shift){
 // and the user wants to count today as the ride day. Replace today's plan type
 // with a ride (matched to the actual ride: indoor vs outdoor, short vs long)
 // and cascade the displaced gym work forward, shifting the last gym day to REST.
+// v3.19: has real gym work (at least one completed set) been logged on this day?
+function _gymSetsLogged(ds){
+  const log=DB.get('log_'+ds,null);
+  return !!log?.exercises?.some(e=>e.sets?.some(s=>s.done));
+}
+// v3.19: gym sets logged on a day that is now a ride day. Converting a gym day
+// to a ride day (replaceGymWithRide) never deleted log_<date>, but ride days
+// never rendered it — so the sets looked erased. Always show them.
+function rLoggedGymOnRideDay(ds){
+  const log=DB.get('log_'+ds,null);
+  const done=(log?.exercises||[])
+    .map(e=>({id:e.id,sets:(e.sets||[]).filter(s=>s.done)}))
+    .filter(e=>e.sets.length);
+  if(!done.length)return'';
+  const u=unit();
+  const wi=WI[log.type]||{};
+  const lbl=typeof wi.l==='function'?wi.l():(wi.l||log.type||'Gym');
+  return`<div class="card" style="margin-top:14px">
+  <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.8px;margin-bottom:9px">💪 ${_esc(lbl)} logged this day</div>
+  ${done.map(e=>`<div style="margin-bottom:8px">
+    <div style="font-size:13px;font-weight:700">${_esc(EX[e.id]?.n||e.id)}</div>
+    <div style="font-size:12px;color:var(--t2);margin-top:2px">${e.sets.map(s=>`${s.w?s.w+u:'—'} × ${s.r||'—'}`).join(' · ')}</div>
+  </div>`).join('')}
+</div>`;
+}
 function replaceGymWithRide(dateStr){
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   if(!plan)return;
   const di=plan.findIndex(d=>d.date===dateStr);
   if(di<0)return;
+  // v3.19: if gym sets are already logged, you did BOTH — converting the day
+  // would hide that workout and push a session you've already done onto a
+  // later day. Keep the gym day and record the ride alongside instead.
+  if(_gymSetsLogged(dateStr)){
+    plan[di].rideAlongside=true;
+    DB.set(pk,plan);
+    syncUp();render();
+    showToast('You already logged this gym workout — kept it and added the ride alongside','var(--grn)');
+    return'kept';
+  }
   const a=stravaRideOnDate(dateStr);
   if(!a)return;
   const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
@@ -11123,6 +11161,7 @@ function replaceGymWithRide(dateStr){
   syncUp();
   go('week',{_dir:'back'});
   showToast(`🔄 ${displacedType.charAt(0)+displacedType.slice(1).toLowerCase()} cascaded forward — today is now a ride day`,'var(--grn)');
+  return'converted';
 }
 
 // User chose to keep BOTH the planned gym AND the logged ride. We track this
