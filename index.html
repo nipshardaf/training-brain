@@ -413,6 +413,7 @@ const EX = {
   // ── Single-leg (unilateral) variants (v2.68) — discoverable via manual swap
   // and the AI "make legs unilateral" tool. Not in default SLOTS rotation. ──
   sl_squat:     {n:'Single-Leg Squat',     g:'quad',     t:'C',sets:3,reps:'8/leg', rpe:'8',  m:'Quads · Glutes',          p:'One_Leg_Barbell_Squat',                   uni:true},
+  sl_leg_press: {n:'Single-Leg Leg Press', g:'quad',     t:'C',sets:3,reps:'10/leg',rpe:'7',  m:'Quads · Glutes',          p:null,                                       uni:true},
   reverse_lunge:{n:'Reverse Lunge',        g:'quad',     t:'C',sets:3,reps:'10/leg',rpe:'7',  m:'Quads · Glutes',          p:'Dumbbell_Rear_Lunge',                     uni:true},
   sl_legext:    {n:'Single-Leg Leg Extension',g:'quad',  t:'I',sets:3,reps:'12/leg',rpe:'7',  m:'Quads',                   p:'Single-Leg_Leg_Extension',                uni:true},
   sl_rdl:       {n:'Single-Leg Deadlift',  g:'ham',      t:'C',sets:3,reps:'8/leg', rpe:'8',  m:'Hamstrings · Glutes',     p:'Kettlebell_One-Legged_Deadlift',          uni:true},
@@ -537,7 +538,7 @@ const EX_EQUIP={
   mountain_climber:['bodyweight'],bicycle_crunch:['bodyweight'],side_plank:['bodyweight'],
   leg_raise_floor:['bodyweight'],crunch:['bodyweight'],burpee:['bodyweight'],
   // Single-leg variants (v2.68) — tagged so the gym-equipment filter applies
-  sl_squat:['dumbbell'],reverse_lunge:['dumbbell'],sl_legext:['machine'],
+  sl_squat:['dumbbell'],reverse_lunge:['dumbbell'],sl_legext:['machine'],sl_leg_press:['machine'],
   sl_rdl:['dumbbell'],cable_kickback:['cable'],sl_seated_calf:['dumbbell'],
 };
 
@@ -951,10 +952,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.20';
+const APP_VERSION='3.21';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.21',d:'Add Single-Leg Leg Press to the exercise library',det:'Hugo hit this doing legs today: swapping off Leg Press had no single-leg option, even though every other major leg movement already has one (squat, leg extension, RDL, calf). Added sl_leg_press (machine, quad/glute, 10 reps/leg) — it now shows up under \'Same muscle group\' in the manual swap sheet and in exercise search. Checked free-exercise-db for a demo GIF (no unilateral leg press exists there); shows the same styled placeholder + tappable video demo treatment as the library\'s other GIF-less exercises. Also updated the AI make_legs_unilateral tool: Leg Press now converts to Single-Leg Leg Press instead of Reverse Lunge, since a direct equivalent exists now.'},
   {v:'3.20',d:'Fix — logging or swapping a single exercise inside an extra gym session on a ride day did nothing',det:'When a ride day has a stacked gym session added ("+ Add workout"), the per-exercise \'Log sets\' and \'Busy\' buttons inside that extra session\'s exercise list were wired with an undefined date, because the list was rendered from an object that only carried the exercise IDs. Log sets silently did nothing; swapping an exercise closed the picker as if it worked but never changed anything. The big \'Log workout\' button at the bottom of that section was unaffected and always worked. Now the exercise list for an extra gym session carries its date and type like every other exercise list, so both buttons work per-exercise too.'},
   {v:'3.19',d:'Fix — a gym workout logged on the same day as a ride no longer disappears',det:'If you rode and then did a gym session on the same day, the app could make the gym workout look erased. When the ride synced, it offered to "make it a ride day" even though you had already logged sets, and accepting turned the day into a ride day — which never displayed that day\'s gym log, and pushed the session you\'d just done onto a later day. Your sets were still saved, just hidden. Now: the app no longer offers to replace a gym day once you\'ve logged sets on it — it treats the day as "did both" and shows the ride alongside your workout. If a day was already converted, its logged sets now appear on the ride day under "logged this day". The AI coach follows the same rule.'},
   {v:'3.18',d:'Swapping one gym day for another now rebalances the rest of your week',det:'Changing a planned gym day to a different gym session — say Push to Pull — used to make the Push simply disappear: the day became Pull, any later Pull was set to Rest, and nothing else in the week picked up the Push. Now it is a real swap. If another upcoming day already has Pull, that day takes the Push instead, with a freshly generated set of exercises. If no day has Pull, the Push moves to your next Rest day. Only if there is no free day left is it skipped, and the app says so. The swap menu also previews this before you choose — for example "↔ Thu becomes Push" — so you know what the rest of your week will look like. Past days, locked days and any day with sets already logged are never changed.'},
@@ -7435,7 +7437,7 @@ const COACH_TOOLS=[{
 // image library, so curls map to single-leg RDL (a unilateral hamstring move).
 const UNILATERAL_MAP={
   bb_squat:'sl_squat',front_squat:'sl_squat',goblet_squat:'sl_squat',bw_squat:'sl_squat',jump_squat:'sl_squat',
-  hack_squat:'reverse_lunge',leg_press:'reverse_lunge',
+  hack_squat:'reverse_lunge',leg_press:'sl_leg_press',
   rdl:'sl_rdl',deadlift:'sl_rdl',nordic_curl:'sl_rdl',leg_curl:'sl_rdl',seated_leg_curl:'sl_rdl',
   hip_thrust:'cable_kickback',glute_bridge:'sl_glute_bridge',
   leg_ext:'sl_legext',
