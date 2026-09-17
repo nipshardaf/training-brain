@@ -380,6 +380,7 @@ const EX = {
   deadlift:    {n:'Conventional Deadlift',g:'ham',      t:'C',sets:4,reps:'5–6',  rpe:'8–9',m:'Full Posterior Chain',    p:'Barbell_Deadlift'},
   hip_thrust:  {n:'Barbell Hip Thrust',   g:'ham',      t:'C',sets:4,reps:'10–12',rpe:'8',  m:'Glutes · Hamstrings',     p:'Barbell_Hip_Thrust'},
   glute_bridge:{n:'Glute Bridge',         g:'ham',      t:'C',sets:3,reps:'12–15',rpe:'6',  m:'Glutes · Hamstrings',     p:'Barbell_Glute_Bridge'},
+  mach_hip_thrust:{n:'Hip Thrust Machine',g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Glutes · Hamstrings',     p:null},
   glute_kick:  {n:'Cable Glute Kickback', g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Glutes',                  p:'Glute_Kickback',                          uni:true},
   nordic_curl: {n:'Nordic Curl',          g:'ham',      t:'C',sets:3,reps:'5–8',  rpe:'9',  m:'Hamstrings',              p:'Natural_Glute_Ham_Raise'},
   leg_curl:    {n:'Lying Leg Curl',       g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Lying_Leg_Curls'},
@@ -560,7 +561,7 @@ const EX_EQUIP={
   bb_squat:['barbell','rack'],front_squat:['barbell','rack'],leg_press:['machine'],bss:['dumbbell'],
   lunge:['dumbbell'],step_up:['dumbbell'],goblet_squat:['dumbbell'],hack_squat:['machine'],leg_ext:['machine'],
   adductor_mach:['machine'],abductor_mach:['machine'],rdl:['barbell'],deadlift:['barbell'],
-  hip_thrust:['barbell','bench'],glute_bridge:['barbell'],glute_kick:['cable'],nordic_curl:['bodyweight'],
+  hip_thrust:['barbell','bench'],glute_bridge:['barbell'],mach_hip_thrust:['machine'],glute_kick:['cable'],nordic_curl:['bodyweight'],
   leg_curl:['machine'],seated_leg_curl:['machine'],calf_raise:['machine'],seated_calf:['machine'],
   single_calf:['bodyweight'],plank:['bodyweight'],hang_raise:['pullup_bar'],ab_wheel:['ab_wheel'],
   cable_crunch:['cable'],mach_crunch:['machine'],short_foot:['bodyweight'],towel_scrunch:['bodyweight'],
@@ -995,10 +996,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.22';
+const APP_VERSION='3.23';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.23',d:'Add Hip Thrust Machine — the seated belt-in glute machine',det:'Hugo asked specifically for "the machine that belts you in" — the seated hip-thrust machine with a hip belt/strap that a lot of gyms (including commercial chains) now have, distinct from the barbell Hip Thrust already in the library. No demo image exists for it in free-exercise-db (checked; it only has the barbell version), so it shows the same styled placeholder + tappable video demo as the library\'s other GIF-less exercises. Tagged machine equipment, same muscle group as Hip Thrust and Glute Bridge so it shows up alongside them in the swap sheet.'},
   {v:'3.22',d:'Exercise library expanded by 30 — chest, shoulders, arms and back had the thinnest swap options',det:'Hugo asked for more variety after running into the missing single-leg leg press. Audited the library (88 exercises) against free-exercise-db and added 30 new ones concentrated where swap alternatives ran thinnest: chest +4 (Decline Bench, Machine Chest Press, DB Fly, Cable Crossover), shoulders/delts/traps +7 (Machine Shoulder Press, Front Raise, Upright Row, Reverse Pec Deck, Seated Rear Delt Raise, Barbell/DB Shrug), triceps +4 (Close-Grip Bench, Single-Arm Cable Extension, Kickback, Bench Dip), biceps +5 (Concentration Curl, Spider Curl, Reverse Curl, Machine Curl, Zottman Curl), back +6 (Chin-Up, Close-Grip Lat Pulldown, Straight-Arm Pulldown, Elevated Cable Row, Reverse-Grip Row, Lying T-Bar Row), hamstrings/glutes +2 (Good Morning, Cable Pull-Through), core +2 (Russian Twist, Decline Crunch). Every image URL was checked before adding (all resolve). None of these were added to the default SLOTS rotation, so your current weekly plan generation is unaffected — they only show up when you tap Swap (same muscle group / search), which is exactly where the old library ran out of options.'},
   {v:'3.21',d:'Add Single-Leg Leg Press to the exercise library',det:'Hugo hit this doing legs today: swapping off Leg Press had no single-leg option, even though every other major leg movement already has one (squat, leg extension, RDL, calf). Added sl_leg_press (machine, quad/glute, 10 reps/leg) — it now shows up under \'Same muscle group\' in the manual swap sheet and in exercise search. Checked free-exercise-db for a demo GIF (no unilateral leg press exists there); shows the same styled placeholder + tappable video demo treatment as the library\'s other GIF-less exercises. Also updated the AI make_legs_unilateral tool: Leg Press now converts to Single-Leg Leg Press instead of Reverse Lunge, since a direct equivalent exists now.'},
   {v:'3.20',d:'Fix — logging or swapping a single exercise inside an extra gym session on a ride day did nothing',det:'When a ride day has a stacked gym session added ("+ Add workout"), the per-exercise \'Log sets\' and \'Busy\' buttons inside that extra session\'s exercise list were wired with an undefined date, because the list was rendered from an object that only carried the exercise IDs. Log sets silently did nothing; swapping an exercise closed the picker as if it worked but never changed anything. The big \'Log workout\' button at the bottom of that section was unaffected and always worked. Now the exercise list for an extra gym session carries its date and type like every other exercise list, so both buttons work per-exercise too.'},
