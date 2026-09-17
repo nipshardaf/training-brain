@@ -397,6 +397,40 @@ const EX = {
   arch_raise:  {n:'Arch Raise',          g:'foot',     t:'I',sets:3,reps:'12–15',rpe:'4',  m:'Arch · Intrinsic Foot',   p:null},
   toe_spread:  {n:'Toe Spread & Hold',   g:'foot',     t:'I',sets:3,reps:'10×5s', rpe:'3', m:'Intrinsic Foot',          p:null},
   heel_raise:  {n:'Heel Raise (arch)',   g:'foot',     t:'I',sets:3,reps:'15–20',rpe:'5',  m:'Arch · Calves',           p:null,                                      uni:true},
+  // ── v3.22 library expansion — more variety per muscle group so the manual
+  // swap sheet doesn't run dry. Not added to SLOTS (default rotation is
+  // unchanged) — these surface via "Same muscle group" and search, same as
+  // the v2.68 single-leg variants. All images verified against free-exercise-db. ──
+  decline_bench:      {n:'Decline Bench Press',        g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Lower Chest',             p:'Decline_Barbell_Bench_Press'},
+  mach_chest_press:   {n:'Machine Chest Press',         g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Chest · Triceps',         p:'Machine_Bench_Press'},
+  db_fly:             {n:'Dumbbell Fly',                g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest',                   p:'Dumbbell_Flyes'},
+  cable_crossover:    {n:'Cable Crossover',             g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest',                   p:'Cable_Crossover'},
+  mach_shoulder_press:{n:'Machine Shoulder Press',      g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders',               p:'Machine_Shoulder_Military_Press'},
+  front_raise:        {n:'Dumbbell Front Raise',        g:'shoulder', t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Front Delts',             p:'Front_Two-Dumbbell_Raise'},
+  upright_row:        {n:'Upright Row',                 g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders · Traps',       p:'Upright_Barbell_Row'},
+  reverse_pec_deck:   {n:'Reverse Pec Deck',            g:'rdelt',    t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Rear Delts',              p:'Reverse_Machine_Flyes'},
+  seated_rear_delt:   {n:'Seated Rear Delt Raise',      g:'rdelt',    t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Rear Delts',              p:'Seated_Bent-Over_Rear_Delt_Raise'},
+  bb_shrug:           {n:'Barbell Shrug',               g:'shoulder', t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Traps',                   p:'Barbell_Shrug'},
+  db_shrug:           {n:'Dumbbell Shrug',              g:'shoulder', t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Traps',                   p:'Dumbbell_Shrug'},
+  close_grip_bench:   {n:'Close-Grip Bench Press',      g:'tri',      t:'C',sets:4,reps:'8–10', rpe:'8',  m:'Triceps · Chest',         p:'Close-Grip_Barbell_Bench_Press'},
+  cable_tri_1arm:     {n:'Single-Arm Cable Tricep Ext', g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Cable_One_Arm_Tricep_Extension',          uni:true},
+  db_kickback:        {n:'Tricep Kickback',             g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Triceps',                 p:'Tricep_Dumbbell_Kickback'},
+  bench_dip:          {n:'Bench Dip',                   g:'tri',      t:'C',sets:3,reps:'12–15',rpe:'6',  m:'Triceps · Chest',         p:'Bench_Dips',                              bw:true},
+  concentration_curl: {n:'Concentration Curl',          g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Concentration_Curls',                     uni:true},
+  spider_curl:        {n:'Spider Curl',                 g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Spider_Curl'},
+  reverse_curl:       {n:'Reverse Barbell Curl',        g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Forearms · Biceps',       p:'Reverse_Barbell_Curl'},
+  mach_curl:          {n:'Machine Bicep Curl',          g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Machine_Bicep_Curl'},
+  zottman_curl:       {n:'Zottman Curl',                g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps · Forearms',       p:'Zottman_Curl'},
+  chinup:             {n:'Chin-Up',                     g:'vback',    t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Lats · Biceps',           p:'Chin-Up',                                 bw:true},
+  cg_lat_pull:        {n:'Close-Grip Lat Pulldown',     g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Biceps',           p:'Close-Grip_Front_Lat_Pulldown'},
+  straight_arm_pull:  {n:'Straight-Arm Pulldown',       g:'vback',    t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Lats',                    p:'Straight-Arm_Pulldown'},
+  elevated_row:       {n:'Elevated Cable Row',          g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Back',             p:'Elevated_Cable_Rows'},
+  rev_grip_row:       {n:'Reverse-Grip Barbell Row',    g:'hback_h',  t:'C',sets:4,reps:'8–10', rpe:'8',  m:'Back · Biceps',           p:'Reverse_Grip_Bent-Over_Rows'},
+  lying_tbar:         {n:'Lying T-Bar Row',             g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back',                    p:'Lying_T-Bar_Row'},
+  good_morning:       {n:'Good Morning',                g:'ham',      t:'C',sets:3,reps:'8–10', rpe:'7',  m:'Hamstrings · Lower Back', p:'Good_Morning'},
+  cable_pull_through: {n:'Cable Pull-Through',          g:'ham',      t:'C',sets:3,reps:'12–15',rpe:'7',  m:'Glutes · Hamstrings',     p:'Pull_Through'},
+  russian_twist:      {n:'Russian Twist',               g:'core',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Obliques · Core',        p:'Russian_Twist',                           bw:true},
+  decline_crunch:     {n:'Decline Crunch',              g:'core',     t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Abs',                     p:'Decline_Crunch',                          bw:true},
   // ── Bodyweight / home exercises ────────────────────────────────────────────
   pushup:       {n:'Push-Up',              g:'chest',    t:'C',sets:4,reps:'10–15',rpe:'6',  m:'Chest · Triceps',         p:['https://wger.de/media/exercise-images/1551/a6a9e561-3965-45c6-9f2b-ee671e1a3a45.png'], bw:true},
   decline_pu:   {n:'Decline Push-Up',      g:'chest',    t:'C',sets:3,reps:'10–15',rpe:'7',  m:'Upper Chest',             p:'Decline_Push-Up', bw:true},
@@ -540,6 +574,15 @@ const EX_EQUIP={
   // Single-leg variants (v2.68) — tagged so the gym-equipment filter applies
   sl_squat:['dumbbell'],reverse_lunge:['dumbbell'],sl_legext:['machine'],sl_leg_press:['machine'],
   sl_rdl:['dumbbell'],cable_kickback:['cable'],sl_seated_calf:['dumbbell'],
+  // v3.22 library expansion
+  decline_bench:['barbell','bench'],mach_chest_press:['machine'],db_fly:['dumbbell','bench'],cable_crossover:['cable'],
+  mach_shoulder_press:['machine'],front_raise:['dumbbell'],upright_row:['barbell'],reverse_pec_deck:['machine'],
+  seated_rear_delt:['dumbbell'],bb_shrug:['barbell'],db_shrug:['dumbbell'],
+  close_grip_bench:['barbell','bench','rack'],cable_tri_1arm:['cable'],db_kickback:['dumbbell'],bench_dip:['bench'],
+  concentration_curl:['dumbbell'],spider_curl:['ez_bar','incline_bench'],reverse_curl:['barbell'],mach_curl:['machine'],zottman_curl:['dumbbell'],
+  chinup:['pullup_bar'],cg_lat_pull:['machine'],straight_arm_pull:['cable'],elevated_row:['cable'],
+  rev_grip_row:['barbell'],lying_tbar:['machine'],good_morning:['barbell','rack'],cable_pull_through:['cable'],
+  russian_twist:['bodyweight'],decline_crunch:['bodyweight'],
 };
 
 /* ── COACHING CUES ── */
@@ -952,10 +995,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.21';
+const APP_VERSION='3.22';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.22',d:'Exercise library expanded by 30 — chest, shoulders, arms and back had the thinnest swap options',det:'Hugo asked for more variety after running into the missing single-leg leg press. Audited the library (88 exercises) against free-exercise-db and added 30 new ones concentrated where swap alternatives ran thinnest: chest +4 (Decline Bench, Machine Chest Press, DB Fly, Cable Crossover), shoulders/delts/traps +7 (Machine Shoulder Press, Front Raise, Upright Row, Reverse Pec Deck, Seated Rear Delt Raise, Barbell/DB Shrug), triceps +4 (Close-Grip Bench, Single-Arm Cable Extension, Kickback, Bench Dip), biceps +5 (Concentration Curl, Spider Curl, Reverse Curl, Machine Curl, Zottman Curl), back +6 (Chin-Up, Close-Grip Lat Pulldown, Straight-Arm Pulldown, Elevated Cable Row, Reverse-Grip Row, Lying T-Bar Row), hamstrings/glutes +2 (Good Morning, Cable Pull-Through), core +2 (Russian Twist, Decline Crunch). Every image URL was checked before adding (all resolve). None of these were added to the default SLOTS rotation, so your current weekly plan generation is unaffected — they only show up when you tap Swap (same muscle group / search), which is exactly where the old library ran out of options.'},
   {v:'3.21',d:'Add Single-Leg Leg Press to the exercise library',det:'Hugo hit this doing legs today: swapping off Leg Press had no single-leg option, even though every other major leg movement already has one (squat, leg extension, RDL, calf). Added sl_leg_press (machine, quad/glute, 10 reps/leg) — it now shows up under \'Same muscle group\' in the manual swap sheet and in exercise search. Checked free-exercise-db for a demo GIF (no unilateral leg press exists there); shows the same styled placeholder + tappable video demo treatment as the library\'s other GIF-less exercises. Also updated the AI make_legs_unilateral tool: Leg Press now converts to Single-Leg Leg Press instead of Reverse Lunge, since a direct equivalent exists now.'},
   {v:'3.20',d:'Fix — logging or swapping a single exercise inside an extra gym session on a ride day did nothing',det:'When a ride day has a stacked gym session added ("+ Add workout"), the per-exercise \'Log sets\' and \'Busy\' buttons inside that extra session\'s exercise list were wired with an undefined date, because the list was rendered from an object that only carried the exercise IDs. Log sets silently did nothing; swapping an exercise closed the picker as if it worked but never changed anything. The big \'Log workout\' button at the bottom of that section was unaffected and always worked. Now the exercise list for an extra gym session carries its date and type like every other exercise list, so both buttons work per-exercise too.'},
   {v:'3.19',d:'Fix — a gym workout logged on the same day as a ride no longer disappears',det:'If you rode and then did a gym session on the same day, the app could make the gym workout look erased. When the ride synced, it offered to "make it a ride day" even though you had already logged sets, and accepting turned the day into a ride day — which never displayed that day\'s gym log, and pushed the session you\'d just done onto a later day. Your sets were still saved, just hidden. Now: the app no longer offers to replace a gym day once you\'ve logged sets on it — it treats the day as "did both" and shows the ride alongside your workout. If a day was already converted, its logged sets now appear on the ride day under "logged this day". The AI coach follows the same rule.'},
