@@ -996,10 +996,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.24';
+const APP_VERSION='3.25';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.25',d:'Fix — switching lbs/kg silently corrupted progression targets, PR comparisons and the tonnage/progress charts',det:'You confirmed you\'ve switched units before, so this was live, not theoretical. Root cause: nothing in the stored data — sets, PRs — ever recorded WHICH unit a weight was logged in. toggleUnit() only converted the numbers currently on screen; every historical log, PR and chart point stayed a bare number with no way to tell 45 lbs from 45 kg. Three consequences: (1) computeProgressionTarget read your last top set and any PR-anchor fallback as if they were always in today\'s unit, so a stale kg number read as lbs (or vice versa) after a switch would push your \'next target\' weight wildly off — too heavy or too light by roughly 2.2x. (2) checkPR/PR badges everywhere (exercise cards, log rows, swap sheet, PR tab, edit-PR, AI coach prompts) displayed and compared raw stored numbers under whichever unit label happened to be showing, so a PR set before a switch could silently look beaten or unbeaten by the wrong margin. (3) The 12-week tonnage chart and per-exercise progress chart (_scanGymSets) summed/plotted every historical set at face value, so total volume and 1RM trend lines were wrong across any unit switch in the window. FIX: every place a set or PR weight gets written now tags it with the unit it was written in (set.u / prs[id].u) — toggleUnit, the −/+ steppers, plates bar/plate adjustments, manual weight entry, new-set prefill, PR save and PR edit. A new _wToCurrentUnit(v,entryUnit) helper converts a stored weight to whatever unit is currently displayed using that tag, and it\'s now used everywhere a historical weight feeds math or display: progression targets, PR anchor fallback, PR badges/comparisons/edit form, and both charts. IMPORTANT CAVEAT: this is forward-safe only — it cannot retroactively fix weights already logged before this update, because there was never any record of which unit they were in, and untagged legacy data is deliberately left as a no-op passthrough rather than guessed at. If a number from before today looks off after a unit switch, that\'s pre-existing data with no unit tag; anything logged from now on will carry its unit and convert correctly.'},
   {v:'3.24',d:'Real demo GIFs for Burpee and Pike Push-Up (were placeholders)',det:'Found free, openly-licensed demo GIFs for these two on Wikimedia Commons — every file hosted there is required to carry a free-reuse license, same category as the free-exercise-db/wger sources already used throughout the library. IMPORTANT CAVEAT: Wikimedia is blocked by network policy in this environment, so the exact URLs could not be live-verified (no 200 check like the rest of this batch) — they were built from Wikimedia\'s standard file-path convention from confirmed page titles (File:Burpee.gif, File:Pike Push Ups.gif). If either URL is off, the existing onerror fallback (v2.69) just shows the regular styled placeholder — no breakage, worst case is cosmetic. Ask Hugo to confirm these actually render before relying on it. The other confirmed gaps (Wall Sit, 4 foot-mobility exercises, Single-Leg Leg Press, Hip Thrust Machine) still have no image anywhere in the free databases — genuinely don\'t exist as hotlinkable assets, not a search failure — so they keep the placeholder card, which is already tappable into a real auto-found YouTube tutorial (v2.70/v2.71 — this was already automatic for every exercise, GIF or not, nothing new needed there).'},
   {v:'3.23',d:'Add Hip Thrust Machine — the seated belt-in glute machine',det:'Hugo asked specifically for "the machine that belts you in" — the seated hip-thrust machine with a hip belt/strap that a lot of gyms (including commercial chains) now have, distinct from the barbell Hip Thrust already in the library. No demo image exists for it in free-exercise-db (checked; it only has the barbell version), so it shows the same styled placeholder + tappable video demo as the library\'s other GIF-less exercises. Tagged machine equipment, same muscle group as Hip Thrust and Glute Bridge so it shows up alongside them in the swap sheet.'},
   {v:'3.22',d:'Exercise library expanded by 30 — chest, shoulders, arms and back had the thinnest swap options',det:'Hugo asked for more variety after running into the missing single-leg leg press. Audited the library (88 exercises) against free-exercise-db and added 30 new ones concentrated where swap alternatives ran thinnest: chest +4 (Decline Bench, Machine Chest Press, DB Fly, Cable Crossover), shoulders/delts/traps +7 (Machine Shoulder Press, Front Raise, Upright Row, Reverse Pec Deck, Seated Rear Delt Raise, Barbell/DB Shrug), triceps +4 (Close-Grip Bench, Single-Arm Cable Extension, Kickback, Bench Dip), biceps +5 (Concentration Curl, Spider Curl, Reverse Curl, Machine Curl, Zottman Curl), back +6 (Chin-Up, Close-Grip Lat Pulldown, Straight-Arm Pulldown, Elevated Cable Row, Reverse-Grip Row, Lying T-Bar Row), hamstrings/glutes +2 (Good Morning, Cable Pull-Through), core +2 (Russian Twist, Decline Crunch). Every image URL was checked before adding (all resolve). None of these were added to the default SLOTS rotation, so your current weekly plan generation is unaffected — they only show up when you tap Swap (same muscle group / search), which is exactly where the old library ran out of options.'},
@@ -1528,14 +1529,14 @@ async function getAICoach(energy,ct,dp){
     let line=ex.n;
     if(pr){
       hasPRs++;
-      line+=` (PR: ${pr.w}${u}×${pr.r}`;
+      line+=` (PR: ${_wToCurrentUnit(pr.w,pr.u)}${u}×${pr.r}`;
       if(lastSets){
         const done=lastSets.filter(s=>s.done&&s.w);
         if(done.length){
           hasHistory++;
           const avgW=Math.round(done.reduce((a,s)=>a+(parseFloat(s.w)||0),0)/done.length);
           const avgR=Math.round(done.reduce((a,s)=>a+(parseInt(s.r)||0),0)/done.length);
-          const pct=pr.w>0?Math.round(avgW/pr.w*100):0;
+          const pct=_wToCurrentUnit(pr.w,pr.u)>0?Math.round(avgW/_wToCurrentUnit(pr.w,pr.u)*100):0;
           line+=`, last session: ${avgW}${u}×${avgR} avg — ${done.length}/${lastSets.length} sets done${pct<85?' ⚠️ below PR pace':''}`;
         }
       }
@@ -1670,7 +1671,7 @@ SORE: [active recovery ride — specific reduced targets]`;
     const tgt=energyTargets(id,'okay');
     let line=`${ex.n} | today's target: ${tgt.sets}×${tgt.reps} RPE ${tgt.rpe}${tgt.sugW?` @ ~${tgt.sugW}${unit()}`:''}`;
     if(ex.assist)line+=' [ASSISTED — weight is machine HELP; LOWER = stronger; progress by REDUCING it]';
-    if(pr)line+=` | PR: ${pr.w}${unit()}×${pr.r}`;
+    if(pr)line+=` | PR: ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}`;
     if(sessions.length)line+=` | Recent: ${sessions.join(', ')}`;
     return line;
   }).filter(Boolean);
@@ -3875,7 +3876,7 @@ function energyTargets(exId,energy){
   // (and give assisted lifts correspondingly MORE help) until the block ends. v2.94.
   const _cb=_comebackState();
   if(_cb&&_cb.factor)mult=ex.assist?mult*(2-_cb.factor):mult*_cb.factor;
-  const sugW=pr?.w?Math.round(pr.w*mult/2.5)*2.5:null;
+  const sugW=pr?.w?Math.round(_wToCurrentUnit(pr.w,pr.u)*mult/2.5)*2.5:null;
   return{sets,reps,rpe,sugW};
 }
 
@@ -4901,6 +4902,17 @@ function _fmtW(n){
   const x=Math.round(n*10)/10;
   return x%1===0?String(x):x.toFixed(1);
 }
+function _wToCurrentUnit(v,entryUnit){
+  // v3.25: converts a stored weight to the currently-displayed unit using the
+  // unit it was recorded in (the .u tag added in v3.25). Untagged legacy data
+  // (pre-v3.25 logs/PRs) has no way to know its original unit, so it passes
+  // through unchanged here — a deliberate no-op, not a guess.
+  const v2=parseFloat(v);
+  if(isNaN(v2))return v2;
+  const cur=unit();
+  if(!entryUnit||entryUnit===cur)return v2;
+  return _convertW(v2,cur);
+}
 function weightEntryMode(){return DB.get('weight_entry','number');}
 function _refreshWeightEntryUI(){
   const modal=document.getElementById('exlog-modal');
@@ -4968,6 +4980,7 @@ function toggleUnit(){
         const v=parseFloat(set.w);
         if(!isNaN(v)&&v>0){
           set.w=_fmtW(_convertW(v,next));
+          set.u=next; // v3.25: keep the unit tag in sync with the converted value
           delete set.plates; // denominations differ per unit
           delete set.bar;    // bar options differ per unit — re-decompose with default
         }
@@ -5055,6 +5068,7 @@ function adjBar(ei,si,dir){
   set.plates=clean;
   set.w=_fmtW(platesTotal(counts,set));
   set._edited=true;
+  set.u=unit(); // v3.25
   _saveLog();
   debouncedSync();
   const tot=document.getElementById(`plt-tot-${ei}-${si}`);
@@ -5074,6 +5088,7 @@ function adjPlate(ei,si,plate,dir){
   if(set.bar==null||set.bar==='')set.bar=barWeight(set);
   set.w=_fmtW(platesTotal(counts,set));
   set._edited=true;
+  set.u=unit(); // v3.25
   _saveLog();
   debouncedSync();
   const tot=document.getElementById(`plt-tot-${ei}-${si}`);
@@ -6418,7 +6433,7 @@ function rExList(dp,log){
   <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 ${_T('tutorial')}</button>
 </div>
 <div class="ex-body">
-  <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}</div>
+  <div class="ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}</span>`:''}</div>
   <div class="ex-bdgs">
     <span class="bdg bs">${tgt.sets} ${_T('sets_unit')}</span><span class="bdg br">${tgt.reps} ${_T('reps_unit')}</span><span class="bdg bp">RPE ${tgt.rpe}</span>
     ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
@@ -6686,10 +6701,10 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
           const bestR=parseInt(bestSet?.r)||0;
           let prLabel='';
           if(pr){
-            // Assisted: at/above PR means LESS assist (bestW <= pr.w) at equal/more reps
-            const atOrAbovePR=_assist?(bestW<=pr.w&&bestR>=pr.r):(bestW>=pr.w&&bestR>=pr.r);
+            // Assisted: at/above PR means LESS assist (bestW <= _wToCurrentUnit(pr.w,pr.u)) at equal/more reps
+            const atOrAbovePR=_assist?(bestW<=_wToCurrentUnit(pr.w,pr.u)&&bestR>=pr.r):(bestW>=_wToCurrentUnit(pr.w,pr.u)&&bestR>=pr.r);
             if(atOrAbovePR){prLabel=isEarlyUser?' [baseline]':' [NEW PR]';}
-            else{prLabel=` [below PR: ${pr.w}${u}×${pr.r}${_assist?' assist':''}]`;}
+            else{prLabel=` [below PR: ${_wToCurrentUnit(pr.w,pr.u)}${u}×${pr.r}${_assist?' assist':''}]`;}
           }
           return `    ${ex.n}: best ${bestW}${u}×${bestR}, avg ${avgW}${u}×${avgR}, ${done.length} sets${prLabel}`;
         }).filter(Boolean);
@@ -8507,7 +8522,7 @@ function computeProgressionTarget(exId,lastSets){
   const done=(lastSets||[]).filter(s=>s.done&&s.w&&s.r);
   if(!done.length){
     const pr=(DB.get('prs',{})||{})[exId];
-    if(pr)return{w:pr.w,r:Math.max(repLow,Math.min(repHigh,pr.r)),change:'starting at your PR',reason:'no recent session — use PR as anchor'};
+    if(pr)return{w:_wToCurrentUnit(pr.w,pr.u),r:Math.max(repLow,Math.min(repHigh,pr.r)),change:'starting at your PR',reason:'no recent session — use PR as anchor'};
     return{w:'',r:repLow,change:'first time',reason:'no history yet — enter your starting weight'};
   }
   // Assisted exercises (assisted pull-up/dip): weight = ASSISTANCE, so progress
@@ -8520,7 +8535,7 @@ function computeProgressionTarget(exId,lastSets){
     else{if(bw>aw)return b;if(bw<aw)return a;}
     return parseInt(b.r)>parseInt(a.r)?b:a;
   });
-  const lastW=parseFloat(topSet.w);
+  const lastW=_wToCurrentUnit(topSet.w,topSet.u); // v3.25: unit-safe
   const lastR=parseInt(topSet.r);
   // Maintain mode (cutting / lose_weight goal) → hold
   if(step===0)return{w:lastW,r:lastR,change:'hold',reason:'cutting phase — preserve strength, don\'t push'};
@@ -8566,10 +8581,10 @@ function makeSets(exId,energy,last){
   if(ex.uni){
     return Array.from({length:n*2},(_,i)=>{
       const side=i%2===0?'L':'R';
-      return{w:prefillW,r:prefillR,done:false,side,_edited:!!prefillW,_ai:isAi,_tgt:isTgt};
+      return{w:prefillW,r:prefillR,done:false,side,_edited:!!prefillW,_ai:isAi,_tgt:isTgt,u:unit()};
     });
   }
-  return Array.from({length:n},(_,si)=>({w:prefillW,r:prefillR,done:false,_edited:!!prefillW,_ai:isAi,_tgt:isTgt}));
+  return Array.from({length:n},(_,si)=>({w:prefillW,r:prefillR,done:false,_edited:!!prefillW,_ai:isAi,_tgt:isTgt,u:unit()}));
 }
 
 function getLastLog(exId){
@@ -8668,7 +8683,7 @@ function rLogEx(le,ei){
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
   return`<div class="log-ex${allDone?' done-ex':''}" id="lex${ei}">
 <div class="log-ex-hdr" onclick="togLogEx(${ei})">
-  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${pr.w}${unit()}×${pr.r}</span>`:''}${!isOpen&&allDone?summary:''}</div>
+  <div class="log-ex-name">${ex.n}${pr?`<span class="pr-b">🏆 ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}</span>`:''}${!isOpen&&allDone?summary:''}</div>
   <button class="wt-adj" style="font-size:13px;padding:4px 7px;width:auto;height:auto;margin-left:4px;flex-shrink:0" onclick="event.stopPropagation();openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄</button>
   <span class="log-ex-prog${allDone?' done':''}" id="prog${ei}">${allDone?'✓ Done':doneSets+'/'+le.sets.length}</span>
   <span class="log-ex-chev${isOpen?' open':''}" id="chev${ei}">▾</span>
@@ -8716,7 +8731,7 @@ function updSet(ei,si,field,val){
   const set=S.activeLog.exercises[ei]?.sets[si];
   if(!set)return;
   set[field]=val;
-  if(field==='w'){delete set.plates;delete set.bar;}
+  if(field==='w'){delete set.plates;delete set.bar;set.u=unit();} // v3.25
   _saveLog();
   debouncedSync();
 }
@@ -8776,7 +8791,7 @@ function addSet(ei){
   const ex=EX[le.id];
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
-  const neu={w:last.w||'',r:last.r||'',done:false};
+  const neu={w:last.w||'',r:last.r||'',done:false,u:last.u||unit()}; // v3.25
   if(last.plates&&typeof last.plates==='object')neu.plates={...last.plates};
   le.sets.push(neu);
   _saveLog();
@@ -8812,7 +8827,7 @@ function checkPR(id,weight,reps){
       ?(weight<cur.w||(weight===cur.w&&reps>cur.r))
       :(weight>cur.w||(weight===cur.w&&reps>cur.r));
   if(isBetter){
-    prs[id]={w:weight,r:reps,date:fd(new Date())};
+    prs[id]={w:weight,r:reps,date:fd(new Date()),u:unit()}; // v3.25
     DB.set('prs',prs);
     prToast(EX[id]?.n||id);
   }
@@ -8837,7 +8852,7 @@ function deletePR(id){
 <div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:22px 20px calc(var(--sb)+22px);max-width:430px;margin:0 auto;width:100%">
   <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:6px">Delete PR?</div>
-  <div style="font-size:14px;color:var(--t2);margin-bottom:20px">${ex?.n||id} — 🏆 ${pr.w}${u} × ${pr.r} on ${pr.date}</div>
+  <div style="font-size:14px;color:var(--t2);margin-bottom:20px">${ex?.n||id} — 🏆 ${_wToCurrentUnit(pr.w,pr.u)}${u} × ${pr.r} on ${pr.date}</div>
   <button onclick="(()=>{const p=DB.get('prs',{});delete p['${id}'];DB.set('prs',p);this.closest('[style*=inset]').remove();render();})()" style="width:100%;background:var(--red);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Yes, delete it</button>
   <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
 </div>`;
@@ -8860,10 +8875,10 @@ function editPR(id){
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px">
     <div>
       <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Weight (${u})</div>
-      <input id="pr-edit-w" type="number" value="${pr.w}" inputmode="decimal"
+      <input id="pr-edit-w" type="number" value="${_wToCurrentUnit(pr.w,pr.u)}" inputmode="decimal"
         oninput="(()=>{const w=parseFloat(this.value)||0;const el=document.getElementById('pr-w-conv');if(el)el.textContent=w?'= '+(w*${toOther}).toFixed(1)+' ${otherU}':'';})()"
         style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:24px;font-weight:700;padding:13px;text-align:center;outline:none;font-family:inherit;-webkit-appearance:none">
-      <div id="pr-w-conv" style="font-size:12px;color:var(--t2);text-align:center;margin-top:5px;min-height:16px">${pr.w?'= '+(pr.w*toOther).toFixed(1)+' '+otherU:''}</div>
+      <div id="pr-w-conv" style="font-size:12px;color:var(--t2);text-align:center;margin-top:5px;min-height:16px">${_wToCurrentUnit(pr.w,pr.u)?'= '+(_wToCurrentUnit(pr.w,pr.u)*toOther).toFixed(1)+' '+otherU:''}</div>
     </div>
     <div>
       <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">Reps</div>
@@ -8874,7 +8889,7 @@ function editPR(id){
   </div>
 
   <div style="font-size:12px;color:var(--t2);margin-bottom:20px;text-align:center;padding:8px 12px;background:var(--s2);border-radius:10px">
-    Current PR: <strong style="color:var(--txt)">${pr.w}${u} × ${pr.r}</strong> — set ${pr.date}
+    Current PR: <strong style="color:var(--txt)">${_wToCurrentUnit(pr.w,pr.u)}${u} × ${pr.r}</strong> — set ${pr.date}
   </div>
 
   <button id="pr-edit-confirm" onclick="(()=>{
@@ -8885,7 +8900,7 @@ function editPR(id){
       btn.style.background='var(--red)';btn.textContent='Enter valid values';
       setTimeout(()=>{btn.style.background='var(--acc)';btn.textContent='Save changes';},1200);return;}
     const p=DB.get('prs',{});
-    p['${id}']={w,r,date:fd(new Date())};
+    p['${id}']={w,r,date:fd(new Date()),u:unit()}; // v3.25
     DB.set('prs',p);
     this.closest('[style*=inset]').remove();
     render();
@@ -8908,6 +8923,7 @@ function adjW(ei,si,dir){
   const nw=Math.max(0,Math.round((cur+dir*step)*10)/10);
   set.w=_fmtW(nw);
   set._edited=true;
+  set.u=unit(); // v3.25
   delete set.plates;
   delete set.bar;
   _saveLog();
@@ -9459,7 +9475,7 @@ function _scanGymSets(days){
         const grp=_EX_GROUP[ex.g]||'Other';
         for(const s of(le.sets||[])){
           if(!s.done||!s.w||!s.r)continue;
-          out.push({date:ds,exId:le.id,exName:ex.n,group:grp,w:+s.w,r:+s.r});
+          out.push({date:ds,exId:le.id,exName:ex.n,group:grp,w:_wToCurrentUnit(s.w,s.u),r:+s.r}); // v3.25: unit-safe
         }
       }
     }
@@ -10259,7 +10275,7 @@ ${!prKeys.length
             <div class="prc-main" onclick="this.nextElementSibling.classList.toggle('open')">
               <span class="prc-name">${ex.n}</span>
               <span class="prc-date">${pr.date}</span>
-              <span class="prc-val">🏆 ${pr.w}${u}×${pr.r}</span>
+              <span class="prc-val">🏆 ${_wToCurrentUnit(pr.w,pr.u)}${u}×${pr.r}</span>
             </div>
             <div class="prc-actions">
               <button onclick="editPR('${id}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:7px;cursor:pointer">✏️ Edit</button>
@@ -11433,7 +11449,7 @@ function showExLogModal(le,ei,ds){
   modal.innerHTML=`<div class="swap-ov" onclick="closeExLog('${ds}')"></div>
 <div class="swap-sheet">
   <div class="swap-title">${ex.n}</div>
-  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${pr.w}${unit()}×${pr.r}</span></div>`:''}
+  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}</span></div>`:''}
   <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
   ${unitBar(ex)}
   <div id="exlog-rows">${usePlatesEntry(ex)
@@ -11475,7 +11491,7 @@ function exLogAdd(ei){
   const ex=EX[le.id];
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
-  const neu={w:last.w||'',r:last.r||'',done:false};
+  const neu={w:last.w||'',r:last.r||'',done:false,u:last.u||unit()}; // v3.25
   if(last.plates&&typeof last.plates==='object')neu.plates={...last.plates};
   le.sets.push(neu);
   _saveLog();
