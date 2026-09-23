@@ -996,10 +996,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.28';
+const APP_VERSION='3.29';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.29',d:'Exercise order now follows the standard rule: compounds first, your priority lift first, isolation after, core last',det:'You asked whether flat bench before incline was actually right. Checked it. The evidence: a 2021 meta-analysis (Nunes et al.) found strength gains favour whichever exercise is done first in a session, while muscle growth came out about the same either way. That is why the standard prescription is multi-joint lifts before single-joint ones, and your most important lift first. Flat before incline is a sensible default, but if upper chest is your priority, incline should lead. The gap on our side: the AI picker from 3.27 could only choose WHICH exercise filled each slot, never the order, so slot 1 (flat press family) always came first no matter what the AI thought. Now the AI also chooses the order, with explicit rules in its prompt: compounds before isolation, the lift that matters most for your goals first, never isolating a muscle before a compound that needs it (no triceps before pressing, no biceps before rows), small-muscle isolation near the end, core last. Code then double-checks the non-negotiable part: every slot still filled exactly once from real candidates, and compounds, isolation, core in that tier order even if the AI slips; the AI\'s choice within a tier (e.g. incline before flat) is kept. The offline rules fallback now applies the same tier order, which fixes one case where a compound like dips could land after lateral raises.'},
   {v:'3.28',d:'Merged the other v3.20 fix, and extra-session Log sets now save to the extra session',det:'Another session had already pushed its own v3.20 (Log sets opening the wrong exercise) while these updates were sitting unpushed, so the two lines of work were merged and the local ones renumbered 3.21 to 3.27. The two fixes touched the same buttons: the extra gym session on a ride day had its per-exercise Log sets button wired up in 3.21, but it always opened the day\'s main log, not the extra session\'s own log. With the ID-based lookup from 3.20 that would have quietly started a second log for the day. Now an exercise that belongs to the extra session opens and saves to that session\'s log (the same one Log workout / Continue log uses), and swapping an exercise there updates the extra session\'s list instead of doing nothing.'},
   {v:'3.27',d:'AI now picks push/pull/legs exercises first, rules-based SLOTS logic is the instant offline fallback',det:'You said the flat-before-incline push-day order proved there was no well-defined logic, and that the AI API should be doing this instead, falling back to rules only if the network is down. Two corrections and a build. First, the order WAS defined — it\'s a hardcoded SLOTS template (flat bench in slot 1, incline in slot 3, after the OHP slot) — a real but debatable authoring choice, not an absence of logic. Second, the app\'s existing AI proxy (Gemini → Perplexity → OpenAI) already has a documented daily free-tier quota that gets exhausted (there\'s a whole _aiQuotaHit / isQuotaErr system for it), so making every single exercise pick a live API call would burn through that quota fast and make workout generation fail offline or mid-quota with nothing to show. Built AI-first-with-rules-fallback the way that respects both: genSession() (the SLOTS-based logic) still runs FIRST and instantly on every plan generation — you always get a valid, complete plan with zero wait and zero network dependency. Freshly-generated gym days are then tagged _freshGen and handed to a new background step, upgradeWeekExercisesWithAI(), which makes ONE batched Gemini call covering every fresh day in that plan at once (not one call per day or per slot — that would multiply API usage 5-6x per day and could hit the quota on a single plan generation). The AI is constrained to the exact same equipment-filtered candidate pool genSession draws from (_slotCandidates/filterSlot), so it can only ever pick exercises you actually have access to — it can\'t invent an id. Its response is parsed and validated per day (right number of slots filled, every id present in that slot\'s real candidate list, no duplicates within the day); a day that fails validation simply keeps its rules-based pick — this is a per-day best-effort upgrade, never an all-or-nothing swap, and it silently no-ops if the quota is already known exhausted (_aiQuotaHit) or the call fails for any reason. Wired into all 4 places a week\'s exercises get generated: Generate Plan (both the weather and no-weather paths), the end-of-week \'generate next week\' flow (awaited there specifically, so the weight/rep suggestion prompt reflects the AI\'s actual exercise picks, not the rules placeholder), and the AI coach\'s regenerate_remaining_week tool. CAVEAT: this is a genuine behavior change worth watching — the AI\'s picks are not deterministic the way genSession\'s are, so if you rely on hitting the exact same exercise week over week for progression tracking, a regenerated week could vary more than before. It never changes an exercise on a day you\'ve already logged sets for (existing lock logic is untouched) and never overrides a day whose type hasn\'t changed. Not surfaced in the UI yet whether a given day\'s exercises came from AI or rules (stored as _aiGen internally) — flag if you want that visible.'},
   {v:'3.26',d:'Fix — switching lbs/kg silently corrupted progression targets, PR comparisons and the tonnage/progress charts',det:'You confirmed you\'ve switched units before, so this was live, not theoretical. Root cause: nothing in the stored data — sets, PRs — ever recorded WHICH unit a weight was logged in. toggleUnit() only converted the numbers currently on screen; every historical log, PR and chart point stayed a bare number with no way to tell 45 lbs from 45 kg. Three consequences: (1) computeProgressionTarget read your last top set and any PR-anchor fallback as if they were always in today\'s unit, so a stale kg number read as lbs (or vice versa) after a switch would push your \'next target\' weight wildly off — too heavy or too light by roughly 2.2x. (2) checkPR/PR badges everywhere (exercise cards, log rows, swap sheet, PR tab, edit-PR, AI coach prompts) displayed and compared raw stored numbers under whichever unit label happened to be showing, so a PR set before a switch could silently look beaten or unbeaten by the wrong margin. (3) The 12-week tonnage chart and per-exercise progress chart (_scanGymSets) summed/plotted every historical set at face value, so total volume and 1RM trend lines were wrong across any unit switch in the window. FIX: every place a set or PR weight gets written now tags it with the unit it was written in (set.u / prs[id].u) — toggleUnit, the −/+ steppers, plates bar/plate adjustments, manual weight entry, new-set prefill, PR save and PR edit. A new _wToCurrentUnit(v,entryUnit) helper converts a stored weight to whatever unit is currently displayed using that tag, and it\'s now used everywhere a historical weight feeds math or display: progression targets, PR anchor fallback, PR badges/comparisons/edit form, and both charts. IMPORTANT CAVEAT: this is forward-safe only — it cannot retroactively fix weights already logged before this update, because there was never any record of which unit they were in, and untagged legacy data is deliberately left as a no-op passthrough rather than guessed at. If a number from before today looks off after a unit switch, that\'s pre-existing data with no unit tag; anything logged from now on will carry its unit and convert correctly.'},
@@ -4727,7 +4728,7 @@ function genSession(type,energy='okay',bwOnly=false){
     });
     picked.push(sorted[0]);
   }
-  return picked;
+  return _orderByTier(picked); // v3.29: compounds, then isolation, then core
 }
 
 /* ── AI-ASSISTED EXERCISE SELECTION (v3.26) ──
@@ -4764,13 +4765,43 @@ function _buildExerciseGenPrompt(freshDays,candidatesByDate){
   return`You are a personal training coach picking today's specific exercises from a fixed gym's available equipment. User goal: ${goalStr} | Level: ${levelStr}.
 ${recentNames.length?`Recently trained (avoid repeating back-to-back when a good alternative exists): ${recentNames.join(', ')}`:''}
 
-For each day below, pick exactly ONE exercise id per slot, choosing only from that slot's listed ids — never invent an id that isn't listed. Prefer compound movements when a slot offers one, vary selections sensibly across the week, and keep choices appropriate to the stated goal and level.
+For each day below, pick exactly ONE exercise id per slot, choosing only from that slot's listed ids — never invent an id that isn't listed. Vary selections sensibly across the week and keep choices appropriate to the stated goal and level.
+
+Then list each day's picks in the order they should be performed. The order does NOT have to follow the slot numbers. Order them the way an evidence-based coach would:
+1. Multi-joint (compound) lifts before single-joint (isolation) exercises.
+2. Among the compounds, put first the lift that matters most for this user's goals — the first exercise of a session gets the most strength progress. Otherwise go bigger muscle groups before smaller ones.
+3. Never isolate a muscle before a compound that relies on it (no triceps work before presses, no biceps work before rows or pulldowns).
+4. Small-muscle isolation (delts, arms, calves) near the end, core last.
 
 ${dayTxt}
 
-Respond with ONLY this format, one line per day, ids separated by commas in the same slot order given, nothing else, no explanation:
+Respond with ONLY this format, one line per day, ids separated by commas in the order to perform them, nothing else, no explanation:
 EXERCISES:
 ${freshDays[0].date} (${freshDays[0].type}): id1, id2, id3, ...`;
+}
+
+// v3.29: can these ids fill every slot exactly once? Slots overlap (e.g.
+// inverted_row sits in two Pull slots), so this is a small matching search
+// rather than a per-position check.
+function _matchSlots(ids,cands){
+  if(ids.length!==cands.length||new Set(ids).size!==ids.length)return false;
+  const used=new Array(cands.length).fill(false);
+  const place=k=>{
+    if(k===ids.length)return true;
+    for(let j=0;j<cands.length;j++){
+      if(used[j]||!cands[j].includes(ids[k]))continue;
+      used[j]=true;if(place(k+1))return true;used[j]=false;
+    }
+    return false;
+  };
+  return place(0);
+}
+// Ordering tiers every plan respects, whoever picked the exercises: multi-joint
+// first, single-joint after, core last. Stable within a tier, so the AI's (or the
+// slot template's) priority order inside a tier stands.
+function _exTier(id){const e=EX[id];return !e?1:e.g==='core'?2:e.t==='C'?0:1;}
+function _orderByTier(ids){
+  return ids.map((id,i)=>[id,i]).sort((a,b)=>_exTier(a[0])-_exTier(b[0])||a[1]-b[1]).map(x=>x[0]);
 }
 
 function _parseExerciseGenResponse(text,freshDays,candidatesByDate){
@@ -4785,14 +4816,13 @@ function _parseExerciseGenResponse(text,freshDays,candidatesByDate){
     if(!byDate[date])continue;
     const cands=candidatesByDate[date];
     const ids=m[2].split(',').map(s=>s.trim()).filter(Boolean);
-    if(ids.length!==cands.length)continue; // must fill every slot, nothing extra, nothing missing
-    let valid=true;
-    const seen=new Set();
-    ids.forEach((id,i)=>{
-      if(!cands[i].includes(id)||seen.has(id))valid=false;
-      seen.add(id);
-    });
-    if(valid)picks[date]=ids;
+    // v3.29: the AI chooses the ORDER too. Each id must still fill a distinct
+    // slot (one pick per slot, every slot filled, only listed ids), but slot
+    // numbers no longer dictate sequence. Code then enforces the fixed ordering
+    // rule (compounds, then isolation, then core) without undoing the AI's
+    // priority choices inside each tier.
+    if(!_matchSlots(ids,cands))continue;
+    picks[date]=_orderByTier(ids);
   }
   return picks;
 }
