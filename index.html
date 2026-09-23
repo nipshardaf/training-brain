@@ -996,10 +996,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.25';
+const APP_VERSION='3.26';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.26',d:'AI now picks push/pull/legs exercises first, rules-based SLOTS logic is the instant offline fallback',det:'You said the flat-before-incline push-day order proved there was no well-defined logic, and that the AI API should be doing this instead, falling back to rules only if the network is down. Two corrections and a build. First, the order WAS defined — it\'s a hardcoded SLOTS template (flat bench in slot 1, incline in slot 3, after the OHP slot) — a real but debatable authoring choice, not an absence of logic. Second, the app\'s existing AI proxy (Gemini → Perplexity → OpenAI) already has a documented daily free-tier quota that gets exhausted (there\'s a whole _aiQuotaHit / isQuotaErr system for it), so making every single exercise pick a live API call would burn through that quota fast and make workout generation fail offline or mid-quota with nothing to show. Built AI-first-with-rules-fallback the way that respects both: genSession() (the SLOTS-based logic) still runs FIRST and instantly on every plan generation — you always get a valid, complete plan with zero wait and zero network dependency. Freshly-generated gym days are then tagged _freshGen and handed to a new background step, upgradeWeekExercisesWithAI(), which makes ONE batched Gemini call covering every fresh day in that plan at once (not one call per day or per slot — that would multiply API usage 5-6x per day and could hit the quota on a single plan generation). The AI is constrained to the exact same equipment-filtered candidate pool genSession draws from (_slotCandidates/filterSlot), so it can only ever pick exercises you actually have access to — it can\'t invent an id. Its response is parsed and validated per day (right number of slots filled, every id present in that slot\'s real candidate list, no duplicates within the day); a day that fails validation simply keeps its rules-based pick — this is a per-day best-effort upgrade, never an all-or-nothing swap, and it silently no-ops if the quota is already known exhausted (_aiQuotaHit) or the call fails for any reason. Wired into all 4 places a week\'s exercises get generated: Generate Plan (both the weather and no-weather paths), the end-of-week \'generate next week\' flow (awaited there specifically, so the weight/rep suggestion prompt reflects the AI\'s actual exercise picks, not the rules placeholder), and the AI coach\'s regenerate_remaining_week tool. CAVEAT: this is a genuine behavior change worth watching — the AI\'s picks are not deterministic the way genSession\'s are, so if you rely on hitting the exact same exercise week over week for progression tracking, a regenerated week could vary more than before. It never changes an exercise on a day you\'ve already logged sets for (existing lock logic is untouched) and never overrides a day whose type hasn\'t changed. Not surfaced in the UI yet whether a given day\'s exercises came from AI or rules (stored as _aiGen internally) — flag if you want that visible.'},
   {v:'3.25',d:'Fix — switching lbs/kg silently corrupted progression targets, PR comparisons and the tonnage/progress charts',det:'You confirmed you\'ve switched units before, so this was live, not theoretical. Root cause: nothing in the stored data — sets, PRs — ever recorded WHICH unit a weight was logged in. toggleUnit() only converted the numbers currently on screen; every historical log, PR and chart point stayed a bare number with no way to tell 45 lbs from 45 kg. Three consequences: (1) computeProgressionTarget read your last top set and any PR-anchor fallback as if they were always in today\'s unit, so a stale kg number read as lbs (or vice versa) after a switch would push your \'next target\' weight wildly off — too heavy or too light by roughly 2.2x. (2) checkPR/PR badges everywhere (exercise cards, log rows, swap sheet, PR tab, edit-PR, AI coach prompts) displayed and compared raw stored numbers under whichever unit label happened to be showing, so a PR set before a switch could silently look beaten or unbeaten by the wrong margin. (3) The 12-week tonnage chart and per-exercise progress chart (_scanGymSets) summed/plotted every historical set at face value, so total volume and 1RM trend lines were wrong across any unit switch in the window. FIX: every place a set or PR weight gets written now tags it with the unit it was written in (set.u / prs[id].u) — toggleUnit, the −/+ steppers, plates bar/plate adjustments, manual weight entry, new-set prefill, PR save and PR edit. A new _wToCurrentUnit(v,entryUnit) helper converts a stored weight to whatever unit is currently displayed using that tag, and it\'s now used everywhere a historical weight feeds math or display: progression targets, PR anchor fallback, PR badges/comparisons/edit form, and both charts. IMPORTANT CAVEAT: this is forward-safe only — it cannot retroactively fix weights already logged before this update, because there was never any record of which unit they were in, and untagged legacy data is deliberately left as a no-op passthrough rather than guessed at. If a number from before today looks off after a unit switch, that\'s pre-existing data with no unit tag; anything logged from now on will carry its unit and convert correctly.'},
   {v:'3.24',d:'Real demo GIFs for Burpee and Pike Push-Up (were placeholders)',det:'Found free, openly-licensed demo GIFs for these two on Wikimedia Commons — every file hosted there is required to carry a free-reuse license, same category as the free-exercise-db/wger sources already used throughout the library. IMPORTANT CAVEAT: Wikimedia is blocked by network policy in this environment, so the exact URLs could not be live-verified (no 200 check like the rest of this batch) — they were built from Wikimedia\'s standard file-path convention from confirmed page titles (File:Burpee.gif, File:Pike Push Ups.gif). If either URL is off, the existing onerror fallback (v2.69) just shows the regular styled placeholder — no breakage, worst case is cosmetic. Ask Hugo to confirm these actually render before relying on it. The other confirmed gaps (Wall Sit, 4 foot-mobility exercises, Single-Leg Leg Press, Hip Thrust Machine) still have no image anywhere in the free databases — genuinely don\'t exist as hotlinkable assets, not a search failure — so they keep the placeholder card, which is already tappable into a real auto-found YouTube tutorial (v2.70/v2.71 — this was already automatic for every exercise, GIF or not, nothing new needed there).'},
   {v:'3.23',d:'Add Hip Thrust Machine — the seated belt-in glute machine',det:'Hugo asked specifically for "the machine that belts you in" — the seated hip-thrust machine with a hip belt/strap that a lot of gyms (including commercial chains) now have, distinct from the barbell Hip Thrust already in the library. No demo image exists for it in free-exercise-db (checked; it only has the barbell version), so it shows the same styled placeholder + tappable video demo as the library\'s other GIF-less exercises. Tagged machine equipment, same muscle group as Hip Thrust and Glute Bridge so it shows up alongside them in the swap sheet.'},
@@ -4534,8 +4535,12 @@ function buildWeek(wdays){
       return{...existingDay,weather:w}; // same type → keep exercises, just update weather
     }
     // v2.85: generate exercises for any type defined in SLOTS (covers GYM_SEQ + FULL_BODY)
+    // v3.26: genSession (rules) is the instant, always-on baseline. Freshly-generated
+    // days are tagged _freshGen so a follow-up async call can try to upgrade them to
+    // AI-picked exercises — see upgradeWeekExercisesWithAI. If that upgrade never runs
+    // or fails, this rules-based pick is what stays — never a blank/broken day.
     const exs=SLOTS[type]?genSession(type):null;
-    return{date:w.date,type,exercises:exs,weather:w};
+    return{date:w.date,type,exercises:exs,weather:w,_freshGen:!!exs};
   };
 
   // v2.85: Short-week override. User flagged "I can only train N days this week"
@@ -4721,6 +4726,115 @@ function genSession(type,energy='okay',bwOnly=false){
     picked.push(sorted[0]);
   }
   return picked;
+}
+
+/* ── AI-ASSISTED EXERCISE SELECTION (v3.26) ──
+   genSession() above is the deterministic, instant, offline rules engine — it is
+   now the RULES FALLBACK. When online and the AI quota isn't known-exhausted,
+   a freshly-generated week's gym days get a follow-up async upgrade: ONE batched
+   AI call covers every fresh day at once (not one call per day or per slot — that
+   would burn through Gemini's free-tier daily quota in a single plan generation).
+   The AI is constrained to the exact same equipment-filtered candidate pool
+   genSession draws from, so it can never suggest an exercise you don't have
+   access to. Any day whose response doesn't validate keeps its rules-based
+   pick — this is a per-day best-effort upgrade, never an all-or-nothing swap,
+   and the rules-based plan is always what's shown first (instant) while the
+   upgrade runs in the background. */
+
+// Equipment-filtered candidate list per slot for a gym day type — the same
+// pool genSession draws from, exposed so the AI prompt only ever offers ids
+// you actually have equipment for.
+function _slotCandidates(type){
+  return(SLOTS[type]||[]).map(slot=>filterSlot(slot,false));
+}
+
+function _buildExerciseGenPrompt(freshDays,candidatesByDate){
+  const profile=DB.get('user_profile',{})||{};
+  const goals=profile.goals||(profile.goal?[profile.goal]:[]);
+  const goalStr=goals.filter(Boolean).length?goals.join(', '):'general fitness';
+  const levelStr=profile.level||'intermediate';
+  const recentNames=(DB.get('recent_ex',[])||[]).slice(0,15).map(id=>EX[id]?.n).filter(Boolean);
+  const dayTxt=freshDays.map(d=>{
+    const cands=candidatesByDate[d.date];
+    const slotTxt=cands.map((ids,i)=>`  Slot ${i+1}: `+ids.map(id=>`${id} (${EX[id]?.n}${EX[id]?.t==='C'?', compound':', isolation'})`).join(' | ')).join('\n');
+    return`${d.date} (${d.type}):\n${slotTxt}`;
+  }).join('\n\n');
+  return`You are a personal training coach picking today's specific exercises from a fixed gym's available equipment. User goal: ${goalStr} | Level: ${levelStr}.
+${recentNames.length?`Recently trained (avoid repeating back-to-back when a good alternative exists): ${recentNames.join(', ')}`:''}
+
+For each day below, pick exactly ONE exercise id per slot, choosing only from that slot's listed ids — never invent an id that isn't listed. Prefer compound movements when a slot offers one, vary selections sensibly across the week, and keep choices appropriate to the stated goal and level.
+
+${dayTxt}
+
+Respond with ONLY this format, one line per day, ids separated by commas in the same slot order given, nothing else, no explanation:
+EXERCISES:
+${freshDays[0].date} (${freshDays[0].type}): id1, id2, id3, ...`;
+}
+
+function _parseExerciseGenResponse(text,freshDays,candidatesByDate){
+  const picks={};
+  const block=text.match(/EXERCISES:\s*([\s\S]*)/i);
+  if(!block)return picks;
+  const byDate={};freshDays.forEach(d=>{byDate[d.date]=d;});
+  for(const line of block[1].split('\n')){
+    const m=line.match(/^(\d{4}-\d{2}-\d{2})\s*\([^)]*\)\s*:\s*(.+)$/);
+    if(!m)continue;
+    const date=m[1];
+    if(!byDate[date])continue;
+    const cands=candidatesByDate[date];
+    const ids=m[2].split(',').map(s=>s.trim()).filter(Boolean);
+    if(ids.length!==cands.length)continue; // must fill every slot, nothing extra, nothing missing
+    let valid=true;
+    const seen=new Set();
+    ids.forEach((id,i)=>{
+      if(!cands[i].includes(id)||seen.has(id))valid=false;
+      seen.add(id);
+    });
+    if(valid)picks[date]=ids;
+  }
+  return picks;
+}
+
+// Fire-and-forget by default — callers don't need to await this unless they
+// need the final AI-picked exercise list before doing something else with it
+// (generateNextWeekWithAI awaits it so its weight-suggestion prompt reflects
+// the exercises the AI actually picked, not the rules-based placeholder).
+async function upgradeWeekExercisesWithAI(pk){
+  const plan=DB.get(pk,null);
+  if(!plan)return;
+  const freshDays=plan.filter(d=>d._freshGen&&SLOTS[d.type]);
+  // Strip the transient flag either way — it must never linger in stored data.
+  if(plan.some(d=>d._freshGen))DB.set(pk,plan.map(({_freshGen,...d})=>d));
+  if(!freshDays.length)return;
+  if(_aiQuotaHit)return; // known exhausted today — don't waste a call, keep rules picks
+  const candidatesByDate={};
+  freshDays.forEach(d=>{candidatesByDate[d.date]=_slotCandidates(d.type);});
+  const prompt=_buildExerciseGenPrompt(freshDays,candidatesByDate);
+  try{
+    const r=await fetch(GEMINI_PROXY,{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:500,temperature:0.6,thinkingConfig:{thinkingBudget:0}}})});
+    trackAICall('week_exercise_gen',r.ok);
+    if(!r.ok)throw new Error('API '+r.status);
+    const json=await r.json();
+    const text=json.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if(!text)throw new Error('empty');
+    const picks=_parseExerciseGenResponse(text,freshDays,candidatesByDate);
+    if(!Object.keys(picks).length)return;
+    const latest=DB.get(pk,null); // re-fetch — plan may have changed while the call was in flight
+    if(!latest)return;
+    let changed=false;
+    const updated=latest.map(d=>{
+      if(picks[d.date]){changed=true;return{...d,exercises:picks[d.date],_aiGen:true};}
+      return d;
+    });
+    if(changed){
+      DB.set(pk,updated);
+      if(pk===DB.pk(S.weekStart))render();
+    }
+  }catch(e){
+    console.warn('AI exercise generation failed — kept rules-based picks:',e);
+    if(isQuotaErr(e.message))_aiQuotaHit=true;
+  }
 }
 
 /* ── EXERCISE IMAGES ── */
@@ -7723,6 +7837,7 @@ const COACH_TOOL_HANDLERS={
         newPlan.forEach(d=>{d.locked=origLocks[d.date]||false;});
         DB.set(pk,newPlan);
         syncUp();
+        upgradeWeekExercisesWithAI(pk); // v3.26: background AI upgrade, rules picks already shown
         return{ok:true,msg:`Regenerated from ${from_date} forward`};
       }catch(e){
         return{ok:false,msg:'Regeneration failed: '+(e?.message||e)};
@@ -8386,6 +8501,8 @@ async function generateNextWeekWithAI(){
     const savedWS=S.weekStart;S.weekStart=nextMon;
     nextPlan=buildWeek(wdays);
     DB.set(DB.pk(nextMon),nextPlan);
+    await upgradeWeekExercisesWithAI(DB.pk(nextMon)); // v3.26
+    nextPlan=DB.get(DB.pk(nextMon),null)||nextPlan; // pick up the AI-upgraded exercises, if any
     S.weekStart=savedWS;
   }
   // Collect this week's gym sessions
@@ -11766,6 +11883,7 @@ function genPlan(){
     const plan=buildWeek(wdays);
     DB.set(DB.pk(S.weekStart),plan);
     render();
+    upgradeWeekExercisesWithAI(DB.pk(S.weekStart)); // v3.26: background AI upgrade
     return;
   }
   const btn=document.querySelector('.btn-p,.btn-s');
@@ -11776,6 +11894,7 @@ function genPlan(){
       const plan=buildWeek(wdays);
       DB.set(DB.pk(S.weekStart),plan);
       render();
+      upgradeWeekExercisesWithAI(DB.pk(S.weekStart)); // v3.26: background AI upgrade
     }catch(e){alert('Could not fetch weather. Check your connection.');render();}
   },()=>{alert('Location access is needed to fetch your local weather forecast.');render();});
 }
