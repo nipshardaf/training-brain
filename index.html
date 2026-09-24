@@ -249,9 +249,9 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .wt-adj{background:var(--s3);border:none;border-radius:8px;color:var(--txt);font-size:18px;font-weight:700;width:30px;height:42px;cursor:pointer;-webkit-appearance:none;flex-shrink:0;display:flex;align-items:center;justify-content:center;line-height:1}
 .wt-adj:active{background:var(--acc);color:#fff;transform:scale(.88)}
 /* pre-filled weight (from last session) shown dimmed until user edits */
-.set-inp.prefilled{color:var(--t2)}
+.set-inp.prefilled{color:var(--t2)!important} /* beats the light-theme .set-inp !important */
 /* AI-suggested weight shown in accent color until user edits */
-.set-inp.ai-fill{color:var(--al);}
+.set-inp.ai-fill{color:var(--al)!important;}
 
 /* swap modal */
 .swap-modal{position:fixed;inset:0;z-index:200}
@@ -267,26 +267,32 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .ex-busy-btn:active{background:var(--s3)}
 .unit-toggle{background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;-webkit-appearance:none}
 .unit-toggle:active{background:var(--s3)}
-.entry-tog{display:inline-flex;background:var(--s2);border:1px solid var(--bord);border-radius:8px;overflow:hidden}
-.entry-tog button{background:transparent;border:none;color:var(--t2);font-size:11px;font-weight:700;padding:4px 10px;cursor:pointer;-webkit-appearance:none;font-family:inherit}
-.entry-tog button.on{background:rgba(124,58,237,.16);color:var(--acc)}
-.plt-card{background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:10px;margin-bottom:8px}
-.plt-card.s-done{opacity:.72;border-color:rgba(16,185,129,.35)}
-.plt-card-top{display:flex;align-items:center;gap:8px;margin-bottom:8px}
-.plt-card-top .set-n{width:28px;text-align:center;font-weight:800;color:var(--t2);font-size:13px}
-.plt-total{flex:1;font-size:18px;font-weight:800;color:var(--txt)}
-.plt-total small{font-size:11px;font-weight:700;color:var(--t2);margin-left:4px}
-.plt-bar-hint{font-size:10px;color:var(--t2);margin:-2px 0 8px 36px}
-.plt-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
-.plt-chip{display:flex;align-items:center;justify-content:space-between;gap:2px;background:var(--s3);border-radius:10px;padding:4px 4px}
-.plt-chip .plt-lab{flex:1;text-align:center;line-height:1.15;min-width:0}
-.plt-chip .plt-lab b{display:block;font-size:12px;color:var(--txt)}
-.plt-chip .plt-lab span{font-size:10px;color:var(--al);font-weight:800}
-.plt-chip .wt-adj{width:28px;height:34px;font-size:16px}
-.plt-chip.plt-bar{outline:1px solid rgba(96,165,250,.35)}
-.plt-reps{display:flex;align-items:center;gap:8px;margin-top:8px}
-.plt-reps label{font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
-.plt-reps .set-inp{max-width:90px}
+/* v3.32 set logger: compact rows (set · last · weight · reps · done) + one helper under the active set */
+.sets-hdr.v2,.set-row.v2{grid-template-columns:26px 58px 1fr 62px 42px;gap:6px}
+.set-row.v2 .set-n{cursor:pointer}
+.set-row.v2.act .set-n{color:var(--acc)}
+.set-row.v2.act .set-inp{border-color:rgba(124,58,237,.45)}
+.set-last{font-size:11px;font-weight:600;color:var(--t2);text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+.ld-panel{background:var(--s1);border:1px solid var(--bord);border-radius:12px;padding:9px 10px;margin:-2px 0 9px}
+.ld-top{display:flex;align-items:center;gap:6px}
+.ld-lbl{flex:1;font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
+.wt-adj.ld-adj{width:auto;height:34px;padding:0 12px;font-size:13px}
+.ld-bar{position:relative;display:flex;align-items:center;height:62px;margin:8px 0 2px}
+.ld-bar::before{content:'';position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;background:var(--t2);opacity:.35;border-radius:3px}
+.ld-side{position:relative;flex:1;min-width:0;display:flex;align-items:center;gap:1px}
+.ld-side.ld-l{justify-content:flex-end}
+.ld-collar{position:relative;flex-shrink:0;width:6px;height:24px;background:var(--t2);opacity:.75;border-radius:2px;margin:0 2px}
+.ld-shaft{position:relative;flex:0 0 52px;text-align:center;font-size:9px;font-weight:800;color:var(--t2);transform:translateY(15px);white-space:nowrap}
+.ld-plate{position:relative;flex:0 1 20px;min-width:9px;border:none;border-radius:3px;font-size:9px;font-weight:800;padding:0;cursor:pointer;writing-mode:vertical-rl;transform:rotate(180deg);-webkit-appearance:none;font-family:inherit;box-shadow:inset 0 0 0 1px rgba(0,0,0,.18);overflow:hidden}
+.ld-plate:active{transform:rotate(180deg) scale(.9)}
+.ld-note{font-size:12px;font-weight:600;color:var(--txt);margin:2px 0 8px;line-height:1.4}
+.ld-note small{color:var(--amb);font-weight:600}
+.ld-chips{display:flex;flex-wrap:wrap;gap:5px}
+.ld-chip{background:var(--s3);border:none;border-radius:8px;color:var(--txt);font-size:12px;font-weight:700;padding:7px 9px;cursor:pointer;-webkit-appearance:none;font-family:inherit}
+.ld-chip:active{background:var(--acc);color:#fff}
+.ld-row{display:flex;align-items:center;gap:8px;margin-top:6px}
+.ld-rlbl{width:30px;flex-shrink:0;font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.5px}
+.ld-hint{font-size:10px;color:var(--t2);margin-top:6px}
 
 /* lock screen */
 .lock-wrap{min-height:100vh;min-height:-webkit-fill-available;display:flex;flex-direction:column;align-items:center;justify-content:safe center;padding:calc(20px + var(--st)) calc(20px + var(--sr)) calc(20px + var(--sb)) calc(20px + var(--sl));text-align:center;background:var(--bg);overflow-y:auto}
@@ -996,10 +1002,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.31';
+const APP_VERSION='3.32';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.32',d:'Set logger rebuilt: plates only on barbell lifts, last time on every set, and later sets follow your changes',det:'You said the Plates option was wrong and looked like it counted the bar twice, and that the page needed remaking. WHAT WAS WRONG: the plate counter appeared on every exercise, dumbbells, machines and cables included, always with a made-up 45 lb bar (a 20 lb cable raise showed a 45 bar and a total of 20). The Bar sat inside the grid labelled "Plates ×2 (per side)", so it read as doubled. And the 2.5 and 25 counters shared an ID, so tapping +2.5 changed the number on the 25 chip while the total only rose by 5. THE NEW SCREEN: one compact row per set, Set · Last · weight · reps · ✓. Last is what you lifted on that set last session. The set you are on gets a helper underneath with −/+ buttons; on barbell lifts (only those, and not T-bar rows, which load one end) it also draws the whole loaded barbell with the plates mirrored on both sides, says "45 bar + 2×45 each side", and has +45 / +35 / +25 / +10 / +5 / +2.5 buttons that put one plate on each side (tap a plate on the bar to take it off). The weight you type is what counts; the plates are worked out from it, and it tells you if a weight can\'t be made with plates. The bar is fixed, 45 lb (20 kg), or 25 lb (10 kg) on EZ-bar lifts, so there is nothing to set; the old −/+ on the bar just cycled 35 → 25 → 45. kg gets the 25 kg plate it was missing. The 123/Plates switch is gone because there is only one mode now. The Log sets sheet also shows your target and why, e.g. "+5 lb: you hit all your reps last time". FOLLOWING SETS: change a set\'s weight or reps and the sets after it follow, up or down, until one you set yourself; ticked sets are never changed. Values still following are shown in grey, and turn solid once you set them.'},
   {v:'3.31',d:'The coach can now add, remove and restyle a day\'s exercises',det:'You asked whether the coach on each day can change exercises. It could already swap one exercise, re-pick the whole day, and change sets, reps and weight, but not add or remove anything. Now it can do three more things, each waiting for you to tap Apply like every coach change. ADD: "add some abs" puts the exercise in with others of its kind (compounds first, isolation next, core last) without reshuffling the rest, and refuses if your gym lacks the equipment. REMOVE: "drop lateral raises" or "I only have 40 minutes" removes one exercise per card, isolation before compounds, which is what makes Make this workout shorter actually work. It won\'t remove an exercise you have logged sets for, or the last one on a day. DIFFERENT STYLE: "dumbbells only", "machines only", "bodyweight", "more upper chest" or "go easy on my shoulder" rebuilds the day\'s whole list the way you asked; Push stays Push. To do that the coach now sees every exercise your equipment allows for that workout, not just the few the planner rotates through, and anything it names that you can\'t do is skipped and reported. The list still follows the compounds-first order from 3.29, and like New exercises it is refused once sets are logged. Also: when you name an exercise to swap or drop, the coach now looks at that day\'s exercises first, so "lateral raises" finds the cable version your day actually has, and plurals like "raises" match. Exercise names are also matched more strictly: before, half the words agreeing was enough, so "leg press" could land on Barbell Bench Press through the single word "press". Now every word has to match, or most of them including at least two, and "dumbbell" and "DB" count as the same word. Plain names now mean the obvious lift: "bench" is Barbell Bench Press (since the library grew in 3.23 it had been resolving to Bench Dip, so dictating "bench 100 lb 3x8" to the coach logged the wrong exercise), "squat" is Barbell Squat, "deadlift" is Conventional Deadlift, "dips" is Tricep Dips, and "push-ups", "chin-ups" and "pull-ups" are found again.'},
   {v:'3.30',d:'Ask the coach from any day, and re-pick a day\'s exercises in one tap',det:'You asked how to regenerate today\'s Push, and for the AI to live on each day. WHY PUSH FELT LOCKED IN: Regenerate plan for this week, and the coach\'s regenerate_remaining_week, both deliberately keep a day\'s exercises whenever its workout type stays the same (so a weather refresh doesn\'t wipe your workouts). So asking for new exercises changed nothing on a day that stayed Push. NEW EXERCISES BUTTON: a 🔄 New exercises button now sits next to the Exercises heading on any gym day. It re-runs the exercise picker for that day, respecting your equipment, energy and Home-day setting, and keeps the draw that changes the most exercises. It only appears while nothing is logged: once you\'ve done a set the day is fixed, and single-exercise swaps are the tool. An opened-but-empty log is rebuilt with the new exercises too. COACH ON EVERY DAY: each day screen has a one-line 💬 Ask about this day bar above the exercises. It starts closed, so it stays out of the way. Open it and it is the same coach and the same conversation as the week screen, but it knows which day you are on: its exercises, whether you have logged sets, and what "this workout" means. Day-specific suggestions sit under the box (different exercises, why these exercises, make it shorter, how heavy). Questions asked from a day are tagged with that date in the thread. The coach also has a new regenerate_day_exercises tool, so "give me different exercises today" actually works, and like every coach change it waits for you to tap Apply. Also fixed: expanding Ask the Coach threw an error (a leftover name from v2.60), so it never scrolled you to the chat box.'},
   {v:'3.29',d:'Exercise order now follows the standard rule: compounds first, your priority lift first, isolation after, core last',det:'You asked whether flat bench before incline was actually right. Checked it. The evidence: a 2021 meta-analysis (Nunes et al.) found strength gains favour whichever exercise is done first in a session, while muscle growth came out about the same either way. That is why the standard prescription is multi-joint lifts before single-joint ones, and your most important lift first. Flat before incline is a sensible default, but if upper chest is your priority, incline should lead. The gap on our side: the AI picker from 3.27 could only choose WHICH exercise filled each slot, never the order, so slot 1 (flat press family) always came first no matter what the AI thought. Now the AI also chooses the order, with explicit rules in its prompt: compounds before isolation, the lift that matters most for your goals first, never isolating a muscle before a compound that needs it (no triceps before pressing, no biceps before rows), small-muscle isolation near the end, core last. Code then double-checks the non-negotiable part: every slot still filled exactly once from real candidates, and compounds, isolation, core in that tier order even if the AI slips; the AI\'s choice within a tier (e.g. incline before flat) is kept. The offline rules fallback now applies the same tier order, which fixes one case where a compound like dips could land after lateral raises.'},
@@ -5061,7 +5068,6 @@ function _wToCurrentUnit(v,entryUnit){
   if(!entryUnit||entryUnit===cur)return v2;
   return _convertW(v2,cur);
 }
-function weightEntryMode(){return DB.get('weight_entry','number');}
 function _refreshWeightEntryUI(){
   const modal=document.getElementById('exlog-modal');
   if(modal&&S.activeLog){
@@ -5073,54 +5079,10 @@ function _refreshWeightEntryUI(){
   }
   render();
 }
-function setWeightEntryMode(m){
-  DB.set('weight_entry',m==='plates'?'plates':'number');
-  _refreshWeightEntryUI();
-}
-function barOptions(){return unit()==='lbs'?[45,35,25]:[20,15,10];}
-function barWeight(set){
-  if(set!=null&&set.bar!=null&&set.bar!==''){
-    const b=parseFloat(set.bar);
-    if(!isNaN(b)&&b>=0)return b;
-  }
-  return unit()==='lbs'?45:20;
-}
-function plateSizes(){return unit()==='lbs'?[45,35,25,10,5,2.5]:[20,15,10,5,2.5,1.25];}
-function platesTotal(counts,set){
-  const perSide=plateSizes().reduce((s,p)=>s+(Number(counts[p])||0)*p,0);
-  return Math.round((barWeight(set)+2*perSide)*10)/10;
-}
-function decomposePlates(total,set){
-  let rem=Math.max(0,((parseFloat(total)||0)-barWeight(set))/2);
-  rem=Math.round(rem*10)/10;
-  const counts={};
-  for(const p of plateSizes()){
-    const n=Math.floor((rem+1e-9)/p);
-    counts[p]=n;
-    rem=Math.round((rem-n*p)*10)/10;
-  }
-  return counts;
-}
-function getSetPlates(set){
-  if(set&&set.plates&&typeof set.plates==='object'){
-    const out={};
-    for(const p of plateSizes())out[p]=Number(set.plates[p])||0;
-    return out;
-  }
-  return decomposePlates(set&&set.w,set);
-}
-function usePlatesEntry(ex){
-  return !!(ex&&!ex.assist&&weightEntryMode()==='plates');
-}
 function toggleUnit(){
   const cur=unit();
   const next=cur==='lbs'?'kg':'lbs';
   DB.set('unit',next);
-  // Convert all visible weight inputs
-  document.querySelectorAll('.w-inp').forEach(inp=>{
-    const v=parseFloat(inp.value);
-    if(!isNaN(v)&&v>0)inp.value=_fmtW(_convertW(v,next));
-  });
   // Keep active-log set.w in sync (inputs alone were converted before — −/+ then jumped)
   if(S.activeLog&&S.activeLog.exercises){
     S.activeLog.exercises.forEach(le=>{
@@ -5129,123 +5091,216 @@ function toggleUnit(){
         if(!isNaN(v)&&v>0){
           set.w=_fmtW(_convertW(v,next));
           set.u=next; // v3.25: keep the unit tag in sync with the converted value
-          delete set.plates; // denominations differ per unit
-          delete set.bar;    // bar options differ per unit — re-decompose with default
+          delete set.plates;
+          delete set.bar; // bar weights differ per unit
         }
       });
     });
     _saveLog();
   }
-  document.querySelectorAll('.unit-lbl').forEach(el=>{
-    // Preserve an "assist " prefix if present on column headers
-    const assist=/^assist\s/i.test(el.textContent||'');
-    el.textContent=(assist?'assist ':'')+next;
-  });
-  document.querySelectorAll('.unit-other').forEach(el=>el.textContent=next==='lbs'?'kg':'lbs');
-  // Plates UI uses different denominations — refresh keeps totals honest
-  if(weightEntryMode()==='plates')_refreshWeightEntryUI();
+  // Plate sizes, bar weights and every weight shown differ per unit — redraw
+  _refreshWeightEntryUI();
 }
 function unitBar(ex){
   const u=unit();
-  const m=weightEntryMode();
-  const showPlates=!(ex&&ex.assist);
-  return`<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
-    ${showPlates?`<div class="entry-tog" role="group" aria-label="Weight entry mode">
-      <button type="button" class="${m==='number'?'on':''}" onclick="setWeightEntryMode('number')">123</button>
-      <button type="button" class="${m==='plates'?'on':''}" onclick="setWeightEntryMode('plates')">Plates</button>
-    </div>`:''}
+  return`<div style="display:flex;justify-content:flex-end;align-items:center;gap:8px;margin-bottom:6px">
     <button class="unit-toggle" onclick="toggleUnit()"><span class="unit-lbl">${u}</span> → <span class="unit-other">${u==='lbs'?'kg':'lbs'}</span></button>
   </div>`;
 }
-function weightNumberControls(ei,si,set,wPh){
-  return`<div class="wt-wrap">
-      <button class="wt-adj" onclick="adjW(${ei},${si},-1)">−</button>
-      <input class="set-inp w-inp${set.w&&!set._edited?(set._ai?' ai-fill':' prefilled'):''}" type="text" inputmode="decimal" placeholder="${wPh||'—'}" value="${set.w||''}" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
-      <button class="wt-adj" onclick="adjW(${ei},${si},1)">+</button>
-    </div>`;
+
+/* ── SET LOGGER (v3.32) ──
+   One compact row per set: set · last time · weight · reps · done. The set you
+   are on gets a helper panel underneath it: −/+ for every exercise, plus a
+   picture of the loaded bar and add-a-plate buttons on barbell lifts only (the
+   old Plates mode showed a 45 lb bar on dumbbells, machines and cables).
+   The weight you type is the truth; plates are worked out from it.
+   Carry-forward: editing a set's weight or reps copies it to the later sets,
+   stopping at the first set you set yourself (_ownW/_ownR) and skipping ticked
+   ones — change set 2 to 145 and sets 3 and 4 follow, up or down. */
+// T-bar rows load one end of the bar, so a two-sided plate picture would be wrong.
+function _isBarbellEx(id){const eq=EX_EQUIP[id]||[];return id!=='tbar_row'&&(eq.includes('barbell')||eq.includes('ez_bar'));}
+function _defaultBar(id){const ez=(EX_EQUIP[id]||[]).includes('ez_bar');return unit()==='lbs'?(ez?25:45):(ez?10:20);}
+// The bar never changes: an Olympic bar, or the lighter EZ bar on EZ-bar lifts.
+function barWeight(id){return _defaultBar(id);}
+function plateSizes(){return unit()==='lbs'?[45,35,25,10,5,2.5]:[25,20,15,10,5,2.5,1.25];}
+// Plates for ONE side, biggest first, plus whatever per-side weight can't be made.
+function decomposePlates(total,bar){
+  let rem=Math.round(Math.max(0,((parseFloat(total)||0)-bar)/2)*100)/100;
+  const plates=[];
+  for(const p of plateSizes()){
+    while(rem+1e-9>=p){plates.push(p);rem=Math.round((rem-p)*100)/100;}
+  }
+  return{plates,rem};
 }
-function platesSetCard(ei,si,set,opts){
-  opts=opts||{};
-  const counts=getSetPlates(set);
-  const bar=barWeight(set);
-  const tot=set.w!==''&&set.w!=null?set.w:_fmtW(platesTotal(counts,set));
+const _PLATE_COL={lbs:{45:'#2563eb',35:'#eab308',25:'#16a34a',10:'#e5e7eb',5:'#9ca3af',2.5:'#dc2626'},
+                  kg:{25:'#dc2626',20:'#2563eb',15:'#eab308',10:'#16a34a',5:'#e5e7eb',2.5:'#4b5563',1.25:'#9ca3af'}};
+function _plateStyle(p){
+  const bg=_PLATE_COL[unit()==='lbs'?'lbs':'kg'][p]||'#6b7280';
+  const light=['#e5e7eb','#9ca3af','#eab308'].includes(bg);
+  const h=Math.round(20+32*p/plateSizes()[0]);
+  return`height:${h}px;background:${bg};color:${light?'#111':'#fff'}`;
+}
+function _plateGroupTxt(plates){
+  const parts=[];
+  plates.forEach(p=>{const g=parts.find(x=>x.p===p);g?g.n++:parts.push({p,n:1});});
+  return parts.map(x=>x.n>1?`${x.n}×${x.p}`:String(x.p)).join(' + ');
+}
+// Last session's done sets for this exercise, before the log's own date.
+function _lastDoneSets(exId,ds){
+  const base=ds?new Date(ds+'T12:00:00'):new Date();
+  for(let i=1;i<=60;i++){
+    const d=fd(addDays(base,-i));
+    for(const k of['log_'+d,'extralog_'+d]){
+      const e=DB.get(k,null)?.exercises?.find(x=>x.id===exId);
+      const done=e?.sets?.filter(x=>x.done&&x.w!==''&&x.w!=null);
+      if(done?.length)return done;
+    }
+  }
+  return null;
+}
+function _isFollowing(set,f){return !set.done&&!(f==='w'?set._ownW:set._ownR)&&set[f]!==''&&set[f]!=null;}
+function _actKey(ei){return(S.activeLogKey||'')+'|'+ei;}
+function _actSetIdx(ei,le){
+  S.actSet=S.actSet||{};
+  const cur=S.actSet[_actKey(ei)];
+  if(cur!=null&&le.sets[cur])return cur;
+  return le.sets.findIndex(x=>!x.done); // -1 once every set is ticked
+}
+function _rowEl(ei,si){return document.getElementById('elr'+ei+'_'+si)||document.getElementById('sr'+ei+'_'+si);}
+function _setRowHtml(ei,si,set,last,ctx,act){
+  const lastTxt=last?`${_fmtW(parseFloat(_wToCurrentUnit(last.w,last.u))||0)}×${last.r||'?'}`:'—';
+  return`<div class="set-row v2${set.done?' s-done':''}${act?' act':''}" id="${ctx.pre}${ei}_${si}">
+    <span class="set-n" onclick="focusSet(${ei},${si})">${setLabel(si,set)}</span>
+    <span class="set-last">${lastTxt}</span>
+    <input class="set-inp w-inp${_isFollowing(set,'w')?' prefilled':''}" type="text" inputmode="decimal" placeholder="${ctx.wPh||'—'}" value="${set.w||''}" onfocus="focusSet(${ei},${si})" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp r-inp${_isFollowing(set,'r')?' prefilled':''}" type="text" inputmode="numeric" placeholder="${ctx.rPh||'—'}" value="${set.r||''}" onfocus="focusSet(${ei},${si})" oninput="this.classList.remove('prefilled')" onchange="updSet(${ei},${si},'r',this.value)">
+    <button class="set-ck${set.done?' on':''}" id="${ctx.ck}${ei}_${si}" onclick="${ctx.tog}(${ei},${si})">${set.done?'✓':'○'}</button>
+  </div>`;
+}
+function setBlockHtml(ei,le,ctx){
+  const ex=EX[le.id]||{};
   const u=unit();
-  const tog=opts.togFn||'togSet';
-  const rowId=opts.rowId||(`sr${ei}_${si}`);
-  return`<div class="plt-card${set.done?' s-done':''}" id="${rowId}">
-  <div class="plt-card-top">
-    <span class="set-n">${opts.label||setLabel(si,set)}</span>
-    <div class="plt-total"><span id="plt-tot-${ei}-${si}">${tot}</span><small class="unit-lbl">${u}</small></div>
-    <button class="set-ck${set.done?' on':''}" id="${opts.ckId||(`ck${ei}_${si}`)}" onclick="${tog}(${ei},${si})">${set.done?'✓':'○'}</button>
-  </div>
-  <div class="plt-bar-hint">Plates ×2 (per side)</div>
-  <div class="plt-grid">
-    <div class="plt-chip plt-bar">
-      <button class="wt-adj" onclick="adjBar(${ei},${si},-1)">−</button>
-      <div class="plt-lab"><b>Bar</b><span id="plt-bar-${ei}-${si}">${bar}</span></div>
-      <button class="wt-adj" onclick="adjBar(${ei},${si},1)">+</button>
-    </div>
-    ${plateSizes().map(p=>`<div class="plt-chip">
-      <button class="wt-adj" onclick="adjPlate(${ei},${si},${p},-1)">−</button>
-      <div class="plt-lab"><b>${p}</b><span id="plt-c-${ei}-${si}-${String(p).replace('.','')}">${counts[p]||0}</span></div>
-      <button class="wt-adj" onclick="adjPlate(${ei},${si},${p},1)">+</button>
-    </div>`).join('')}
-  </div>
-  <div class="plt-reps">
-    <label>Reps</label>
-    <input class="set-inp" type="text" inputmode="numeric" placeholder="${opts.rPh||'—'}" value="${set.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
-  </div>
+  const last=_lastDoneSets(le.id,ctx.ds);
+  const act=_actSetIdx(ei,le);
+  const panel=si=>`<div class="ld-panel" id="${ctx.pre}-ld${ei}">${_loadHelperInner(ei,si)}</div>`;
+  const rows=le.sets.map((set,si)=>_setRowHtml(ei,si,set,last?.[si],ctx,si===act)+(si===act?panel(si):'')).join('');
+  return`<div class="set-block" id="${ctx.pre}-sets${ei}" data-ck="${ctx.ck}" data-tog="${ctx.tog}" data-ds="${ctx.ds||''}" data-wph="${_esc(ctx.wPh||'—')}" data-rph="${_esc(ctx.rPh||'—')}">
+  <div class="sets-hdr v2"><span>Set</span><span>Last</span><span class="unit-lbl">${ex.assist?'assist '+u:u}</span><span>Reps</span><span>✓</span></div>
+  ${rows}${act<0?`<div class="ld-panel" id="${ctx.pre}-ld${ei}" style="display:none"></div>`:''}
 </div>`;
 }
-function adjBar(ei,si,dir){
-  if(!S.activeLog)return;
-  const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
-  const opts=barOptions();
-  const cur=barWeight(set);
-  let idx=opts.indexOf(cur);
-  if(idx<0){
-    // Snap to nearest common bar, then step
-    idx=opts.reduce((best,o,i)=>Math.abs(o-cur)<Math.abs(opts[best]-cur)?i:best,0);
+function _rerenderSets(ei){
+  const le=S.activeLog?.exercises[ei];if(!le)return;
+  for(const pre of['elr','sr']){
+    const box=document.getElementById(`${pre}-sets${ei}`);
+    if(!box)continue;
+    const d=box.dataset;
+    box.outerHTML=setBlockHtml(ei,le,{pre,ck:d.ck,tog:d.tog,ds:d.ds,wPh:d.wph,rPh:d.rph});
   }
-  // Cycle through common options
-  idx=(idx+dir+opts.length)%opts.length;
-  set.bar=opts[idx];
-  const counts=getSetPlates(set);
-  const clean={};
-  for(const sz of plateSizes())if(counts[sz])clean[sz]=counts[sz];
-  set.plates=clean;
-  set.w=_fmtW(platesTotal(counts,set));
-  set._edited=true;
+}
+function _loadHelperInner(ei,si){
+  const le=S.activeLog?.exercises[ei];const set=le?.sets[si];if(!set)return'';
+  const ex=EX[le.id]||{};
+  const u=unit(),step=u==='lbs'?5:2.5;
+  const w=parseFloat(set.w)||0;
+  const lbl=set.side?`Set ${Math.floor(si/2)+1} · ${set.side}`:`Set ${si+1}`;
+  let h=`<div class="ld-top"><span class="ld-lbl">${lbl}${ex.assist?' · assistance':''}</span>
+    <button class="wt-adj ld-adj" onclick="adjW(${ei},${si},-1)">−${step}</button>
+    <button class="wt-adj ld-adj" onclick="adjW(${ei},${si},1)">+${step}</button></div>`;
+  if(!_isBarbellEx(le.id)||ex.assist)return h;
+  const bar=barWeight(le.id);
+  const{plates,rem}=decomposePlates(w,bar);
+  const note=!w?'Type a weight, or add plates below'
+    :w<bar?`That's less than the ${bar} ${u} bar`
+    :plates.length?`${bar} bar + <b>${_plateGroupTxt(plates)}</b> each side`
+    :`Just the ${bar} ${u} bar`;
+  const odd=w>=bar&&rem>0.001?` <small>· ${_fmtW(rem*2)} ${u} can't be made with plates</small>`:'';
+  // Whole barbell: biggest plates sit against the collars, mirrored on both sides.
+  const pl=p=>`<button class="ld-plate" style="${_plateStyle(p)}" onclick="removePlate(${ei},${si},${p})" aria-label="Take a ${p} off each side">${p}</button>`;
+  return h+`<div class="ld-bar"><div class="ld-side ld-l">${[...plates].reverse().map(pl).join('')}</div><div class="ld-collar"></div><div class="ld-shaft">${bar} ${u}</div><div class="ld-collar"></div><div class="ld-side ld-r">${plates.map(pl).join('')}</div></div>
+    <div class="ld-note">${note}${odd}</div>
+    <div class="ld-row"><span class="ld-rlbl">Add</span><div class="ld-chips">${plateSizes().map(p=>`<button class="ld-chip" onclick="addPlate(${ei},${si},${p})">+${p}</button>`).join('')}</div></div>
+    <div class="ld-hint">+ puts one plate on each side · tap a plate on the bar to take it off</div>`;
+}
+function _placeHelper(ei,si){
+  const le=S.activeLog?.exercises[ei];if(!le)return;
+  S.actSet=S.actSet||{};
+  if(si==null){S.actSet[_actKey(ei)]=null;si=_actSetIdx(ei,le);}
+  else S.actSet[_actKey(ei)]=si;
+  for(const pre of['elr','sr']){
+    const box=document.getElementById(`${pre}-sets${ei}`);
+    const panel=document.getElementById(`${pre}-ld${ei}`);
+    if(!box||!panel)continue;
+    const row=si>=0?document.getElementById(`${pre}${ei}_${si}`):null;
+    box.querySelectorAll('.set-row').forEach(r=>r.classList.toggle('act',!!row&&r===row));
+    if(!row){panel.style.display='none';continue;}
+    if(row.nextElementSibling!==panel)row.after(panel);
+    panel.style.display='';
+    panel.innerHTML=_loadHelperInner(ei,si);
+  }
+}
+function focusSet(ei,si){
+  S.actSet=S.actSet||{};
+  if(S.actSet[_actKey(ei)]===si&&document.querySelector(`[id$="-ld${ei}"]`)?.previousElementSibling?.id?.endsWith(`${ei}_${si}`))return;
+  _placeHelper(ei,si);
+}
+function _carryForward(ei,si,field){
+  const sets=S.activeLog?.exercises[ei]?.sets;if(!sets)return;
+  const own=field==='w'?'_ownW':'_ownR';
+  for(let j=si+1;j<sets.length;j++){
+    const x=sets[j];
+    if(x[own])break;   // a set you changed yourself starts its own run
+    if(x.done)continue; // never rewrite a ticked set
+    x[field]=sets[si][field];
+    if(field==='w'){x.u=sets[si].u;delete x.plates;}
+  }
+}
+function _refreshSetInputs(ei){
+  const le=S.activeLog?.exercises[ei];if(!le)return;
+  le.sets.forEach((x,si)=>{
+    const row=_rowEl(ei,si);if(!row)return;
+    const wi=row.querySelector('.w-inp'),ri=row.querySelector('.r-inp');
+    if(wi){wi.value=x.w||'';wi.classList.toggle('prefilled',_isFollowing(x,'w'));wi.classList.remove('ai-fill');}
+    if(ri){ri.value=x.r||'';ri.classList.toggle('prefilled',_isFollowing(x,'r'));}
+  });
+}
+function _setW(ei,si,val){
+  const set=S.activeLog?.exercises[ei]?.sets[si];if(!set)return;
+  const raw=String(val==null?'':val).trim();
+  const n=parseFloat(raw);
+  set.w=raw===''||isNaN(n)?'':_fmtW(Math.max(0,n));
   set.u=unit(); // v3.25
+  set._edited=true;set._ownW=true;
+  delete set.plates;
+  if(set.w!=='')_carryForward(ei,si,'w');
   _saveLog();
   debouncedSync();
-  const tot=document.getElementById(`plt-tot-${ei}-${si}`);
-  if(tot)tot.textContent=set.w;
-  const barEl=document.getElementById(`plt-bar-${ei}-${si}`);
-  if(barEl)barEl.textContent=String(set.bar);
+  _refreshSetInputs(ei);
+  _placeHelper(ei,si);
 }
-function adjPlate(ei,si,plate,dir){
-  if(!S.activeLog)return;
-  const set=S.activeLog.exercises[ei]?.sets[si];if(!set)return;
-  const p=parseFloat(plate);
-  const counts=getSetPlates(set);
-  counts[p]=Math.max(0,(counts[p]||0)+dir);
-  const clean={};
-  for(const sz of plateSizes())if(counts[sz])clean[sz]=counts[sz];
-  set.plates=clean;
-  if(set.bar==null||set.bar==='')set.bar=barWeight(set);
-  set.w=_fmtW(platesTotal(counts,set));
-  set._edited=true;
-  set.u=unit(); // v3.25
-  _saveLog();
-  debouncedSync();
-  const tot=document.getElementById(`plt-tot-${ei}-${si}`);
-  if(tot)tot.textContent=set.w;
-  const cid='plt-c-'+ei+'-'+si+'-'+String(p).replace('.','');
-  const cnt=document.getElementById(cid);
-  if(cnt)cnt.textContent=String(counts[p]||0);
+function addPlate(ei,si,p){
+  const le=S.activeLog?.exercises[ei];const set=le?.sets[si];if(!set)return;
+  const bar=barWeight(le.id);
+  const w=Math.max(parseFloat(set.w)||0,bar);
+  _setW(ei,si,Math.round((w+2*p)*100)/100);
 }
-
+function removePlate(ei,si,p){
+  const le=S.activeLog?.exercises[ei];const set=le?.sets[si];if(!set)return;
+  const bar=barWeight(le.id);
+  _setW(ei,si,Math.max(bar,Math.round(((parseFloat(set.w)||0)-2*p)*100)/100));
+}
+// "Why this weight" — the progression target and its reason, shared by the
+// Log workout screen and the per-exercise Log sets sheet.
+function _progTargetHtml(prog,allDone){
+  if(!prog||prog.w===''||prog.w==null||allDone)return'';
+  const ch=prog.change;
+  const badge=ch&&ch!=='hold'&&ch!=='match last'
+    ?`<span style="font-size:10px;font-weight:800;color:${ch.startsWith('↑')?'var(--grn)':'var(--acc)'};background:${ch.startsWith('↑')?'rgba(16,185,129,.15)':'rgba(124,58,237,.12)'};padding:2px 7px;border-radius:6px">${ch}</span>`
+    :ch==='hold'?`<span style="font-size:10px;font-weight:700;color:var(--t2)">hold</span>`:'';
+  return`<div style="font-size:11px;margin-bottom:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px">
+    <span style="color:var(--acc);font-weight:800">🎯 Target: ${prog.w}${unit()} × ${prog.r}</span>${badge}<span style="flex:1"></span>
+  </div>${prog.reason?`<div style="font-size:10px;color:var(--t2);margin:-4px 2px 8px;line-height:1.4">${prog.reason}</div>`:''}`;
+}
 /* ── LOCK SCREEN ── */
 function rLock(){
   const hasPIN=!!DB.get('pin',null);
@@ -8978,25 +9033,13 @@ function rLogEx(le,ei){
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar(ex)}
-  ${_prog&&_prog.w!==''&&!allDone?`<div style="font-size:11px;margin-bottom:8px;background:rgba(124,58,237,.08);border:1px solid rgba(124,58,237,.25);border-radius:8px;padding:6px 10px;display:flex;align-items:center;gap:8px">
-    <span style="color:var(--acc);font-weight:800">🎯 Target: ${_prog.w}${unit()} × ${_prog.r}</span>
-    ${_prog.change&&_prog.change!=='hold'&&_prog.change!=='match last'?`<span style="font-size:10px;font-weight:800;color:${_prog.change.startsWith('↑')?'var(--grn)':'var(--acc)'};background:${_prog.change.startsWith('↑')?'rgba(16,185,129,.15)':'rgba(124,58,237,.12)'};padding:2px 7px;border-radius:6px">${_prog.change}</span>`:_prog.change==='hold'?`<span style="font-size:10px;font-weight:700;color:var(--t2)">hold</span>`:''}
-    <span style="flex:1"></span>
-  </div>${_prog.reason?`<div style="font-size:10px;color:var(--t2);margin:-4px 2px 8px;line-height:1.4">${_prog.reason}</div>`:''}`:''}
+  ${_progTargetHtml(_prog,allDone)}
   ${_aiSugg&&!_prog?.w&&!allDone?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-bottom:8px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:5px 9px">✨ AI suggestion: ${_aiSugg.w}${unit()} × ${_aiSugg.r} reps</div>`:''}
   ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
   ${_wSwap?`<div style="font-size:11px;font-weight:600;margin-bottom:8px;background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:5px 9px;display:flex;align-items:center;gap:8px"><span style="color:var(--amb);flex:1">💡 Try <strong>${EX[_wSwap.toId]?.n||_wSwap.suggested}</strong> — ${_wSwap.reason}</span><button onclick="event.stopPropagation();doExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}','${_wSwap.toId}')" style="background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);border-radius:6px;color:var(--amb);font-size:10px;font-weight:700;padding:4px 9px;cursor:pointer;white-space:nowrap;-webkit-appearance:none">Swap →</button></div>`:''}
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
   ${ex.assist?`<div style="font-size:11px;color:var(--amb);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.45">⚖️ This is <strong>assistance weight</strong> — how much the machine helps. <strong>Lower = stronger.</strong> Your goal is to reduce it over time toward unassisted.</div>`:''}
-  ${usePlatesEntry(ex)
-    ? le.sets.map((set,si)=>platesSetCard(ei,si,set,{rPh})).join('')
-    : `<div class="sets-hdr"><span>#</span><span class="unit-lbl">${ex.assist?'assist '+unit():unit()}</span><span>Reps</span><span>✓</span></div>
-  ${le.sets.map((set,si)=>`<div class="set-row${set.done?' s-done':''}" id="sr${ei}_${si}">
-    <span class="set-n">${setLabel(si,set)}</span>
-    ${weightNumberControls(ei,si,set,wPh)}
-    <input class="set-inp" type="text" inputmode="numeric" placeholder="${rPh}" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
-    <button class="set-ck${set.done?' on':''}" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">${set.done?'✓':'○'}</button>
-  </div>`).join('')}`}
+  ${setBlockHtml(ei,le,{pre:'sr',ck:'ck',tog:'togSet',wPh,rPh,ds:S.activeLog.date})}
   <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
   <button class="ex-busy-btn" style="margin-top:10px;width:100%;text-align:center" onclick="openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄 Swap exercise</button>
 </div>
@@ -9018,8 +9061,13 @@ function updSet(ei,si,field,val){
   if(!S.activeLog)return;
   const set=S.activeLog.exercises[ei]?.sets[si];
   if(!set)return;
+  if(field==='w'){_setW(ei,si,val);return;} // v3.32: carries forward + redraws plates
   set[field]=val;
-  if(field==='w'){delete set.plates;delete set.bar;set.u=unit();} // v3.25
+  if(field==='r'){
+    set._ownR=true;
+    if(String(val).trim()!=='')_carryForward(ei,si,'r');
+    _refreshSetInputs(ei);
+  }
   _saveLog();
   debouncedSync();
 }
@@ -9036,8 +9084,10 @@ function togSet(ei,si){
   // patch DOM
   const row=document.getElementById(`sr${ei}_${si}`);
   const ck=document.getElementById(`ck${ei}_${si}`);
-  if(row)row.className=(row.classList.contains('plt-card')?'plt-card':'set-row')+(set.done?' s-done':'');
+  if(row)row.classList.toggle('s-done',set.done);
   if(ck){ck.className='set-ck'+(set.done?' on':'');ck.textContent=set.done?'✓':'○';}
+  _refreshSetInputs(ei);
+  _placeHelper(ei); // helper moves on to the next set still to do
   const allDone=le.sets.every(s=>s.done);
   const doneSets=le.sets.filter(s=>s.done).length;
   const exEl=document.getElementById(`lex${ei}`);
@@ -9080,25 +9130,9 @@ function addSet(ei){
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
   const neu={w:last.w||'',r:last.r||'',done:false,u:last.u||unit()}; // v3.25
-  if(last.plates&&typeof last.plates==='object')neu.plates={...last.plates};
   le.sets.push(neu);
   _saveLog();
-  const body=document.getElementById('lbody'+ei);
-  if(!body)return;
-  const addBtn=body.querySelector('.add-set');
-  if(usePlatesEntry(ex)){
-    const wrap=document.createElement('div');
-    wrap.innerHTML=platesSetCard(ei,si,neu,{label:String(si+1),rPh:'—'});
-    body.insertBefore(wrap.firstChild,addBtn);
-    return;
-  }
-  const div=document.createElement('div');
-  div.className='set-row';div.id=`sr${ei}_${si}`;
-  div.innerHTML=`<span class="set-n">${si+1}</span>
-    ${weightNumberControls(ei,si,neu,'—')}
-    <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${last.r||''}" onchange="updSet(${ei},${si},'r',this.value)">
-    <button class="set-ck" id="ck${ei}_${si}" onclick="togSet(${ei},${si})">○</button>`;
-  body.insertBefore(div,addBtn);
+  _rerenderSets(ei);
 }
 
 function checkPR(id,weight,reps){
@@ -9205,20 +9239,10 @@ function adjW(ei,si,dir){
   // unit() stores 'lbs'/'kg' (default lbs). Old code checked ==='lb' with default 'kg',
   // so the step was always 2.5 even when logging in pounds.
   const step=unit()==='lbs'?5:2.5;
-  const inp=document.querySelector(`#sr${ei}_${si} .w-inp`)||document.querySelector(`#elr${ei}_${si} .w-inp`);
+  const inp=_rowEl(ei,si)?.querySelector('.w-inp');
   // Prefer visible input so −/+ stays correct after unit toggle or typing before blur
   const cur=parseFloat(inp&&inp.value!==''?inp.value:set.w)||0;
-  const nw=Math.max(0,Math.round((cur+dir*step)*10)/10);
-  set.w=_fmtW(nw);
-  set._edited=true;
-  set.u=unit(); // v3.25
-  delete set.plates;
-  delete set.bar;
-  _saveLog();
-  if(inp){inp.value=set.w;inp.classList.remove('prefilled','ai-fill');}
-  const tot=document.getElementById(`plt-tot-${ei}-${si}`);
-  if(tot)tot.textContent=set.w;
-  debouncedSync();
+  _setW(ei,si,Math.max(0,Math.round((cur+dir*step)*10)/10)); // v3.32: carries forward
 }
 
 function markEdited(ei,si,inp){
@@ -11762,10 +11786,9 @@ function showExLogModal(le,ei,ds){
   <div class="swap-title">${ex.n}</div>
   ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}</span></div>`:''}
   <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
+  ${_progTargetHtml(computeProgressionTarget(le.id,getLastLog(le.id)),le.sets.every(x=>x.done))}
   ${unitBar(ex)}
-  <div id="exlog-rows">${usePlatesEntry(ex)
-    ? le.sets.map((set,si)=>platesSetCard(ei,si,set,{rowId:`elr${ei}_${si}`,ckId:`elk${ei}_${si}`,togFn:'exLogTog',rPh:'—'})).join('')
-    : `<div class="sets-hdr"><span>#</span><span class="unit-lbl">${ex.assist?'assist '+unit():unit()}</span><span>Reps</span><span>✓</span></div>`+le.sets.map((set,si)=>exLogRow(ei,si,set)).join('')}</div>
+  <div id="exlog-rows">${setBlockHtml(ei,le,{pre:'elr',ck:'elk',tog:'exLogTog',wPh:'—',rPh:'—',ds})}</div>
   <button class="add-set" style="margin-top:6px" onclick="exLogAdd(${ei})">+ Add set</button>
   <button class="btn btn-p" style="margin-top:14px" onclick="closeExLog('${ds}')">Done</button>
 </div>`;
@@ -11773,14 +11796,6 @@ function showExLogModal(le,ei,ds){
   requestAnimationFrame(()=>modal.classList.add('on'));
 }
 
-function exLogRow(ei,si,set){
-  return`<div class="set-row${set.done?' s-done':''}" id="elr${ei}_${si}">
-    <span class="set-n">${setLabel(si,set)}</span>
-    ${weightNumberControls(ei,si,set,'—')}
-    <input class="set-inp" type="text" inputmode="numeric" placeholder="—" value="${set.r}" onchange="updSet(${ei},${si},'r',this.value)">
-    <button class="set-ck${set.done?' on':''}" id="elk${ei}_${si}" onclick="exLogTog(${ei},${si})">${set.done?'✓':'○'}</button>
-  </div>`;
-}
 
 function exLogTog(ei,si){
   if(!S.activeLog)return;
@@ -11792,8 +11807,10 @@ function exLogTog(ei,si){
   debouncedSync();
   const row=document.getElementById(`elr${ei}_${si}`);
   const ck=document.getElementById(`elk${ei}_${si}`);
-  if(row)row.className=(row.classList.contains('plt-card')?'plt-card':'set-row')+(set.done?' s-done':'');
+  if(row)row.classList.toggle('s-done',set.done);
   if(ck){ck.className='set-ck'+(set.done?' on':'');ck.textContent=set.done?'✓':'○';}
+  _refreshSetInputs(ei);
+  _placeHelper(ei); // helper moves on to the next set still to do
 }
 
 function exLogAdd(ei){
@@ -11803,17 +11820,9 @@ function exLogAdd(ei){
   const last=le.sets[le.sets.length-1]||{};
   const si=le.sets.length;
   const neu={w:last.w||'',r:last.r||'',done:false,u:last.u||unit()}; // v3.25
-  if(last.plates&&typeof last.plates==='object')neu.plates={...last.plates};
   le.sets.push(neu);
   _saveLog();
-  const rows=document.getElementById('exlog-rows');if(!rows)return;
-  const div=document.createElement('div');
-  if(usePlatesEntry(ex)){
-    div.innerHTML=platesSetCard(ei,si,neu,{rowId:`elr${ei}_${si}`,ckId:`elk${ei}_${si}`,togFn:'exLogTog',label:String(si+1),rPh:'—'});
-  }else{
-    div.innerHTML=exLogRow(ei,si,neu);
-  }
-  rows.appendChild(div.firstElementChild);
+  _rerenderSets(ei);
 }
 
 function closeExLog(ds){
