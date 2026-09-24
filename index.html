@@ -996,10 +996,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.29';
+const APP_VERSION='3.30';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.30',d:'Ask the coach from any day, and re-pick a day\'s exercises in one tap',det:'You asked how to regenerate today\'s Push, and for the AI to live on each day. WHY PUSH FELT LOCKED IN: Regenerate plan for this week, and the coach\'s regenerate_remaining_week, both deliberately keep a day\'s exercises whenever its workout type stays the same (so a weather refresh doesn\'t wipe your workouts). So asking for new exercises changed nothing on a day that stayed Push. NEW EXERCISES BUTTON: a 🔄 New exercises button now sits next to the Exercises heading on any gym day. It re-runs the exercise picker for that day, respecting your equipment, energy and Home-day setting, and keeps the draw that changes the most exercises. It only appears while nothing is logged: once you\'ve done a set the day is fixed, and single-exercise swaps are the tool. An opened-but-empty log is rebuilt with the new exercises too. COACH ON EVERY DAY: each day screen has a one-line 💬 Ask about this day bar above the exercises. It starts closed, so it stays out of the way. Open it and it is the same coach and the same conversation as the week screen, but it knows which day you are on: its exercises, whether you have logged sets, and what "this workout" means. Day-specific suggestions sit under the box (different exercises, why these exercises, make it shorter, how heavy). Questions asked from a day are tagged with that date in the thread. The coach also has a new regenerate_day_exercises tool, so "give me different exercises today" actually works, and like every coach change it waits for you to tap Apply. Also fixed: expanding Ask the Coach threw an error (a leftover name from v2.60), so it never scrolled you to the chat box.'},
   {v:'3.29',d:'Exercise order now follows the standard rule: compounds first, your priority lift first, isolation after, core last',det:'You asked whether flat bench before incline was actually right. Checked it. The evidence: a 2021 meta-analysis (Nunes et al.) found strength gains favour whichever exercise is done first in a session, while muscle growth came out about the same either way. That is why the standard prescription is multi-joint lifts before single-joint ones, and your most important lift first. Flat before incline is a sensible default, but if upper chest is your priority, incline should lead. The gap on our side: the AI picker from 3.27 could only choose WHICH exercise filled each slot, never the order, so slot 1 (flat press family) always came first no matter what the AI thought. Now the AI also chooses the order, with explicit rules in its prompt: compounds before isolation, the lift that matters most for your goals first, never isolating a muscle before a compound that needs it (no triceps before pressing, no biceps before rows), small-muscle isolation near the end, core last. Code then double-checks the non-negotiable part: every slot still filled exactly once from real candidates, and compounds, isolation, core in that tier order even if the AI slips; the AI\'s choice within a tier (e.g. incline before flat) is kept. The offline rules fallback now applies the same tier order, which fixes one case where a compound like dips could land after lateral raises.'},
   {v:'3.28',d:'Merged the other v3.20 fix, and extra-session Log sets now save to the extra session',det:'Another session had already pushed its own v3.20 (Log sets opening the wrong exercise) while these updates were sitting unpushed, so the two lines of work were merged and the local ones renumbered 3.21 to 3.27. The two fixes touched the same buttons: the extra gym session on a ride day had its per-exercise Log sets button wired up in 3.21, but it always opened the day\'s main log, not the extra session\'s own log. With the ID-based lookup from 3.20 that would have quietly started a second log for the day. Now an exercise that belongs to the extra session opens and saves to that session\'s log (the same one Log workout / Continue log uses), and swapping an exercise there updates the extra session\'s list instead of doing nothing.'},
   {v:'3.27',d:'AI now picks push/pull/legs exercises first, rules-based SLOTS logic is the instant offline fallback',det:'You said the flat-before-incline push-day order proved there was no well-defined logic, and that the AI API should be doing this instead, falling back to rules only if the network is down. Two corrections and a build. First, the order WAS defined — it\'s a hardcoded SLOTS template (flat bench in slot 1, incline in slot 3, after the OHP slot) — a real but debatable authoring choice, not an absence of logic. Second, the app\'s existing AI proxy (Gemini → Perplexity → OpenAI) already has a documented daily free-tier quota that gets exhausted (there\'s a whole _aiQuotaHit / isQuotaErr system for it), so making every single exercise pick a live API call would burn through that quota fast and make workout generation fail offline or mid-quota with nothing to show. Built AI-first-with-rules-fallback the way that respects both: genSession() (the SLOTS-based logic) still runs FIRST and instantly on every plan generation — you always get a valid, complete plan with zero wait and zero network dependency. Freshly-generated gym days are then tagged _freshGen and handed to a new background step, upgradeWeekExercisesWithAI(), which makes ONE batched Gemini call covering every fresh day in that plan at once (not one call per day or per slot — that would multiply API usage 5-6x per day and could hit the quota on a single plan generation). The AI is constrained to the exact same equipment-filtered candidate pool genSession draws from (_slotCandidates/filterSlot), so it can only ever pick exercises you actually have access to — it can\'t invent an id. Its response is parsed and validated per day (right number of slots filled, every id present in that slot\'s real candidate list, no duplicates within the day); a day that fails validation simply keeps its rules-based pick — this is a per-day best-effort upgrade, never an all-or-nothing swap, and it silently no-ops if the quota is already known exhausted (_aiQuotaHit) or the call fails for any reason. Wired into all 4 places a week\'s exercises get generated: Generate Plan (both the weather and no-weather paths), the end-of-week \'generate next week\' flow (awaited there specifically, so the weight/rep suggestion prompt reflects the AI\'s actual exercise picks, not the rules placeholder), and the AI coach\'s regenerate_remaining_week tool. CAVEAT: this is a genuine behavior change worth watching — the AI\'s picks are not deterministic the way genSession\'s are, so if you rely on hitting the exact same exercise week over week for progression tracking, a regenerated week could vary more than before. It never changes an exercise on a day you\'ve already logged sets for (existing lock logic is untouched) and never overrides a day whose type hasn\'t changed. Not surfaced in the UI yet whether a given day\'s exercises came from AI or rules (stored as _aiGen internally) — flag if you want that visible.'},
@@ -6500,7 +6501,8 @@ ${(()=>{
 </div>`;
 })()}
 ${rVitruvianCard(ds)}
-${isGym&&dp.exercises?rExList(dp,log):''}
+${rAskCoach(ds)}
+${isGym&&dp.exercises?rExList(dp,log,{regen:true}):''}
 ${isRide?rRideCard(dp)+rLoggedGymOnRideDay(ds):''}
 ${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
 ${dp.type==='REST'?rRestCard():''}
@@ -6543,10 +6545,14 @@ function rVitruvianCard(ds){
 </div>`;
 }
 
-function rExList(dp,log){
+function rExList(dp,log,opts){
   const energyLabel=S.energy?_T('e_'+S.energy):'';
+  // v3.30: re-pick this day's exercises. Main gym day only (not the extra session on a ride day),
+  // and only while nothing is logged: once a set is done the day is fixed and single swaps are the tool.
+  const canRegen=opts?.regen&&SLOTS[dp.type]&&!_gymSetsLogged(dp.date)&&!log?.completed;
+  const regen=canRegen?`<button onclick="regenDayExercises('${dp.date}')" style="background:var(--s2);border:1px solid var(--bord);border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--al);cursor:pointer">🔄 New exercises</button>`:'';
   const elbl=energyLabel?`<span style="background:var(--s2);border-radius:100px;padding:3px 10px;font-size:11px;font-weight:700;color:var(--al)">${energyLabel}</span>`:'';
-  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="sec-lbl" style="margin-bottom:0">${_T('exercises_lbl')}</div>${elbl}</div><div class="ex-list">${(dp.exercises||[]).map((id,i)=>{
+  return`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px"><div class="sec-lbl" style="margin-bottom:0">${_T('exercises_lbl')}</div><div style="display:flex;align-items:center;gap:6px">${elbl}${regen}</div></div><div class="ex-list">${(dp.exercises||[]).map((id,i)=>{
     const ex=EX[id];if(!ex)return'';
     const pr=DB.get('prs',{})[id];
     const tgt=energyTargets(id,S.energy||'okay');
@@ -7415,6 +7421,7 @@ CAPABILITIES — what you can do:
   · log_gym_sets(date, exercises[]) — log structured gym sets. Each exercise has a name (fuzzy-matched against the library) and an array of {weight, reps} sets. Use when user dictates a workout like "bench 100 lb 3x8, OHP 65 lb 3x10". Weight is in the user's preferred unit. Updates PRs automatically.
   · regenerate_remaining_week(from_date) — regenerate plan from a date forward, preserving prior days and locked days.
   · make_legs_unilateral(date) — convert a leg day's exercises to single-leg variants (squat→single-leg squat, RDL→single-leg deadlift, etc.). Use when the user wants to train legs one side at a time.
+  · regenerate_day_exercises(date) — re-pick every exercise on one gym day (fresh selection, same workout type). Use this for "new/different exercises for today". regenerate_remaining_week does NOT change the exercises of a day whose workout type stays the same, so never use it for this.
   · swap_exercise(date, from_exercise, to_exercise) — replace a specific exercise on a gym day with a different one (e.g. barbell bench → dumbbell press). Both names fuzzy-matched.
   · set_exercise_targets(date, exercise, sets?, reps?, weight?) — prescribe the sets/reps/weight for a specific exercise (e.g. "set squat to 5x5 at 100kg"). Omitted fields keep their current value.
 - BE PROACTIVE with tool calls. If the user's question implies they want a plan change, CALL THE TOOL in this same response. Don't describe what you would do or ask for permission — just call the tool. The app shows a confirmation card automatically before any change applies, so the user always has the final say. Calling the tool isn't an action — it's a proposal that the user can Apply or Skip.
@@ -7593,6 +7600,17 @@ const COACH_TOOLS=[{
         type:'OBJECT',
         properties:{
           date:{type:'STRING',description:'Date of the leg day in YYYY-MM-DD'}
+        },
+        required:['date']
+      }
+    },
+    {
+      name:'regenerate_day_exercises',
+      description:"Re-pick EVERY exercise on one gym day with a fresh selection of the same workout type (respects the user's equipment and home-day setting). Use when the user wants new, different or fresh exercises for a day — e.g. 'give me different exercises today', 'regenerate my push day', 'I'm bored of these lifts'. To change ONE specific lift use swap_exercise instead. Refused if sets are already logged that day.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the gym day in YYYY-MM-DD'}
         },
         required:['date']
       }
@@ -7909,6 +7927,10 @@ const COACH_TOOL_HANDLERS={
       return{ok:true,msg:`Converted ${changed} exercise${changed!==1?'s':''} to single-leg${skipped?` (${skipped} kept — gym lacks equipment)`:''}`};
     }
   },
+  regenerate_day_exercises:{
+    summarize:({date})=>`New exercises for ${_dayLbl(date)}`,
+    execute:({date})=>_regenDayCore(date)
+  },
   swap_exercise:{
     summarize:({date,from_exercise,to_exercise})=>{
       const f=_matchExerciseByName(from_exercise),t=_matchExerciseByName(to_exercise);
@@ -8071,13 +8093,16 @@ function resetAskConversation(){
 // (Previously persisted via DB.get('ask_collapsed'), which meant once expanded it
 // stayed expanded across opens — defeating the point.) v2.91.
 let _askCollapsed=true;
-function toggleAskCollapse(){
-  _askCollapsed=!_askCollapsed;
+function toggleAskCollapse(ds){
+  // v3.30: a day screen's panel opens per day; the week panel keeps its own state.
+  let expanding;
+  if(ds){S.askDayOpen=S.askDayOpen===ds?null:ds;expanding=S.askDayOpen===ds;}
+  else{_askCollapsed=!_askCollapsed;expanding=!_askCollapsed;}
   render();
   // After expanding: scroll the chat into view, jump the thread to its latest
   // message (so the user sees the most recent exchange), and refresh the
   // top/bottom navigation buttons.
-  if(cur){
+  if(expanding){ // was `if(cur)`, an undeclared name left over from v2.60, which threw on every toggle
     setTimeout(()=>{
       const inp=document.getElementById('ask-coach-input');
       if(inp)inp.scrollIntoView({behavior:'smooth',block:'end'});
@@ -8137,7 +8162,7 @@ function _buildAskContents(conv){
   for(let i=0;i<conv.length;i++){
     const t=conv[i];
     if(t.role==='user'){
-      const text=(i===lastUserIdx)?_buildAskUserContext(conv,t.rawText):t.rawText;
+      const text=(i===lastUserIdx)?_buildAskUserContext(conv,t.rawText,t.dayCtx):t.rawText;
       contents.push({role:'user',parts:[{text}]});
     }else{
       // model role
@@ -8153,8 +8178,10 @@ function _buildAskContents(conv){
 // Compose the full context-rich prompt for the latest user message. Includes
 // a summary of recent actions applied in this conversation so the model knows
 // what's already been done.
-function _buildAskUserContext(conv,question){
-  const ctx=buildAskPrompt(question);
+function _buildAskUserContext(conv,question,dayCtx){
+  const ctx0=buildAskPrompt(question);
+  // v3.30: asked from a day screen — tell the model which day "this" means.
+  const ctx=dayCtx?ctx0.replace('=== USER\'S QUESTION ===',()=>_askDayFocus(dayCtx)+'\n\n=== USER\'S QUESTION ==='):ctx0;
   // Summarise actions applied earlier in this conversation
   const applied=[];
   for(const t of conv){
@@ -8162,7 +8189,7 @@ function _buildAskUserContext(conv,question){
     for(const a of t.appliedActions)applied.push(`${a.fc.name}(${JSON.stringify(a.fc.args)}) → ${a.result.msg}`);
   }
   if(applied.length){
-    return ctx.replace('=== USER\'S QUESTION ===',`=== ACTIONS ALREADY APPLIED THIS CONVERSATION ===\n${applied.map(a=>'  '+a).join('\n')}\n\n=== USER'S QUESTION ===`);
+    return ctx.replace('=== USER\'S QUESTION ===',()=>`=== ACTIONS ALREADY APPLIED THIS CONVERSATION ===\n${applied.map(a=>'  '+a).join('\n')}\n\n=== USER'S QUESTION ===`);
   }
   return ctx;
 }
@@ -8191,7 +8218,8 @@ async function sendAskCoach(){
   }
   // Append user turn to the conversation immediately so UI updates
   const conv=getAskConversation();
-  conv.push({role:'user',text:_esc(question),rawText:question,at:new Date().toISOString()});
+  const dayCtx=inp.dataset.day||null; // set when asked from a day screen (v3.30)
+  conv.push({role:'user',text:_esc(question),rawText:question,dayCtx,at:new Date().toISOString()});
   setAskConversation(conv);
   inp.value='';
   S.askLoading=true;S.askError=null;render();
@@ -8300,9 +8328,34 @@ const _ASK_SUGGESTIONS=[
   '⚡ Why is my form negative?'
 ];
 
-function rAskCoach(){
+// v3.30: the coach on each day screen. Same conversation as the week panel,
+// but each question carries the day it was asked from (see _askDayFocus).
+function _askDaySuggestions(ds){
+  const dp=DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null)?.find(d=>d.date===ds);
+  if(dp&&SLOTS[dp.type])return _gymSetsLogged(ds)
+    ?['📊 How did this workout go?','📈 What should I aim for next time?','🦵 What should I train next?']
+    :['🔄 Give me different exercises for this day','🤔 Why these exercises?','⏱️ Make this workout shorter','💡 How heavy should I go?'];
+  if(dp&&VIT_RIDE_TYPES.includes(dp.type))return['🚴 How should I pace this ride?','🔄 Make this a gym day instead','😴 Should I rest instead?'];
+  return['💪 Can I train today instead?','🧘 What should I do on this rest day?'];
+}
+function _askDayFocus(ds){
+  const plan=DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null);
+  const dp=plan?.find(d=>d.date===ds);
+  const isToday=ds===fd(new Date());
+  const lines=[`The user asked this from the screen for ${_dayLbl(ds)} (${ds})${isToday?', which is today':''}.`];
+  if(dp){
+    lines.push(`Planned: ${_typeShort(dp.type)}.`);
+    if(dp.exercises?.length)lines.push(`Exercises, in order: ${dp.exercises.map(id=>EX[id]?.n||id).join(', ')}.`);
+    if(dp.extraGym?.exercises?.length)lines.push(`Extra ${_typeShort(dp.extraGym.type)} session on this day: ${dp.extraGym.exercises.map(id=>EX[id]?.n||id).join(', ')}.`);
+    if(SLOTS[dp.type])lines.push(_gymSetsLogged(ds)?'Sets are already logged, so this day\'s exercises are fixed (regenerate_day_exercises will refuse).':'No sets logged on this day yet.');
+  }
+  lines.push('Read "this day", "this workout" and "these exercises" as this day unless the user names another date. For fresh exercises on this day call regenerate_day_exercises; to change one lift call swap_exercise.');
+  return'=== DAY IN FOCUS ===\n'+lines.join('\n');
+}
+function rAskCoach(dayDs){
   // Guests see the panel as a locked preview so they know the feature exists
   if(S.guest||!S.fbUser){
+    if(dayDs)return''; // the week screen already shows the preview; don't repeat it on every day
     return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
     <div style="display:flex;align-items:center;gap:6px">
@@ -8325,6 +8378,7 @@ function rAskCoach(){
   const limitReached=cfg.quota!==-1&&used>=cfg.quota;
   // Basic tier (no access): show a locked teaser only on Week view
   if(cfg.quota===0){
+    if(dayDs)return'';
     return`<div style="background:var(--s1);border:1px dashed var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px;text-align:center">
   <div style="font-size:12px;font-weight:700;color:var(--t2);margin-bottom:4px">🔒 Ask the Coach</div>
   <div style="font-size:11px;color:var(--t2);line-height:1.5">Interactive AI coaching is in private beta. Contact the app owner for access.</div>
@@ -8339,12 +8393,15 @@ function rAskCoach(){
   // header bar to reclaim vertical space. State persists across reloads via DB.
   // Following the exercise-card pattern: the WHOLE row is clickable, with a
   // chevron indicating state. v2.62.
-  const collapsed=_askCollapsed;
+  // On a day screen the panel opens per day and starts closed (v3.30).
+  const collapsed=dayDs?S.askDayOpen!==dayDs:_askCollapsed;
+  const title=dayDs?'💬 Ask about this day':'💬 Ask the Coach';
+  const toggle=dayDs?`toggleAskCollapse('${dayDs}')`:'toggleAskCollapse()';
   if(collapsed){
     const msgCount=conv.length;
-    const summary=msgCount>0?`${msgCount} message${msgCount!==1?'s':''}`:'Tap to ask';
-    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 15px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:8px" onclick="toggleAskCollapse()">
-  <span style="font-size:13px;font-weight:700;color:var(--al)">💬 Ask the Coach</span>
+    const summary=dayDs?'New exercises, questions…':msgCount>0?`${msgCount} message${msgCount!==1?'s':''}`:'Tap to ask';
+    return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 15px;margin-bottom:12px;cursor:pointer;display:flex;align-items:center;gap:8px" onclick="${toggle}">
+  <span style="font-size:13px;font-weight:700;color:var(--al)">${title}</span>
   ${tierBadge}
   <span style="flex:1;font-size:11px;color:var(--t2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0">· ${summary}</span>
   <span style="font-size:13px;color:var(--t2);font-weight:700;flex-shrink:0">▶</span>
@@ -8355,7 +8412,7 @@ function rAskCoach(){
   const threadHtml=conv.map((t,ti)=>{
     if(t.role==='user'){
       return`<div style="display:flex;justify-content:flex-end;margin-bottom:8px">
-        <div style="max-width:85%;background:var(--acc);color:#fff;border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:12px;line-height:1.45">${t.text}</div>
+        <div style="max-width:85%;background:var(--acc);color:#fff;border-radius:14px 14px 4px 14px;padding:8px 12px;font-size:12px;line-height:1.45">${t.dayCtx?`<div style="font-size:9px;font-weight:700;opacity:.75;margin-bottom:2px">📅 ${_dayLbl(t.dayCtx)}</div>`:''}${t.text}</div>
       </div>`;
     }
     // model turn
@@ -8395,8 +8452,8 @@ function rAskCoach(){
   // pattern. The right-side controls (counter, Reset) stay non-collapsing.
   return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${hasThread?'10px':'8px'}">
-    <div style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0" onclick="toggleAskCollapse()">
-      <span style="font-size:13px;font-weight:700;color:var(--al)">💬 Ask the Coach</span>
+    <div style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0" onclick="${toggle}">
+      <span style="font-size:13px;font-weight:700;color:var(--al)">${title}</span>
       ${tierBadge}
       <span style="font-size:13px;color:var(--t2);font-weight:700;margin-left:2px">▼</span>
     </div>
@@ -8413,14 +8470,14 @@ function rAskCoach(){
   </div>`:''}
   ${S.askError?`<div style="font-size:11px;color:var(--red);margin-bottom:8px">⚠️ ${_esc(S.askError)}</div>`:''}
   <div style="display:flex;gap:6px;margin-bottom:8px">
-    <input id="ask-coach-input" type="text" placeholder="${limitReached?'Daily limit reached':hasThread?'Continue the conversation…':'Ask anything about your training…'}" ${limitReached?'disabled':''}
+    <input id="ask-coach-input" data-day="${dayDs||''}" type="text" placeholder="${limitReached?'Daily limit reached':dayDs?`Ask about ${_dayLbl(dayDs)}…`:hasThread?'Continue the conversation…':'Ask anything about your training…'}" ${limitReached?'disabled':''}
       onkeydown="if(event.key==='Enter')sendAskCoach()"
       style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:9px 12px;outline:none;font-family:inherit;${limitReached?'opacity:.5':''}">
     <button onclick="sendAskCoach()" ${limitReached||S.askLoading?'disabled':''}
       style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer;${(limitReached||S.askLoading)?'opacity:.5;cursor:not-allowed':''}">${S.askLoading?'…':hasThread?'Send':'Ask'}</button>
   </div>
-  ${!limitReached&&!hasThread?`<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
-    ${_ASK_SUGGESTIONS.map(q=>`<button onclick="document.getElementById('ask-coach-input').value=this.textContent.trim();sendAskCoach()" style="flex:0 0 auto;padding:6px 11px;border-radius:100px;border:1px solid var(--bord);background:var(--s2);color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">${q}</button>`).join('')}
+  ${!limitReached&&(!hasThread||dayDs)?`<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:2px;-webkit-overflow-scrolling:touch">
+    ${(dayDs?_askDaySuggestions(dayDs):_ASK_SUGGESTIONS).map(q=>`<button onclick="document.getElementById('ask-coach-input').value=this.textContent.trim();sendAskCoach()" style="flex:0 0 auto;padding:6px 11px;border-radius:100px;border:1px solid var(--bord);background:var(--s2);color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap">${q}</button>`).join('')}
   </div>`:limitReached?`<div style="font-size:11px;color:var(--t2);text-align:center;padding:4px 0">Resets at midnight. ${isAdmin?'':'Contact the app owner for higher access.'}</div>`:''}
 </div>`;
 }
@@ -11987,6 +12044,48 @@ function toggleHomeDay(dateStr){
   render();
   if(on)showToast('🏠 Switched to bodyweight exercises','var(--acc)');
   else showToast('🏠 Switched back to gym exercises','var(--t2)');
+}
+
+// v3.30: fresh exercises for one gym day. Re-planning the week deliberately keeps a
+// day's exercises when its type is unchanged, so before this the only way to get a
+// different Push was swapping every exercise by hand.
+function regenDayExercises(ds){
+  const r=_regenDayCore(ds);
+  if(r.ok)render();
+  showToast(r.ok?`🔄 ${r.msg}`:r.msg,r.ok?'var(--acc)':'var(--t2)');
+}
+// Shared by the button and the coach's regenerate_day_exercises tool.
+function _regenDayCore(ds){
+  const pk=DB.pk(getMon(new Date(ds+'T12:00:00')));
+  const plan=DB.get(pk,null);
+  const dp=plan?.find(d=>d.date===ds);
+  if(!dp)return{ok:false,msg:'That date isn\'t in your plan'};
+  if(!SLOTS[dp.type])return{ok:false,msg:'That day isn\'t a gym workout'};
+  const lk='log_'+ds;
+  const log=DB.get(lk,null);
+  if(_gymSetsLogged(ds)||log?.completed)return{ok:false,msg:'Sets are already logged for this day — swap single exercises instead'};
+  const bw=DB.get('home_day_'+ds,false);
+  const cur=new Set(dp.exercises||[]);
+  // genSession breaks ties at random, so draw a few times and keep the draw
+  // that shares the fewest exercises with the current list.
+  let best=null,bestOverlap=Infinity;
+  for(let i=0;i<10&&bestOverlap>0;i++){
+    const next=genSession(dp.type,S.energy||'okay',bw);
+    const overlap=next.filter(id=>cur.has(id)).length;
+    if(overlap<bestOverlap){best=next;bestOverlap=overlap;}
+  }
+  const changed=best.filter(id=>!cur.has(id)).length;
+  if(!changed)return{ok:false,msg:'No other exercises fit this day with your equipment'};
+  dp.exercises=best;
+  delete dp._aiGen;
+  // An opened-but-untouched log still lists the old exercises and would win when
+  // Log workout is tapped. It holds only generated prefills, so rebuild it.
+  if(log){
+    log.exercises=best.map(id=>({id,sets:makeSets(id,S.energy||'okay',getLastLog(id))}));
+    DB.set(lk,log);
+  }
+  DB.set(pk,plan);syncUp();
+  return{ok:true,changed,msg:`${changed} new exercise${changed===1?'':'s'} for ${_dayLbl(ds)}: ${best.map(id=>EX[id]?.n||id).join(', ')}`};
 }
 
 /* ── INIT ── */
