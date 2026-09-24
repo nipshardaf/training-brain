@@ -996,10 +996,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.30';
+const APP_VERSION='3.31';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.31',d:'The coach can now add, remove and restyle a day\'s exercises',det:'You asked whether the coach on each day can change exercises. It could already swap one exercise, re-pick the whole day, and change sets, reps and weight, but not add or remove anything. Now it can do three more things, each waiting for you to tap Apply like every coach change. ADD: "add some abs" puts the exercise in with others of its kind (compounds first, isolation next, core last) without reshuffling the rest, and refuses if your gym lacks the equipment. REMOVE: "drop lateral raises" or "I only have 40 minutes" removes one exercise per card, isolation before compounds, which is what makes Make this workout shorter actually work. It won\'t remove an exercise you have logged sets for, or the last one on a day. DIFFERENT STYLE: "dumbbells only", "machines only", "bodyweight", "more upper chest" or "go easy on my shoulder" rebuilds the day\'s whole list the way you asked; Push stays Push. To do that the coach now sees every exercise your equipment allows for that workout, not just the few the planner rotates through, and anything it names that you can\'t do is skipped and reported. The list still follows the compounds-first order from 3.29, and like New exercises it is refused once sets are logged. Also: when you name an exercise to swap or drop, the coach now looks at that day\'s exercises first, so "lateral raises" finds the cable version your day actually has, and plurals like "raises" match. Exercise names are also matched more strictly: before, half the words agreeing was enough, so "leg press" could land on Barbell Bench Press through the single word "press". Now every word has to match, or most of them including at least two, and "dumbbell" and "DB" count as the same word. Plain names now mean the obvious lift: "bench" is Barbell Bench Press (since the library grew in 3.23 it had been resolving to Bench Dip, so dictating "bench 100 lb 3x8" to the coach logged the wrong exercise), "squat" is Barbell Squat, "deadlift" is Conventional Deadlift, "dips" is Tricep Dips, and "push-ups", "chin-ups" and "pull-ups" are found again.'},
   {v:'3.30',d:'Ask the coach from any day, and re-pick a day\'s exercises in one tap',det:'You asked how to regenerate today\'s Push, and for the AI to live on each day. WHY PUSH FELT LOCKED IN: Regenerate plan for this week, and the coach\'s regenerate_remaining_week, both deliberately keep a day\'s exercises whenever its workout type stays the same (so a weather refresh doesn\'t wipe your workouts). So asking for new exercises changed nothing on a day that stayed Push. NEW EXERCISES BUTTON: a 🔄 New exercises button now sits next to the Exercises heading on any gym day. It re-runs the exercise picker for that day, respecting your equipment, energy and Home-day setting, and keeps the draw that changes the most exercises. It only appears while nothing is logged: once you\'ve done a set the day is fixed, and single-exercise swaps are the tool. An opened-but-empty log is rebuilt with the new exercises too. COACH ON EVERY DAY: each day screen has a one-line 💬 Ask about this day bar above the exercises. It starts closed, so it stays out of the way. Open it and it is the same coach and the same conversation as the week screen, but it knows which day you are on: its exercises, whether you have logged sets, and what "this workout" means. Day-specific suggestions sit under the box (different exercises, why these exercises, make it shorter, how heavy). Questions asked from a day are tagged with that date in the thread. The coach also has a new regenerate_day_exercises tool, so "give me different exercises today" actually works, and like every coach change it waits for you to tap Apply. Also fixed: expanding Ask the Coach threw an error (a leftover name from v2.60), so it never scrolled you to the chat box.'},
   {v:'3.29',d:'Exercise order now follows the standard rule: compounds first, your priority lift first, isolation after, core last',det:'You asked whether flat bench before incline was actually right. Checked it. The evidence: a 2021 meta-analysis (Nunes et al.) found strength gains favour whichever exercise is done first in a session, while muscle growth came out about the same either way. That is why the standard prescription is multi-joint lifts before single-joint ones, and your most important lift first. Flat before incline is a sensible default, but if upper chest is your priority, incline should lead. The gap on our side: the AI picker from 3.27 could only choose WHICH exercise filled each slot, never the order, so slot 1 (flat press family) always came first no matter what the AI thought. Now the AI also chooses the order, with explicit rules in its prompt: compounds before isolation, the lift that matters most for your goals first, never isolating a muscle before a compound that needs it (no triceps before pressing, no biceps before rows), small-muscle isolation near the end, core last. Code then double-checks the non-negotiable part: every slot still filled exactly once from real candidates, and compounds, isolation, core in that tier order even if the AI slips; the AI\'s choice within a tier (e.g. incline before flat) is kept. The offline rules fallback now applies the same tier order, which fixes one case where a compound like dips could land after lateral raises.'},
   {v:'3.28',d:'Merged the other v3.20 fix, and extra-session Log sets now save to the extra session',det:'Another session had already pushed its own v3.20 (Log sets opening the wrong exercise) while these updates were sitting unpushed, so the two lines of work were merged and the local ones renumbered 3.21 to 3.27. The two fixes touched the same buttons: the extra gym session on a ride day had its per-exercise Log sets button wired up in 3.21, but it always opened the day\'s main log, not the extra session\'s own log. With the ID-based lookup from 3.20 that would have quietly started a second log for the day. Now an exercise that belongs to the extra session opens and saves to that session\'s log (the same one Log workout / Continue log uses), and swapping an exercise there updates the extra session\'s list instead of doing nothing.'},
@@ -7422,6 +7423,9 @@ CAPABILITIES — what you can do:
   · regenerate_remaining_week(from_date) — regenerate plan from a date forward, preserving prior days and locked days.
   · make_legs_unilateral(date) — convert a leg day's exercises to single-leg variants (squat→single-leg squat, RDL→single-leg deadlift, etc.). Use when the user wants to train legs one side at a time.
   · regenerate_day_exercises(date) — re-pick every exercise on one gym day (fresh selection, same workout type). Use this for "new/different exercises for today". regenerate_remaining_week does NOT change the exercises of a day whose workout type stays the same, so never use it for this.
+  · set_day_exercises(date, exercises[], style) — replace a gym day's whole list with exercises you choose, for a different style of the same workout ("dumbbells only", "machines only", "bodyweight", "more upper chest", "easy on my shoulder"). Pick 4–6 that fit and still cover the workout's muscle groups; use exact names from the DAY IN FOCUS list when present.
+  · add_exercise(date, exercise) — add one exercise to a gym day ("add some abs").
+  · remove_exercise(date, exercise) — drop one exercise from a gym day. To shorten a workout, call it once per exercise, dropping isolation before compounds.
   · swap_exercise(date, from_exercise, to_exercise) — replace a specific exercise on a gym day with a different one (e.g. barbell bench → dumbbell press). Both names fuzzy-matched.
   · set_exercise_targets(date, exercise, sets?, reps?, weight?) — prescribe the sets/reps/weight for a specific exercise (e.g. "set squat to 5x5 at 100kg"). Omitted fields keep their current value.
 - BE PROACTIVE with tool calls. If the user's question implies they want a plan change, CALL THE TOOL in this same response. Don't describe what you would do or ask for permission — just call the tool. The app shows a confirmation card automatically before any change applies, so the user always has the final say. Calling the tool isn't an action — it's a proposal that the user can Apply or Skip.
@@ -7602,6 +7606,43 @@ const COACH_TOOLS=[{
           date:{type:'STRING',description:'Date of the leg day in YYYY-MM-DD'}
         },
         required:['date']
+      }
+    },
+    {
+      name:'set_day_exercises',
+      description:"Replace a gym day's whole exercise list with exercises YOU choose, to give the user a different style of the same workout — e.g. 'dumbbells only today', 'machines only', 'bodyweight', 'more upper chest', 'go easy on my shoulder'. Pick 4-6 exercises that fit the request and still cover the workout's muscle groups, using exact names from the DAY IN FOCUS list when it is present. For random fresh picks with no particular style use regenerate_day_exercises instead. Refused if sets are already logged that day.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the gym day in YYYY-MM-DD'},
+          exercises:{type:'ARRAY',description:'Exercise names, 4-6 of them',items:{type:'STRING'}},
+          style:{type:'STRING',description:'Short label for what the user asked for, e.g. "dumbbells only"'}
+        },
+        required:['date','exercises']
+      }
+    },
+    {
+      name:'add_exercise',
+      description:"Add one exercise to a gym day. Use when the user wants extra work — e.g. 'add some abs', 'add face pulls today'. It is placed with exercises of its kind (compounds first, isolation next, core last). Refused if their gym lacks the equipment or the workout is already marked complete.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the gym day in YYYY-MM-DD'},
+          exercise:{type:'STRING',description:'Name of the exercise to add (e.g. "hanging leg raise")'}
+        },
+        required:['date','exercise']
+      }
+    },
+    {
+      name:'remove_exercise',
+      description:"Remove one exercise from a gym day. Use when the user wants to drop a lift or shorten the workout — e.g. 'drop lateral raises', 'I only have 40 minutes'. To shorten, call it once per exercise to drop, removing isolation work before compounds. Refused for an exercise that already has logged sets, or if it would leave the day empty.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          date:{type:'STRING',description:'Date of the gym day in YYYY-MM-DD'},
+          exercise:{type:'STRING',description:'Name of the exercise to remove'}
+        },
+        required:['date','exercise']
       }
     },
     {
@@ -7931,9 +7972,25 @@ const COACH_TOOL_HANDLERS={
     summarize:({date})=>`New exercises for ${_dayLbl(date)}`,
     execute:({date})=>_regenDayCore(date)
   },
+  set_day_exercises:{
+    summarize:({date,exercises,style})=>{
+      const{ids,skipped}=_resolveDayExercises(exercises);
+      const lbl=style?style.charAt(0).toUpperCase()+style.slice(1):'New exercises';
+      return`${lbl} — ${_dayLbl(date)}: ${ids.map(id=>EX[id].n).join(', ')}${skipped.length?` (not available: ${skipped.join(', ')})`:''}`;
+    },
+    execute:({date,exercises,style})=>_setDayExercisesCore(date,exercises,style)
+  },
+  add_exercise:{
+    summarize:({date,exercise})=>{const id=_matchExerciseByName(exercise);return`Add ${id?EX[id].n:exercise} to ${_dayLbl(date)}`;},
+    execute:({date,exercise})=>_addExerciseCore(date,exercise)
+  },
+  remove_exercise:{
+    summarize:({date,exercise})=>{const id=_matchExerciseByName(exercise,_planDay(date).dp?.exercises);return`Remove ${id?EX[id].n:exercise} from ${_dayLbl(date)}`;},
+    execute:({date,exercise})=>_removeExerciseCore(date,exercise)
+  },
   swap_exercise:{
     summarize:({date,from_exercise,to_exercise})=>{
-      const f=_matchExerciseByName(from_exercise),t=_matchExerciseByName(to_exercise);
+      const f=_matchExerciseByName(from_exercise,_planDay(date).dp?.exercises)||_matchExerciseByName(from_exercise),t=_matchExerciseByName(to_exercise);
       return`Swap ${f?EX[f].n:from_exercise} → ${t?EX[t].n:to_exercise} on ${_dayLbl(date)}`;
     },
     execute:({date,from_exercise,to_exercise})=>{
@@ -7942,7 +7999,7 @@ const COACH_TOOL_HANDLERS={
       const dp=plan?.find(d=>d.date===date);
       if(!dp)return{ok:false,msg:'Date not in plan'};
       if(!dp.exercises||!dp.exercises.length)return{ok:false,msg:'No exercises on that day'};
-      const fromId=_matchExerciseByName(from_exercise);
+      const fromId=_matchExerciseByName(from_exercise,dp.exercises)||_matchExerciseByName(from_exercise);
       const toId=_matchExerciseByName(to_exercise);
       if(!fromId)return{ok:false,msg:`Couldn't find "${from_exercise}"`};
       if(!toId)return{ok:false,msg:`Couldn't find "${to_exercise}"`};
@@ -8011,20 +8068,42 @@ const COACH_TOOL_HANDLERS={
 // Fuzzy-match an exercise name against the EX library. Returns the exercise id
 // or null. Shared by the AI tools (swap_exercise, set_exercise_targets,
 // log_gym_sets). Scores by portion of input words found in the exercise name.
-function _matchExerciseByName(name){
-  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+// Bare common names → the lift people mean. Without these, "bench" resolved to
+// Bench Dip (shortest name containing the word) once v3.23 added it, so "log my
+// bench 100 lb" logged the wrong exercise. Keys are singular (see _exSing). v3.31.
+const _EX_ALIASES={'bench':'bb_bench','bench press':'bb_bench','squat':'bb_squat','back squat':'bb_squat','deadlift':'deadlift','dip':'dips','row':'bb_row','curl':'bb_curl','bicep curl':'bb_curl','push up':'pushup','pushup':'pushup','chin up':'chinup','chinup':'chinup','pull up':'pullup','pullup':'pullup','calf raise':'calf_raise','hamstring curl':'leg_curl'};
+const _exSing=w=>w.length>=3&&w.endsWith('s')&&!w.endsWith('ss')?w.slice(0,-1):w; // "ups"→"up", "press" stays
+// pool (v3.31): match only among these ids first, e.g. the exercises already on a day,
+// so "drop lateral raises" finds the cable version the day actually has.
+function _matchExerciseByName(name,pool){
+  // "dumbbell" and "DB" mean the same thing in exercise names
+  const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\bdumbbells?\b/g,'db').trim();
   const target=norm(name);
   if(!target)return null;
   const words=target.split(/\s+/);
   let best=null,bestScore=0;
-  for(const [id,ex] of Object.entries(EX)){
+  const aliasId=_EX_ALIASES[words.map(_exSing).join(' ')];
+  if(aliasId&&EX[aliasId]&&(!pool||pool.includes(aliasId)))return aliasId;
+  const entries=pool?pool.filter(id=>EX[id]).map(id=>[id,EX[id]]):Object.entries(EX);
+  for(const [id,ex] of entries){
     const exName=norm(ex.n);
     let score;
     if(exName===target)score=1000;
     else{
-      const matched=words.filter(w=>exName.includes(w)).length;
-      score=(matched/words.length)*100;
-      if(matched===words.length)score+=50-Math.min(exName.length,50);
+      // Match at the start of a word, not anywhere inside one ("abs" was hitting
+      // the "ab" in "cable"), and let whole-word hits break ties.
+      const exWords=exName.split(' ');
+      let matched=0,exact=0;
+      for(const w of words){
+        const sg=_exSing(w);
+        if(exWords.some(x=>x===w||x===sg)){matched++;exact++;}
+        else if(exWords.some(x=>x.startsWith(w)||x.startsWith(sg)))matched++;
+      }
+      if(matched===words.length)score=150-Math.min(exName.length,50)+10*exact;
+      // A partial match needs most of the words and at least two of them, so one
+      // generic word can't turn "leg press" into Barbell Bench Press (v3.31).
+      else if(matched>=2&&matched/words.length>=0.6)score=(matched/words.length)*100;
+      else score=0;
     }
     if(score>bestScore){bestScore=score;best=id;}
   }
@@ -8334,7 +8413,7 @@ function _askDaySuggestions(ds){
   const dp=DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null)?.find(d=>d.date===ds);
   if(dp&&SLOTS[dp.type])return _gymSetsLogged(ds)
     ?['📊 How did this workout go?','📈 What should I aim for next time?','🦵 What should I train next?']
-    :['🔄 Give me different exercises for this day','🤔 Why these exercises?','⏱️ Make this workout shorter','💡 How heavy should I go?'];
+    :['🔄 Give me different exercises for this day','🏋️ Make it dumbbells only','⏱️ Make this workout shorter','🤔 Why these exercises?','💡 How heavy should I go?'];
   if(dp&&VIT_RIDE_TYPES.includes(dp.type))return['🚴 How should I pace this ride?','🔄 Make this a gym day instead','😴 Should I rest instead?'];
   return['💪 Can I train today instead?','🧘 What should I do on this rest day?'];
 }
@@ -8347,9 +8426,12 @@ function _askDayFocus(ds){
     lines.push(`Planned: ${_typeShort(dp.type)}.`);
     if(dp.exercises?.length)lines.push(`Exercises, in order: ${dp.exercises.map(id=>EX[id]?.n||id).join(', ')}.`);
     if(dp.extraGym?.exercises?.length)lines.push(`Extra ${_typeShort(dp.extraGym.type)} session on this day: ${dp.extraGym.exercises.map(id=>EX[id]?.n||id).join(', ')}.`);
-    if(SLOTS[dp.type])lines.push(_gymSetsLogged(ds)?'Sets are already logged, so this day\'s exercises are fixed (regenerate_day_exercises will refuse).':'No sets logged on this day yet.');
+    if(SLOTS[dp.type]){
+      lines.push(_gymSetsLogged(ds)?'Sets are already logged, so the exercise list is fixed: regenerate_day_exercises and set_day_exercises will refuse, and an exercise with logged sets can\'t be removed. add_exercise still works.':'No sets logged on this day yet.');
+      lines.push('Exercises available for this workout with the user\'s equipment (name, equipment, compound):\n'+_dayExerciseMenu(dp,ds));
+    }
   }
-  lines.push('Read "this day", "this workout" and "these exercises" as this day unless the user names another date. For fresh exercises on this day call regenerate_day_exercises; to change one lift call swap_exercise.');
+  lines.push('Read "this day", "this workout" and "these exercises" as this day unless the user names another date. Changing this day\'s exercises: a different style of the same workout (dumbbells only, machines only, bodyweight, a muscle focus, easier on a sore joint) → set_day_exercises with 4–6 exercises from the list above, exact names; random fresh picks → regenerate_day_exercises; change one lift → swap_exercise; add or drop one → add_exercise / remove_exercise.');
   return'=== DAY IN FOCUS ===\n'+lines.join('\n');
 }
 function rAskCoach(dayDs){
@@ -12078,14 +12160,104 @@ function _regenDayCore(ds){
   if(!changed)return{ok:false,msg:'No other exercises fit this day with your equipment'};
   dp.exercises=best;
   delete dp._aiGen;
-  // An opened-but-untouched log still lists the old exercises and would win when
-  // Log workout is tapped. It holds only generated prefills, so rebuild it.
-  if(log){
-    log.exercises=best.map(id=>({id,sets:makeSets(id,S.energy||'okay',getLastLog(id))}));
-    DB.set(lk,log);
-  }
+  _resetUntouchedLog(ds,best);
   DB.set(pk,plan);syncUp();
   return{ok:true,changed,msg:`${changed} new exercise${changed===1?'':'s'} for ${_dayLbl(ds)}: ${best.map(id=>EX[id]?.n||id).join(', ')}`};
+}
+// v3.31: the plan entry for a date, whichever week it falls in.
+function _planDay(ds){
+  const pk=DB.pk(getMon(new Date(ds+'T12:00:00')));
+  const plan=DB.get(pk,null);
+  return{pk,plan,dp:plan?.find(d=>d.date===ds)||null};
+}
+// An opened-but-untouched log still lists the old exercises and would win when
+// Log workout is tapped. It holds only generated prefills, so rebuild it.
+function _resetUntouchedLog(ds,ids){
+  const lk='log_'+ds;
+  const log=DB.get(lk,null);
+  if(!log||log.completed||_gymSetsLogged(ds))return;
+  log.exercises=ids.map(id=>({id,sets:makeSets(id,S.energy||'okay',getLastLog(id))}));
+  DB.set(lk,log);
+}
+// v3.31 coach tools: add_exercise, remove_exercise, set_day_exercises.
+function _addExerciseCore(ds,name){
+  const{pk,plan,dp}=_planDay(ds);
+  if(!dp)return{ok:false,msg:'That date isn\'t in your plan'};
+  if(!dp.exercises?.length)return{ok:false,msg:'That day has no gym workout to add to'};
+  const id=_matchExerciseByName(name);
+  if(!id)return{ok:false,msg:`Couldn't find "${name}"`};
+  if(dp.exercises.includes(id))return{ok:false,msg:`${EX[id].n} is already on ${_dayLbl(ds)}`};
+  if(!exAvail(id))return{ok:false,msg:`Your gym doesn't have the equipment for ${EX[id].n}`};
+  const lk='log_'+ds;
+  const log=DB.get(lk,null);
+  if(log?.completed)return{ok:false,msg:'That workout is already marked complete'};
+  // Slot it in with its kind (compounds, then isolation, then core) without
+  // reshuffling the exercises already there.
+  let pos=dp.exercises.findIndex(x=>_exTier(x)>_exTier(id));
+  if(pos<0)pos=dp.exercises.length;
+  dp.exercises.splice(pos,0,id);
+  DB.set(pk,plan);
+  if(log){
+    const next=dp.exercises[pos+1];
+    const li=next?log.exercises.findIndex(e=>e.id===next):-1;
+    log.exercises.splice(li<0?log.exercises.length:li,0,{id,sets:makeSets(id,S.energy||'okay',getLastLog(id))});
+    DB.set(lk,log);
+  }
+  syncUp();
+  return{ok:true,msg:`Added ${EX[id].n} to ${_dayLbl(ds)}`};
+}
+function _removeExerciseCore(ds,name){
+  const{pk,plan,dp}=_planDay(ds);
+  if(!dp)return{ok:false,msg:'That date isn\'t in your plan'};
+  if(!dp.exercises?.length)return{ok:false,msg:'That day has no gym exercises'};
+  const id=_matchExerciseByName(name,dp.exercises);
+  if(!id)return{ok:false,msg:`"${name}" isn't on ${_dayLbl(ds)}`};
+  if(dp.exercises.length<=1)return{ok:false,msg:`${EX[id].n} is the only exercise left — make the day a Rest day instead`};
+  const lk='log_'+ds;
+  const log=DB.get(lk,null);
+  if(log?.exercises?.find(e=>e.id===id)?.sets?.some(s=>s.done))return{ok:false,msg:`You've already logged sets for ${EX[id].n}, so it stays`};
+  if(log?.completed)return{ok:false,msg:'That workout is already marked complete'};
+  dp.exercises=dp.exercises.filter(x=>x!==id);
+  DB.set(pk,plan);
+  if(log){log.exercises=log.exercises.filter(e=>e.id!==id);DB.set(lk,log);}
+  syncUp();
+  const left=dp.exercises.length;
+  return{ok:true,msg:`Removed ${EX[id].n} from ${_dayLbl(ds)} — ${left} exercise${left===1?'':'s'} left`};
+}
+// Names the coach chose → available ids, in compounds/isolation/core order (the v3.29 rule).
+function _resolveDayExercises(names){
+  const ids=[],skipped=[];
+  for(const n of names||[]){
+    const id=_matchExerciseByName(n);
+    if(!id||!exAvail(id)){skipped.push(n);continue;}
+    if(!ids.includes(id))ids.push(id);
+  }
+  return{ids:_orderByTier(ids.slice(0,8)),skipped};
+}
+function _setDayExercisesCore(ds,names,style){
+  const{pk,plan,dp}=_planDay(ds);
+  if(!dp)return{ok:false,msg:'That date isn\'t in your plan'};
+  if(!SLOTS[dp.type])return{ok:false,msg:'That day isn\'t a gym workout'};
+  const log=DB.get('log_'+ds,null);
+  if(_gymSetsLogged(ds)||log?.completed)return{ok:false,msg:'Sets are already logged for this day — swap single exercises instead'};
+  const{ids,skipped}=_resolveDayExercises(names);
+  if(ids.length<3)return{ok:false,msg:`Only ${ids.length} of those exercises ${ids.length===1?'is':'are'} available with your equipment — need at least 3`};
+  dp.exercises=ids;
+  delete dp._aiGen;
+  DB.set(pk,plan);
+  _resetUntouchedLog(ds,ids);
+  syncUp();
+  const lbl=style?style.charAt(0).toUpperCase()+style.slice(1)+' — ':'';
+  return{ok:true,msg:`${lbl}${_dayLbl(ds)}: ${ids.map(id=>EX[id].n).join(', ')}${skipped.length?` (skipped, not available: ${skipped.join(', ')})`:''}`};
+}
+// Everything the user's equipment allows for this workout's muscle groups — the
+// coach picks from this for set_day_exercises, not just the planner's slot pools.
+function _dayExerciseMenu(dp,ds){
+  const groups=new Set((SLOTS[dp.type]||[]).flat().map(id=>EX[id]?.g).filter(Boolean));
+  const byG={};
+  Object.keys(EX).filter(id=>groups.has(EX[id].g)&&exAvail(id)).forEach(id=>{(byG[EX[id].g]=byG[EX[id].g]||[]).push(id);});
+  const txt=Object.entries(byG).map(([g,ids])=>`  ${g}: `+ids.map(id=>`${EX[id].n} (${(EX_EQUIP[id]||[]).join('+')||'bodyweight'}${EX[id].t==='C'?', compound':''})`).join('; ')).join('\n');
+  return txt+(DB.get('home_day_'+ds,false)?'\n  Home day is ON: favour bodyweight exercises.':'');
 }
 
 /* ── INIT ── */
