@@ -1,3 +1,8 @@
+// v12 — AI proxy only answers signed-in users of the app: it checks the Firebase
+//       ID token (Authorization: Bearer …) against Google's public keys. Every
+//       reply carries X-TB-Auth: 1 so the app knows it can start sending the
+//       token (an older worker's CORS check would reject that header).
+//       Kill switch: set the REQUIRE_AUTH variable to 0 to accept anyone again.
 // v11 — Vitruvian auto-ingest inbox (/vitruvian/*) fed by an iOS Shortcut
 //       accepts duration in either minutes or seconds
 // v10 — Gemini → Perplexity → OpenAI fallback chain + Strava OAuth
@@ -166,8 +171,20 @@ export default {
     }
 
     // ── AI proxy with fallback chain: Gemini → Perplexity → OpenAI ───────────
-    const body = await request.text();
     const cors = corsHeaders(origin);
+    // Anyone could call the AI proxy before (iOS home-screen apps send no Origin,
+    // so the origin check can't block scripts) and spend the Gemini quota — and
+    // then the paid Perplexity/OpenAI fallbacks. Only signed-in users get through.
+    if (env.REQUIRE_AUTH !== '0') {
+      const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      const user = token ? await verifyFirebaseToken(token, env.FIREBASE_PROJECT_ID || 'training-631c1') : null;
+      if (!user) {
+        return new Response(JSON.stringify({ error: 'Sign in to use the AI coach.' }), {
+          status: 401, headers: { 'Content-Type': 'application/json', ...cors },
+        });
+      }
+    }
+    const body = await request.text();
 
     // Extract prompt from Gemini-format request body (used for fallback providers)
     function extractPrompt(rawBody) {
@@ -260,10 +277,56 @@ export default {
   },
 };
 
+// ── Firebase ID token check (RS256 JWT signed by Google's securetoken keys) ──
+const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
+let _jwks = null, _jwksExp = 0;
+async function getJwks() {
+  if (_jwks && Date.now() < _jwksExp) return _jwks;
+  const r = await fetch(JWKS_URL);
+  if (!r.ok) throw new Error('jwks ' + r.status);
+  const maxAge = +(/max-age=(\d+)/.exec(r.headers.get('Cache-Control') || '') || [])[1] || 3600;
+  _jwks = await r.json();
+  _jwksExp = Date.now() + maxAge * 1000;
+  return _jwks;
+}
+function b64urlBytes(s) {
+  s = s.replace(/-/g, '+').replace(/_/g, '/');
+  while (s.length % 4) s += '=';
+  const bin = atob(s), out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+  return out;
+}
+// Returns the token's claims if it is a valid, unexpired ID token for this
+// Firebase project; null otherwise. Never throws.
+async function verifyFirebaseToken(token, projectId, jwksOverride) {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    const [h, p, sig] = parts;
+    const dec = s => JSON.parse(new TextDecoder().decode(b64urlBytes(s)));
+    const header = dec(h), claims = dec(p);
+    if (header.alg !== 'RS256' || !header.kid) return null;
+    const now = Math.floor(Date.now() / 1000);
+    if (claims.aud !== projectId) return null;
+    if (claims.iss !== 'https://securetoken.google.com/' + projectId) return null;
+    if (!claims.sub || claims.exp <= now || claims.iat > now + 300) return null;
+    const jwks = jwksOverride || await getJwks();
+    const jwk = (jwks.keys || []).find(k => k.kid === header.kid);
+    if (!jwk) return null;
+    const key = await crypto.subtle.importKey('jwk', jwk, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['verify']);
+    const ok = await crypto.subtle.verify('RSASSA-PKCS1-v1_5', key, b64urlBytes(sig), new TextEncoder().encode(h + '.' + p));
+    return ok ? claims : null;
+  } catch (e) {
+    return null;
+  }
+}
+
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Expose-Headers': 'X-TB-Auth',
+    'X-TB-Auth': '1',
   };
 }
