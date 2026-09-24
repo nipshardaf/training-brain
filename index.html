@@ -277,6 +277,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .ld-top{display:flex;align-items:center;gap:6px}
 .ld-lbl{flex:1;font-size:11px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.6px}
 .wt-adj.ld-adj{width:auto;height:34px;padding:0 12px;font-size:13px}
+.wt-adj.ld-clear{background:rgba(239,68,68,.12);color:var(--red)}
 .ld-bar{position:relative;display:flex;align-items:center;height:62px;margin:8px 0 2px}
 .ld-bar::before{content:'';position:absolute;left:0;right:0;top:50%;height:6px;margin-top:-3px;background:var(--t2);opacity:.35;border-radius:3px}
 .ld-side{position:relative;flex:1;min-width:0;display:flex;align-items:center;gap:1px}
@@ -1002,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.33';
+const APP_VERSION='3.34';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.34',d:'Clear bar button — take every plate off in one tap',det:'You said stripping the bar took forever with only −5. Barbell lifts now have a Clear bar button next to −5 / +5 whenever there are plates loaded; one tap sets the weight back to just the bar. Like any weight change, the sets after it that you haven\'t set yourself follow. You can still tap a single plate on the bar to take that pair off.'},
   {v:'3.33',d:'Safer cloud sync, logged workouts kept in your plan, runs sync, and a lighter app',det:'From the full-app review. SYNC: (1) Sets logged with no signal were only remembered in memory, so if you closed the app before they uploaded, the next open pulled the cloud\'s older copy of that day over them. Pending uploads are now saved on the phone, a pull never overwrites something that hasn\'t been uploaded yet, failed uploads retry by themselves (15 s, backing off to 5 min), and the app uploads straight away when you switch away from it or get signal back. (2) The first upload of each session replaced your entire cloud record with whatever that device had, deleting anything it didn\'t have, and it ran even when the download had failed or timed out. Uploads now only add and update, and the full upload waits until a download has succeeded. PLANS: a gym workout you logged before the week was built (or on a day planned as rest or a ride, if you didn\'t ride) is now kept as that workout. Before, building the week put a ride on top of it, Regenerate kept the wrong day, and the same workout could be planned again later that week. RUNS: runs from intervals.icu (Garmin, Apple Watch) and Strava used to be thrown away. They are now kept in their own list (so they never count as rides), shown on the day you ran with distance, time, pace and heart rate, badged on the week view, and the coach knows about them. Plans don\'t schedule runs yet. LIGHTER APP: the full version history was 187 KB, about a fifth of the app, downloaded on every fresh load. Only the latest ten ship with the app now; the rest load when you tap Show older versions. AI LOCK: the AI helper answered anyone who found its address, which could burn the free AI allowance and then the paid fallbacks. With worker v12 it only answers people signed in to this app, and the app switches over by itself once the new worker is live.'},
   {v:'3.32',d:'Set logger rebuilt: plates only on barbell lifts, last time on every set, and later sets follow your changes',det:'You said the Plates option was wrong and looked like it counted the bar twice, and that the page needed remaking. WHAT WAS WRONG: the plate counter appeared on every exercise, dumbbells, machines and cables included, always with a made-up 45 lb bar (a 20 lb cable raise showed a 45 bar and a total of 20). The Bar sat inside the grid labelled "Plates ×2 (per side)", so it read as doubled. And the 2.5 and 25 counters shared an ID, so tapping +2.5 changed the number on the 25 chip while the total only rose by 5. THE NEW SCREEN: one compact row per set, Set · Last · weight · reps · ✓. Last is what you lifted on that set last session. The set you are on gets a helper underneath with −/+ buttons; on barbell lifts (only those, and not T-bar rows, which load one end) it also draws the whole loaded barbell with the plates mirrored on both sides, says "45 bar + 2×45 each side", and has +45 / +35 / +25 / +10 / +5 / +2.5 buttons that put one plate on each side (tap a plate on the bar to take it off). The weight you type is what counts; the plates are worked out from it, and it tells you if a weight can\'t be made with plates. The bar is fixed, 45 lb (20 kg), or 25 lb (10 kg) on EZ-bar lifts, so there is nothing to set; the old −/+ on the bar just cycled 35 → 25 → 45. kg gets the 25 kg plate it was missing. The 123/Plates switch is gone because there is only one mode now. The Log sets sheet also shows your target and why, e.g. "+5 lb: you hit all your reps last time". FOLLOWING SETS: change a set\'s weight or reps and the sets after it follow, up or down, until one you set yourself; ticked sets are never changed. Values still following are shown in grey, and turn solid once you set them.'},
   {v:'3.31',d:'The coach can now add, remove and restyle a day\'s exercises',det:'You asked whether the coach on each day can change exercises. It could already swap one exercise, re-pick the whole day, and change sets, reps and weight, but not add or remove anything. Now it can do three more things, each waiting for you to tap Apply like every coach change. ADD: "add some abs" puts the exercise in with others of its kind (compounds first, isolation next, core last) without reshuffling the rest, and refuses if your gym lacks the equipment. REMOVE: "drop lateral raises" or "I only have 40 minutes" removes one exercise per card, isolation before compounds, which is what makes Make this workout shorter actually work. It won\'t remove an exercise you have logged sets for, or the last one on a day. DIFFERENT STYLE: "dumbbells only", "machines only", "bodyweight", "more upper chest" or "go easy on my shoulder" rebuilds the day\'s whole list the way you asked; Push stays Push. To do that the coach now sees every exercise your equipment allows for that workout, not just the few the planner rotates through, and anything it names that you can\'t do is skipped and reported. The list still follows the compounds-first order from 3.29, and like New exercises it is refused once sets are logged. Also: when you name an exercise to swap or drop, the coach now looks at that day\'s exercises first, so "lateral raises" finds the cable version your day actually has, and plurals like "raises" match. Exercise names are also matched more strictly: before, half the words agreeing was enough, so "leg press" could land on Barbell Bench Press through the single word "press". Now every word has to match, or most of them including at least two, and "dumbbell" and "DB" count as the same word. Plain names now mean the obvious lift: "bench" is Barbell Bench Press (since the library grew in 3.23 it had been resolving to Bench Dip, so dictating "bench 100 lb 3x8" to the coach logged the wrong exercise), "squat" is Barbell Squat, "deadlift" is Conventional Deadlift, "dips" is Tricep Dips, and "push-ups", "chin-ups" and "pull-ups" are found again.'},
@@ -5061,11 +5063,13 @@ function _loadHelperInner(ei,si){
   const u=unit(),step=u==='lbs'?5:2.5;
   const w=parseFloat(set.w)||0;
   const lbl=set.side?`Set ${Math.floor(si/2)+1} · ${set.side}`:`Set ${si+1}`;
+  const isBarbell=_isBarbellEx(le.id)&&!ex.assist;
+  const bar=isBarbell?barWeight(le.id):0;
   let h=`<div class="ld-top"><span class="ld-lbl">${lbl}${ex.assist?' · assistance':''}</span>
+    ${isBarbell&&w>bar?`<button class="wt-adj ld-adj ld-clear" onclick="clearBar(${ei},${si})">Clear bar</button>`:''}
     <button class="wt-adj ld-adj" onclick="adjW(${ei},${si},-1)">−${step}</button>
     <button class="wt-adj ld-adj" onclick="adjW(${ei},${si},1)">+${step}</button></div>`;
-  if(!_isBarbellEx(le.id)||ex.assist)return h;
-  const bar=barWeight(le.id);
+  if(!isBarbell)return h;
   const{plates,rem}=decomposePlates(w,bar);
   const note=!w?'Type a weight, or add plates below'
     :w<bar?`That's less than the ${bar} ${u} bar`
@@ -5140,6 +5144,11 @@ function addPlate(ei,si,p){
   const bar=barWeight(le.id);
   const w=Math.max(parseFloat(set.w)||0,bar);
   _setW(ei,si,Math.round((w+2*p)*100)/100);
+}
+// Every plate off in one tap — back to the empty bar (it used to take −5 at a time). v3.34
+function clearBar(ei,si){
+  const le=S.activeLog?.exercises[ei];if(!le?.sets[si])return;
+  _setW(ei,si,barWeight(le.id));
 }
 function removePlate(ei,si,p){
   const le=S.activeLog?.exercises[ei];const set=le?.sets[si];if(!set)return;
