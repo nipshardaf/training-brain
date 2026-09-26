@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.34';
+const APP_VERSION='3.35';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.35',d:'Settings gains a read-only intervals.icu inspector, to settle two questions about Garmin data',det:'A diagnostic, not a feature. Two things decide what is worth building next and cannot be answered from intervals.icu documentation. (1) Whether a Garmin strength activity carries per-set exercise, reps and weight. Apple Health has no field for those, which is why the Vitruvian bridge still asks you to paste a summary into Ask Coach; if Garmin sends them through, gym logging can become fully automatic. (2) What activity type an indoor ride arrives as. _icuToActivity passes the type through untouched and the indoor check only recognises VirtualRide, so if Garmin indoor cycling lands as a plain Ride then every trainer session is being labelled outdoor. That matters now that the Renpho AI Smart Bike can feed real power to a Garmin watch over Bluetooth, the same way it already pairs to Zwift. Settings to Diagnostics to Inspect fetches the last 90 days, then shows the raw JSON for the newest strength activity and the newest ride: the list row and the per-activity detail for each, plus every activity type seen. Copy it out and it answers both questions at once. It only reads, stores nothing and changes nothing.'},
   {v:'3.34',d:'Clear bar button — take every plate off in one tap',det:'You said stripping the bar took forever with only −5. Barbell lifts now have a Clear bar button next to −5 / +5 whenever there are plates loaded; one tap sets the weight back to just the bar. Like any weight change, the sets after it that you haven\'t set yourself follow. You can still tap a single plate on the bar to take that pair off.'},
   {v:'3.33',d:'Safer cloud sync, logged workouts kept in your plan, runs sync, and a lighter app',det:'From the full-app review. SYNC: (1) Sets logged with no signal were only remembered in memory, so if you closed the app before they uploaded, the next open pulled the cloud\'s older copy of that day over them. Pending uploads are now saved on the phone, a pull never overwrites something that hasn\'t been uploaded yet, failed uploads retry by themselves (15 s, backing off to 5 min), and the app uploads straight away when you switch away from it or get signal back. (2) The first upload of each session replaced your entire cloud record with whatever that device had, deleting anything it didn\'t have, and it ran even when the download had failed or timed out. Uploads now only add and update, and the full upload waits until a download has succeeded. PLANS: a gym workout you logged before the week was built (or on a day planned as rest or a ride, if you didn\'t ride) is now kept as that workout. Before, building the week put a ride on top of it, Regenerate kept the wrong day, and the same workout could be planned again later that week. RUNS: runs from intervals.icu (Garmin, Apple Watch) and Strava used to be thrown away. They are now kept in their own list (so they never count as rides), shown on the day you ran with distance, time, pace and heart rate, badged on the week view, and the coach knows about them. Plans don\'t schedule runs yet. LIGHTER APP: the full version history was 187 KB, about a fifth of the app, downloaded on every fresh load. Only the latest ten ship with the app now; the rest load when you tap Show older versions. AI LOCK: the AI helper answered anyone who found its address, which could burn the free AI allowance and then the paid fallbacks. With worker v12 it only answers people signed in to this app, and the app switches over by itself once the new worker is live.'},
   {v:'3.32',d:'Set logger rebuilt: plates only on barbell lifts, last time on every set, and later sets follow your changes',det:'You said the Plates option was wrong and looked like it counted the bar twice, and that the page needed remaking. WHAT WAS WRONG: the plate counter appeared on every exercise, dumbbells, machines and cables included, always with a made-up 45 lb bar (a 20 lb cable raise showed a 45 bar and a total of 20). The Bar sat inside the grid labelled "Plates ×2 (per side)", so it read as doubled. And the 2.5 and 25 counters shared an ID, so tapping +2.5 changed the number on the 25 chip while the total only rose by 5. THE NEW SCREEN: one compact row per set, Set · Last · weight · reps · ✓. Last is what you lifted on that set last session. The set you are on gets a helper underneath with −/+ buttons; on barbell lifts (only those, and not T-bar rows, which load one end) it also draws the whole loaded barbell with the plates mirrored on both sides, says "45 bar + 2×45 each side", and has +45 / +35 / +25 / +10 / +5 / +2.5 buttons that put one plate on each side (tap a plate on the bar to take it off). The weight you type is what counts; the plates are worked out from it, and it tells you if a weight can\'t be made with plates. The bar is fixed, 45 lb (20 kg), or 25 lb (10 kg) on EZ-bar lifts, so there is nothing to set; the old −/+ on the bar just cycled 35 → 25 → 45. kg gets the 25 kg plate it was missing. The 123/Plates switch is gone because there is only one mode now. The Log sets sheet also shows your target and why, e.g. "+5 lb: you hit all your reps last time". FOLLOWING SETS: change a set\'s weight or reps and the sets after it follow, up or down, until one you set yourself; ticked sets are never changed. Values still following are shown in grey, and turn solid once you set them.'},
@@ -3178,6 +3179,86 @@ function stravaDisconnect(){
   if(profile.weight_source==='strava'){delete profile.weight;delete profile.weight_source;}
   DB.set('user_profile',profile);
   syncUp();render();
+}
+
+/* ── INTERVALS.ICU INSPECTOR ─────────────────────────────────────────────────
+   A read-only probe, not a feature. Two things about intervals.icu can't be
+   settled from its docs and decide what's worth building next:
+
+     1. Does a Garmin strength activity carry per-set exercise/reps/weight?
+        If it does, gym logging can become fully automatic — Apple Health
+        can't carry sets, which is why the Vitruvian bridge still asks for a
+        paste. This is the whole question.
+     2. What `type` does an indoor ride arrive as? _icuToActivity passes the
+        type straight through and isIndoor only recognises 'VirtualRide', so
+        if Garmin indoor cycling lands as plain 'Ride' every trainer session
+        is mislabelled as outdoor.
+
+   Dumps the raw JSON for the newest strength activity and the newest ride,
+   list row plus per-activity detail, to copy out. Nothing is stored or
+   changed. */
+const ICU_PROBE_STRENGTH=new Set(['WeightTraining','Strength','StrengthTraining']);
+
+async function icuInspect(){
+  const key=DB.get('icu_key',null);
+  if(!key){showToast('⚠️ Connect intervals.icu first','var(--amb)');return;}
+  showToast('🔬 Fetching from intervals.icu…','var(--acc)');
+  const auth={Authorization:_icuAuthHeader(key)};
+  const out=[];
+  const add=(h,v)=>out.push('===== '+h+' =====\n'+(typeof v==='string'?v:JSON.stringify(v,null,2)));
+  try{
+    const oldest=fd(addDays(new Date(),-90)),newest=fd(addDays(new Date(),1));
+    const r=await fetch(`${ICU_API}/athlete/0/activities?oldest=${oldest}&newest=${newest}`,{headers:auth});
+    if(!r.ok){
+      add('LIST FAILED','HTTP '+r.status+' — '+(await r.text()).slice(0,300));
+      _icuShowReport(out.join('\n\n'));return;
+    }
+    const rows=await r.json();
+    if(!Array.isArray(rows)){add('UNEXPECTED',rows);_icuShowReport(out.join('\n\n'));return;}
+    add('SUMMARY',`${rows.length} activities in the last 90 days\n`+
+      'types seen: '+[...new Set(rows.map(a=>a.type))].join(', '));
+    const strength=rows.find(a=>ICU_PROBE_STRENGTH.has(a.type));
+    const ride=rows.find(a=>RIDE_TYPE_SET.has(a.type));
+    for(const [label,act] of [['STRENGTH',strength],['RIDE',ride]]){
+      if(!act){add(label+' — NONE FOUND','No activity of this kind in the window.');continue;}
+      add(label+' — LIST ROW',act);
+      // The list row is a summary; per-set data, if it exists at all, would
+      // live on the individual activity.
+      if(act.id!=null){
+        try{
+          const d=await fetch(`${ICU_API}/activity/${act.id}`,{headers:auth});
+          add(label+` — DETAIL /activity/${act.id}`, d.ok?await d.json():'HTTP '+d.status);
+        }catch(e){add(label+' — DETAIL ERROR',String(e&&e.message||e));}
+      }
+    }
+  }catch(e){add('ERROR',String(e&&e.message||e));}
+  _icuShowReport(out.join('\n\n'));
+}
+
+function _icuShowReport(text){
+  document.getElementById('icu-probe')?.remove();
+  const d=document.createElement('div');
+  d.id='icu-probe';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:16px';
+  d.innerHTML=`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:16px;max-width:560px;width:100%;max-height:82vh;display:flex;flex-direction:column;padding:16px">
+  <div style="font-size:14px;font-weight:700;margin-bottom:4px">🔬 intervals.icu raw data</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:10px">Copy this and paste it back in chat. Read-only — nothing was changed.</div>
+  <textarea id="icu-probe-txt" readonly style="flex:1;min-height:240px;width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-family:ui-monospace,monospace;font-size:10px;line-height:1.45;padding:10px;resize:none;outline:none"></textarea>
+  <div class="data-btns" style="margin-top:10px">
+    <button class="btn btn-p" onclick="_icuCopyReport()">📋 Copy</button>
+    <button class="btn btn-s" onclick="document.getElementById('icu-probe').remove()">Close</button>
+  </div>
+</div>`;
+  document.body.appendChild(d);
+  const ta=document.getElementById('icu-probe-txt');
+  if(ta)ta.value=text;
+}
+
+function _icuCopyReport(){
+  const ta=document.getElementById('icu-probe-txt');if(!ta)return;
+  const done=()=>showToast('📋 Copied — paste it in chat','var(--grn)');
+  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(ta.value).then(done).catch(()=>{ta.select();document.execCommand('copy');done();});
+  else{ta.select();document.execCommand('copy');done();}
 }
 
 /* ── VITRUVIAN AUTO-LOG ──────────────────────────────────────────────────────
@@ -10856,6 +10937,14 @@ ${(()=>{
 })()}
 
 ${rRideSyncSection()}
+
+<div class="sec-hdr">🔬 Diagnostics</div>
+<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Inspect intervals.icu data</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Shows the raw data intervals.icu holds for your newest strength session and newest ride. Read-only — it changes nothing. Use it to check whether your Garmin sends per-set reps and weight, and how indoor rides are labelled.</div>
+  <button class="btn btn-s" onclick="icuInspect()" ${DB.get('icu_key',null)?'':'disabled style="opacity:.5"'}>🔬 Inspect</button>
+  ${DB.get('icu_key',null)?'':'<div style="font-size:11px;color:var(--t2);margin-top:8px">Connect intervals.icu first.</div>'}
+</div>
 
 <div class="sec-hdr">💪 Vitruvian auto-log</div>
 ${(()=>{
