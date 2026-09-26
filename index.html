@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.35';
+const APP_VERSION='3.36';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.36',d:'Garmin strength sets can now import themselves — reps and weight, after you check them',det:'A Garmin strength activity records exercise, reps and weight for every set. That is precisely what Apple Health cannot carry, and the reason gym logging has still needed a pasted summary. The app now looks for that data on each strength activity it pulls from intervals.icu. Nothing hardcodes a field path, because intervals.icu does not document whether it passes per-set data through or under what names: the reader walks the activity for anything set-shaped, recognising the usual spellings of reps, weight and exercise, and skipping rest blocks. If the shape turns out to be different the sets are simply missed, and the session still logs as before. NOTHING IS WRITTEN AUTOMATICALLY. Sets are parked on the day and the day card offers a review sheet first, showing every exercise and set, which weight unit was assumed, anything skipped for not matching your library, and where in the response the data was found. Two reasons for the gate: the unit is an inference (FIT stores kilograms, so kilograms is assumed unless a field name says otherwise) and importing updates your personal records, which the app still has no way to undo. Getting that wrong silently would be worse than not importing at all. On confirm the sets are written to that day and PRs go through the same path as manual logging, so assisted-machine inversion is honoured.'},
   {v:'3.35',d:'Settings gains a read-only intervals.icu inspector, to settle two questions about Garmin data',det:'A diagnostic, not a feature. Two things decide what is worth building next and cannot be answered from intervals.icu documentation. (1) Whether a Garmin strength activity carries per-set exercise, reps and weight. Apple Health has no field for those, which is why the Vitruvian bridge still asks you to paste a summary into Ask Coach; if Garmin sends them through, gym logging can become fully automatic. (2) What activity type an indoor ride arrives as. _icuToActivity passes the type through untouched and the indoor check only recognises VirtualRide, so if Garmin indoor cycling lands as a plain Ride then every trainer session is being labelled outdoor. That matters now that the Renpho AI Smart Bike can feed real power to a Garmin watch over Bluetooth, the same way it already pairs to Zwift. Settings to Diagnostics to Inspect fetches the last 90 days, then shows the raw JSON for the newest strength activity and the newest ride: the list row and the per-activity detail for each, plus every activity type seen. Copy it out and it answers both questions at once. It only reads, stores nothing and changes nothing.'},
   {v:'3.34',d:'Clear bar button — take every plate off in one tap',det:'You said stripping the bar took forever with only −5. Barbell lifts now have a Clear bar button next to −5 / +5 whenever there are plates loaded; one tap sets the weight back to just the bar. Like any weight change, the sets after it that you haven\'t set yourself follow. You can still tap a single plate on the bar to take that pair off.'},
   {v:'3.33',d:'Safer cloud sync, logged workouts kept in your plan, runs sync, and a lighter app',det:'From the full-app review. SYNC: (1) Sets logged with no signal were only remembered in memory, so if you closed the app before they uploaded, the next open pulled the cloud\'s older copy of that day over them. Pending uploads are now saved on the phone, a pull never overwrites something that hasn\'t been uploaded yet, failed uploads retry by themselves (15 s, backing off to 5 min), and the app uploads straight away when you switch away from it or get signal back. (2) The first upload of each session replaced your entire cloud record with whatever that device had, deleting anything it didn\'t have, and it ran even when the download had failed or timed out. Uploads now only add and update, and the full upload waits until a download has succeeded. PLANS: a gym workout you logged before the week was built (or on a day planned as rest or a ride, if you didn\'t ride) is now kept as that workout. Before, building the week put a ride on top of it, Regenerate kept the wrong day, and the same workout could be planned again later that week. RUNS: runs from intervals.icu (Garmin, Apple Watch) and Strava used to be thrown away. They are now kept in their own list (so they never count as rides), shown on the day you ran with distance, time, pace and heart rate, badged on the week view, and the coach knows about them. Plans don\'t schedule runs yet. LIGHTER APP: the full version history was 187 KB, about a fifth of the app, downloaded on every fresh load. Only the latest ten ship with the app now; the rest load when you tap Show older versions. AI LOCK: the AI helper answered anyone who found its address, which could burn the free AI allowance and then the paid fallbacks. With worker v12 it only answers people signed in to this app, and the app switches over by itself once the new worker is live.'},
@@ -3261,6 +3262,183 @@ function _icuCopyReport(){
   else{ta.select();document.execCommand('copy');done();}
 }
 
+// ── GARMIN STRENGTH SETS ─────────────────────────────────────────────────────
+// A Garmin strength activity records exercise, reps and weight for every set —
+// the one thing Apple Health cannot carry, and the reason gym logging still
+// needs a pasted summary. Whether intervals.icu passes that through, and under
+// what field names, is not documented anywhere, so nothing here hardcodes a
+// path: it walks the activity looking for anything set-shaped. If the shape is
+// wrong we lose the sets, not the session.
+const _SET_REPS_KEYS=['reps','repetitions','rep_count','repCount','numreps','num_reps'];
+const _SET_WEIGHT_KEYS=['weight','weight_kg','weightkg','weight_lb','weight_lbs','load'];
+const _SET_NAME_KEYS=['exercise','exercise_name','exercisename','movement','category','exercise_category','name'];
+
+const _pick=(o,keys)=>{
+  for(const k of Object.keys(o||{})){
+    if(keys.includes(k.toLowerCase()))return{key:k,val:o[k]};
+  }
+  return null;
+};
+
+// Depth-limited search for an array of set-like objects. Returns the sets, the
+// weight unit inferred from the field name, and where it was found — the path
+// is reported in the review sheet so a wrong guess is visible rather than silent.
+function _icuExtractSets(act){
+  let found=null;
+  const seen=new Set();
+  const looksLikeSet=o=>o&&typeof o==='object'&&!Array.isArray(o)&&!!_pick(o,_SET_REPS_KEYS);
+  const walk=(node,path,depth)=>{
+    if(found||node==null||depth>4)return;
+    if(Array.isArray(node)){
+      const rows=node.filter(looksLikeSet);
+      // 2+ set-shaped rows is a real set list; one could be anything.
+      if(rows.length>=2){found={rows,path:path||'(root)'};return;}
+      node.slice(0,20).forEach((v,i)=>walk(v,`${path}[${i}]`,depth+1));
+      return;
+    }
+    if(typeof node!=='object')return;
+    if(seen.has(node))return;
+    seen.add(node);
+    for(const k of Object.keys(node))walk(node[k],path?path+'.'+k:k,depth+1);
+  };
+  walk(act,'',0);
+  if(!found)return null;
+  // Garmin/FIT stores weight in kilograms; only a field name saying otherwise
+  // overrides that. Guessing wrong here would corrupt PRs, so the assumption is
+  // surfaced in the review sheet rather than applied quietly.
+  let unit='kg';
+  const wk=_pick(found.rows[0],_SET_WEIGHT_KEYS);
+  if(wk&&/lb/i.test(wk.key))unit='lbs';
+  const sets=found.rows.map(r=>{
+    const reps=_pick(r,_SET_REPS_KEYS), w=_pick(r,_SET_WEIGHT_KEYS), n=_pick(r,_SET_NAME_KEYS);
+    const st=String(r.set_type||r.setType||r.type||'').toLowerCase();
+    return{
+      exercise:n?String(n.val||'').replace(/_/g,' ').trim():'',
+      reps:reps?parseInt(reps.val):null,
+      weight:w!=null&&w.val!=null?parseFloat(w.val):null,
+      rest:/rest|inactive/.test(st),
+    };
+  // Rest blocks are recorded as sets too; they are not work.
+  }).filter(x=>!x.rest&&x.reps>0);
+  return sets.length?{sets,unit,path:found.path}:null;
+}
+
+// Group consecutive sets of the same movement, match against the library, and
+// convert into the unit this app stores weights in.
+function _icuBuildSetImport(extract){
+  if(!extract)return null;
+  const to=unit();
+  const conv=w=>{
+    if(w==null||isNaN(w)||w<=0)return '';
+    if(extract.unit===to)return String(Math.round(w*10)/10);
+    return String(_convertW(w,to));
+  };
+  const groups=[],unmatched=new Set();
+  extract.sets.forEach(st=>{
+    const id=st.exercise?_matchExerciseByName(st.exercise):null;
+    if(!id){if(st.exercise)unmatched.add(st.exercise);return;}
+    let g=groups[groups.length-1];
+    if(!g||g.id!==id){g={id,sets:[]};groups.push(g);}
+    g.sets.push({w:conv(st.weight),r:String(st.reps),done:true});
+  });
+  return{groups,unmatched:[...unmatched],unit:extract.unit,to,path:extract.path,
+         total:groups.reduce((n,g)=>n+g.sets.length,0)};
+}
+
+// Which key a session for this instant belongs on — shared with _vitruvianApply
+// so a pending import always lands on the same log the session did.
+function _vitruvianLogKeyFor(when){
+  const ds=fd(when);
+  const plan=DB.get(DB.pk(getMon(when)),null);
+  const dp=plan?.find(d=>d.date===ds);
+  return((dp&&VIT_RIDE_TYPES.includes(dp.type))?'extralog_':'log_')+ds;
+}
+
+// Park the parsed sets on the log. Nothing is written into the workout itself
+// until the review sheet is confirmed: the weight unit is an inference, and the
+// app has no way to delete logged sets once they exist.
+function _vitruvianAttachPending(startStr,imp){
+  if(!imp||!imp.groups.length)return false;
+  const when=new Date(startStr);
+  if(isNaN(when.getTime()))return false;
+  const key=_vitruvianLogKeyFor(when);
+  const log=DB.get(key,null);
+  if(!log||!log.vitruvian)return false;
+  if(log.vitruvian.pending&&log.vitruvian.pending.start===startStr)return false;
+  log.vitruvian.pending={start:startStr,...imp};
+  DB.set(key,log);
+  return true;
+}
+
+function vitruvianReviewSets(ds){
+  const log=DB.get('log_'+ds,null),extra=DB.get('extralog_'+ds,null);
+  const src=log?.vitruvian?.pending?log:extra?.vitruvian?.pending?extra:null;
+  const p=src?.vitruvian?.pending;
+  if(!p){showToast('Nothing to import','var(--amb)');return;}
+  const rows=p.groups.map(g=>{
+    const ex=EX[g.id];
+    return`<div style="padding:8px 0;border-bottom:1px solid var(--bord)">
+      <div style="font-size:13px;font-weight:700">${ex?ex.n:g.id}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">${g.sets.map(s=>`${s.w||'—'}${s.w?p.to:''}×${s.r}`).join(' · ')}</div>
+    </div>`;}).join('');
+  const conv=p.unit!==p.to;
+  document.getElementById('vit-review')?.remove();
+  const d=document.createElement('div');
+  d.id='vit-review';
+  d.style.cssText='position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.6);display:flex;align-items:flex-end;justify-content:center';
+  d.innerHTML=`<div style="background:var(--s1);border-radius:18px 18px 0 0;max-width:520px;width:100%;max-height:85vh;display:flex;flex-direction:column;padding:18px 16px 22px">
+  <div style="font-size:15px;font-weight:800;margin-bottom:3px">Import ${p.total} set${p.total!==1?'s':''} from Garmin?</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:12px">
+    ${conv?`Weights read as <strong style="color:var(--txt)">${p.unit}</strong> and converted to ${p.to}. If these look wrong, cancel — importing sets personal records that can't be undone.`
+          :`Weights read as <strong style="color:var(--txt)">${p.to}</strong>, matching your setting.`}
+  </div>
+  <div style="flex:1;overflow-y:auto;margin-bottom:12px">${rows}
+    ${p.unmatched.length?`<div style="font-size:11px;color:var(--amb);margin-top:10px;line-height:1.5">Not in your library, so skipped: ${p.unmatched.join(', ')}</div>`:''}
+    <div style="font-size:10px;color:var(--t2);margin-top:10px;opacity:.7">found at: ${p.path}</div>
+  </div>
+  <button class="btn btn-p" onclick="vitruvianImportSets('${ds}')">✓ Import these sets</button>
+  <button class="btn btn-s" style="margin-top:8px" onclick="vitruvianDiscardSets('${ds}')">Discard</button>
+</div>`;
+  document.body.appendChild(d);
+}
+
+function _vitruvianPendingKey(ds){
+  if(DB.get('log_'+ds,null)?.vitruvian?.pending)return'log_'+ds;
+  if(DB.get('extralog_'+ds,null)?.vitruvian?.pending)return'extralog_'+ds;
+  return null;
+}
+
+function vitruvianImportSets(ds){
+  const key=_vitruvianPendingKey(ds);
+  if(!key){showToast('Nothing to import','var(--amb)');return;}
+  const log=DB.get(key,null);
+  const p=log.vitruvian.pending;
+  if(!Array.isArray(log.exercises))log.exercises=[];
+  p.groups.forEach(g=>{
+    const i=log.exercises.findIndex(e=>e.id===g.id);
+    if(i>=0)log.exercises[i].sets=g.sets; else log.exercises.push({id:g.id,sets:g.sets});
+    // Same PR path as manual logging, so assisted-machine inversion is honoured.
+    g.sets.forEach(st=>{
+      const w=parseFloat(st.w),r=parseInt(st.r);
+      if(w&&r)checkPR(g.id,w,r);
+    });
+  });
+  log.completed=true;
+  delete log.vitruvian.pending;
+  DB.set(key,log);
+  syncUp();
+  document.getElementById('vit-review')?.remove();
+  render();
+  showToast(`💪 Imported ${p.total} set${p.total!==1?'s':''}`,'var(--grn)');
+}
+
+function vitruvianDiscardSets(ds){
+  const key=_vitruvianPendingKey(ds);
+  if(key){const log=DB.get(key,null);delete log.vitruvian.pending;DB.set(key,log);syncUp();}
+  document.getElementById('vit-review')?.remove();
+  render();
+}
+
 /* ── VITRUVIAN AUTO-LOG ──────────────────────────────────────────────────────
    Vitruvian publishes no API, so nothing here talks to Vitruvian directly.
    The chain is: Vitruvian app writes the finished workout to Apple Health →
@@ -3384,25 +3562,40 @@ async function icuFetchStrength(manual=false){
     const rows=await r.json();
     if(!Array.isArray(rows))throw new Error('unexpected response');
     const applied=[];
-    rows.filter(a=>a&&a.start_date_local&&ICU_STRENGTH_TYPES.has(a.type))
-      .forEach(a=>{
-        const dur=a.moving_time||a.elapsed_time||null;
-        const k=_vitruvianApply({
-          start:a.start_date_local,
-          duration_sec:dur,
-          duration_min:dur?Math.round(dur/60*10)/10:null,
-          calories:a.calories!=null?Math.round(a.calories):null,
-          avg_hr:a.average_heartrate!=null?Math.round(a.average_heartrate):null,
-          name:a.name||'Strength',
-          src:'icu',
-        });
-        if(k)applied.push(k);
+    let pending=0;
+    const strength=rows.filter(a=>a&&a.start_date_local&&ICU_STRENGTH_TYPES.has(a.type));
+    for(const a of strength){
+      const dur=a.moving_time||a.elapsed_time||null;
+      const k=_vitruvianApply({
+        start:a.start_date_local,
+        duration_sec:dur,
+        duration_min:dur?Math.round(dur/60*10)/10:null,
+        calories:a.calories!=null?Math.round(a.calories):null,
+        avg_hr:a.average_heartrate!=null?Math.round(a.average_heartrate):null,
+        name:a.name||'Strength',
+        src:'icu',
       });
+      if(k)applied.push(k);
+      // Per-set data, if it survives at all, lives on the individual activity
+      // rather than the list row — so look there, but only for sessions new
+      // enough to still be worth importing.
+      if(a.id!=null&&(k||applied.length)){
+        try{
+          const d=await fetch(`${ICU_API}/activity/${a.id}`,{headers:{Authorization:_icuAuthHeader(key)}});
+          if(d.ok){
+            const imp=_icuBuildSetImport(_icuExtractSets(await d.json()));
+            if(imp&&_vitruvianAttachPending(a.start_date_local,imp))pending++;
+          }
+        }catch(e){console.warn('[icu sets]',e);/* sets are a bonus; the session is already logged */}
+      }
+    }
     DB.set('icu_strength_last_sync',new Date().toISOString());
-    if(applied.length){
-      DB.set('vitruvian_sessions',(DB.get('vitruvian_sessions',0)||0)+applied.length);
+    if(applied.length||pending){
+      if(applied.length)DB.set('vitruvian_sessions',(DB.get('vitruvian_sessions',0)||0)+applied.length);
       syncUp();render();
-      showToast(`💪 ${applied.length} strength session${applied.length!==1?'s':''} from intervals.icu`,'var(--grn)');
+      showToast(pending
+        ?`💪 Garmin sets found — open the day to review`
+        :`💪 ${applied.length} strength session${applied.length!==1?'s':''} from intervals.icu`,'var(--grn)');
     }else if(manual){
       render();showToast('✓ intervals.icu — no new strength sessions');
     }
@@ -6569,7 +6762,11 @@ function rVitruvianCard(ds){
       <div style="font-size:12px;color:var(--t2);margin-top:2px">${bits.join(' · ')||'Session captured'}</div>
     </div>
   </div>
-  ${hasSets?'':`<div style="font-size:11px;color:var(--t2);line-height:1.55;margin-top:9px;padding-top:9px;border-top:1px solid rgba(139,92,246,.2)">${v.src==='icu'?'intervals.icu carries the session, not the lifts':"Apple Health doesn't carry sets or reps — only the session"}. To record what you lifted, paste your Vitruvian summary into Ask Coach.</div>
+  ${v.pending?`<div style="margin-top:9px;padding-top:9px;border-top:1px solid rgba(139,92,246,.2)">
+    <div style="font-size:11px;color:var(--t2);line-height:1.55">Your Garmin recorded ${v.pending.total} set${v.pending.total!==1?'s':''} for this session. Check them before they go in — weights are read in ${v.pending.unit} and importing sets PRs.</div>
+    <button onclick="vitruvianReviewSets('${ds}')" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:11px;font-weight:700;padding:8px 13px;cursor:pointer;margin-top:9px">📋 Review ${v.pending.total} set${v.pending.total!==1?'s':''}</button>
+  </div>`:''}
+  ${hasSets||v.pending?'':`<div style="font-size:11px;color:var(--t2);line-height:1.55;margin-top:9px;padding-top:9px;border-top:1px solid rgba(139,92,246,.2)">${v.src==='icu'?'intervals.icu carries the session, not the lifts':"Apple Health doesn't carry sets or reps — only the session"}. To record what you lifted, paste your Vitruvian summary into Ask Coach.</div>
   <button onclick="vitruvianAddSets('${ds}')" style="background:rgba(139,92,246,.15);border:1px solid rgba(139,92,246,.4);border-radius:9px;color:var(--al);font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;margin-top:9px">🤖 Add my sets</button>`}
 </div>`;
 }
