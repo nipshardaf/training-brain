@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.36';
+const APP_VERSION='3.37';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.37',d:'Gym days on your Garmin watch — each set shows up, press lap, rest countdown',det:'You asked whether gym days could go to your Garmin watch. Garmin gives outside apps no direct route for strength workouts, but intervals.icu, which you already use, can upload planned workouts to Garmin Connect. Turn on Settings → ⌚ Gym days on your watch and every gym day in the next two weeks goes to your intervals.icu calendar as a strength workout. On the watch each set appears as its own step, like "Bench Press 135lb x8": do the set, press lap, and a rest countdown starts (2 min on big lifts, 75 s on smaller ones, 45 s on core). Weights come from your log if you have started one, otherwise from the same targets the set logger would fill in; single-arm and single-leg lifts say "each side". Plan changes, swaps and new exercises are sent automatically, and a day that stops being a gym day is taken back off. It only ever touches workouts it created. One-time setup: in intervals.icu, Settings → Garmin → tick Upload planned workouts. The format was checked against intervals.icu\'s own workout reader before release, but how your particular watch lays it out is worth a look on the first day.'},
   {v:'3.36',d:'Garmin strength sets can now import themselves — reps and weight, after you check them',det:'A Garmin strength activity records exercise, reps and weight for every set. That is precisely what Apple Health cannot carry, and the reason gym logging has still needed a pasted summary. The app now looks for that data on each strength activity it pulls from intervals.icu. Nothing hardcodes a field path, because intervals.icu does not document whether it passes per-set data through or under what names: the reader walks the activity for anything set-shaped, recognising the usual spellings of reps, weight and exercise, and skipping rest blocks. If the shape turns out to be different the sets are simply missed, and the session still logs as before. NOTHING IS WRITTEN AUTOMATICALLY. Sets are parked on the day and the day card offers a review sheet first, showing every exercise and set, which weight unit was assumed, anything skipped for not matching your library, and where in the response the data was found. Two reasons for the gate: the unit is an inference (FIT stores kilograms, so kilograms is assumed unless a field name says otherwise) and importing updates your personal records, which the app still has no way to undo. Getting that wrong silently would be worse than not importing at all. On confirm the sets are written to that day and PRs go through the same path as manual logging, so assisted-machine inversion is honoured.'},
   {v:'3.35',d:'Settings gains a read-only intervals.icu inspector, to settle two questions about Garmin data',det:'A diagnostic, not a feature. Two things decide what is worth building next and cannot be answered from intervals.icu documentation. (1) Whether a Garmin strength activity carries per-set exercise, reps and weight. Apple Health has no field for those, which is why the Vitruvian bridge still asks you to paste a summary into Ask Coach; if Garmin sends them through, gym logging can become fully automatic. (2) What activity type an indoor ride arrives as. _icuToActivity passes the type through untouched and the indoor check only recognises VirtualRide, so if Garmin indoor cycling lands as a plain Ride then every trainer session is being labelled outdoor. That matters now that the Renpho AI Smart Bike can feed real power to a Garmin watch over Bluetooth, the same way it already pairs to Zwift. Settings to Diagnostics to Inspect fetches the last 90 days, then shows the raw JSON for the newest strength activity and the newest ride: the list row and the per-activity detail for each, plus every activity type seen. Copy it out and it answers both questions at once. It only reads, stores nothing and changes nothing.'},
   {v:'3.34',d:'Clear bar button — take every plate off in one tap',det:'You said stripping the bar took forever with only −5. Barbell lifts now have a Clear bar button next to −5 / +5 whenever there are plates loaded; one tap sets the weight back to just the bar. Like any weight change, the sets after it that you haven\'t set yourself follow. You can still tap a single plate on the bar to take that pair off.'},
@@ -3182,6 +3183,193 @@ function stravaDisconnect(){
   syncUp();render();
 }
 
+/* ── GYM DAYS → GARMIN WATCH (v3.37) ──────────────────────────────────────
+   Garmin gives outside apps no route for strength workouts, but intervals.icu
+   uploads planned workouts to Garmin Connect ("Upload planned workouts" in its
+   settings) and they reach the watch at its next sync. So each upcoming gym day
+   goes to the intervals.icu calendar as a WeightTraining workout:
+       Bench Press 4x
+       - Bench Press 135lb x8 1s press lap   ← the watch shows this; press lap when done
+       - Rest 2m                             ← rest countdown
+   The format was checked against intervals.icu's own parser on 2026-09-27:
+   cue text, "x6-8", "22.5kg", "each side", "assist 20kg", "bodyweight" and
+   hyphenated names all come through as step text, lap-press steps included.
+   external_id tb-<date> (tb-<date>-x for a ride day's extra session) makes each
+   send an upsert, and lets a day that stops being a gym day be removed by id.
+   Only events with those ids are ever touched — never the user's own. */
+const WATCH_KEY='watch_push_gym';
+function _watchOn(){return !!DB.get(WATCH_KEY,false)&&!!DB.get('icu_key',null)&&!S.guest;}
+function _restSecs(id){const e=EX[id];return !e?90:e.g==='core'?45:e.t==='C'?120:75;}
+function _fmtRest(sec){return sec%60===0?`${sec/60}m`:`${sec}s`;}
+function _cueName(n){return String(n||'').replace(/[\r\n]+/g,' ').replace(/&/g,'and').replace(/[<>]/g,'').replace(/^[\s-]+/,'').trim();} // intervals.icu HTML-escapes & (showed as "&amp;")
+// The sets to show: what's in the day's log if it has one (your edits included),
+// otherwise the same targets the logger would prefill.
+function _watchSets(ds,id,extra){
+  const le=DB.get((extra?'extralog_':'log_')+ds,null)?.exercises?.find(e=>e.id===id);
+  const sets=le?.sets?.length?le.sets:makeSets(id,'okay',getLastLog(id));
+  return sets.map(x=>({
+    w:x.w!==''&&x.w!=null?_fmtW(parseFloat(_wToCurrentUnit(x.w,x.u))||0):'',
+    r:String(x.r==null?'':x.r).trim(),side:x.side,
+  }));
+}
+function _watchWorkoutText(ds,ids,extra){
+  const u=unit()==='lbs'?'lb':'kg';
+  const blocks=[];
+  for(const id of ids||[]){
+    const ex=EX[id];if(!ex)continue;
+    const name=_cueName(ex.n);
+    let sets=_watchSets(ds,id,extra);
+    // Single-leg/arm lifts log L and R separately; one watch step covers both sides.
+    const uni=sets.some(x=>x.side);
+    if(uni)sets=sets.filter(x=>x.side!=='R');
+    // intervals.icu reads "45s" / "5m" as a step's duration, so rep text must never
+    // contain one: timed holds become a real countdown step instead, and any other
+    // "<n>s" is written "<n>-sec".
+    const repInfo=r=>{
+      let t=(r||String(ex.reps||'')).replace(/[–—]/g,'-').trim();
+      let side=false;
+      const m=t.match(/\/(leg|side|arm)$/i);if(m){side=true;t=t.slice(0,m.index);}
+      const timed=t.match(/^(\d+)\s*s(ec)?$/i);
+      return{t:t.replace(/(\d+)\s*s\b/gi,'$1-sec').replace(/(\d+)\s*m\b/gi,'$1-min'),side,secs:timed?+timed[1]:0};
+    };
+    const load=x=>ex.assist?(x.w?`assist ${x.w}${u}`:'')
+      :(x.w&&parseFloat(x.w)>0?`${x.w}${u}`:(ex.bw?'bodyweight':''));
+    const setLines=x=>{
+      const ri=repInfo(x.r),both=uni||ri.side;
+      if(ri.secs)return both?[`- ${name} left ${ri.secs}s`,`- ${name} right ${ri.secs}s`]:[`- ${name} ${ri.secs}s`];
+      return[`- ${name} ${[load(x),ri.t?`x${ri.t}`:'',both?'each side':''].filter(Boolean).join(' ')} 1s press lap`];
+    };
+    const rest=`- Rest ${_fmtRest(_restSecs(id))}`;
+    // Consecutive identical sets become one repeat ("Bench Press 4x").
+    for(let i=0;i<sets.length;){
+      const cur=setLines(sets[i]).join('\n');
+      let j=i;while(j+1<sets.length&&setLines(sets[j+1]).join('\n')===cur)j++;
+      const n=j-i+1;
+      blocks.push(n>1?`${name} ${n}x\n${cur}\n${rest}`:`${cur}\n${rest}`);
+      i=j+1;
+    }
+  }
+  return blocks.join('\n\n')+'\n';
+}
+// Upcoming gym days (today + 13) as intervals.icu events, keyed by external_id.
+function _watchWanted(){
+  const today=fd(new Date()),end=fd(addDays(new Date(),13));
+  const want={};
+  for(let w=0;w<3;w++){
+    for(const dp of DB.get(DB.pk(addDays(getMon(new Date()),7*w)),null)||[]){
+      if(!dp?.date||dp.date<today||dp.date>end)continue;
+      const add=(extId,type,ids,extra)=>{
+        if(!SLOTS[type]||!ids?.length)return;
+        if(DB.get((extra?'extralog_':'log_')+dp.date,null)?.completed)return; // done — leave it be
+        want[extId]={category:'WORKOUT',start_date_local:dp.date+'T00:00:00',type:'WeightTraining',
+          name:`${_typeShort(type)} day`,external_id:extId,description:_watchWorkoutText(dp.date,ids,extra)};
+      };
+      add('tb-'+dp.date,dp.type,dp.exercises,false);
+      if(dp.extraGym)add('tb-'+dp.date+'-x',dp.extraGym.type,dp.extraGym.exercises,true);
+    }
+  }
+  return want;
+}
+let _watchTimer=null;
+function _watchPushSoon(){
+  if(!_watchOn())return;
+  clearTimeout(_watchTimer);
+  _watchTimer=setTimeout(()=>watchPushGym(false),6000);
+}
+async function _watchIcu(path,method,body){
+  const r=await fetch(`${ICU_API}/athlete/0/${path}`,{method,
+    headers:{Authorization:_icuAuthHeader(DB.get('icu_key',null)),'Content-Type':'application/json'},
+    body:JSON.stringify(body)});
+  if(!r.ok){let t='';try{t=(await r.text()).slice(0,120);}catch(_){}throw new Error(`HTTP ${r.status}${t?' '+t:''}`);}
+  return r;
+}
+async function watchPushGym(manual=false){
+  if(!_watchOn()){if(manual)showToast('Turn on "Gym days on my watch" first','var(--amb)');return;}
+  const today=fd(new Date());
+  const want=_watchWanted();
+  const sent=DB.get('watch_sent',{})||{}; // external_id → {date, sig}
+  const sig=e=>e.name+'|'+e.description;
+  const changed=Object.values(want).filter(e=>sent[e.external_id]?.sig!==sig(e));
+  // A future day this app sent that is no longer a gym day (or its session got
+  // marked done) comes off the calendar — and so off the watch.
+  const gone=Object.keys(sent).filter(id=>!want[id]&&sent[id].date>=today
+    &&!DB.get((id.endsWith('-x')?'extralog_':'log_')+sent[id].date,null)?.completed);
+  if(!changed.length&&!gone.length){
+    if(manual)showToast('⌚ Your watch already has the latest gym days','var(--grn)');
+    return;
+  }
+  try{
+    if(changed.length){
+      await _watchIcu('events/bulk?upsert=true','POST',changed);
+      changed.forEach(e=>{sent[e.external_id]={date:e.start_date_local.slice(0,10),sig:sig(e)};});
+    }
+    if(gone.length){
+      await _watchIcu('events/bulk-delete','PUT',gone.map(id=>({external_id:id})));
+      gone.forEach(id=>delete sent[id]);
+    }
+    const old=fd(addDays(new Date(),-30));
+    for(const id of Object.keys(sent))if(sent[id].date<old)delete sent[id];
+    DB.set('watch_sent',sent);
+    DB.set('watch_last',{at:new Date().toISOString(),sent:changed.length,removed:gone.length,err:null});
+    if(manual)showToast(`⌚ Sent ${changed.length} gym day${changed.length!==1?'s':''}${gone.length?`, removed ${gone.length}`:''} — they reach your watch at its next Garmin sync`,'var(--grn)');
+    else syncUp();
+  }catch(e){
+    DB.set('watch_last',{...(DB.get('watch_last',{})||{}),err:String(e.message||e),errAt:new Date().toISOString()});
+    if(manual)showToast(`⚠️ Couldn't send to intervals.icu — ${e.message||e}`,'var(--red)');
+  }
+  if(S.screen==='settings')render();
+}
+// Turning it off takes the app's upcoming gym days back off the calendar/watch.
+async function _watchRemoveAll(){
+  const today=fd(new Date());
+  const sent=DB.get('watch_sent',{})||{};
+  const ids=Object.keys(sent).filter(id=>sent[id].date>=today
+    &&!DB.get((id.endsWith('-x')?'extralog_':'log_')+sent[id].date,null)?.completed); // leave finished days
+  if(!ids.length||!DB.get('icu_key',null))return;
+  try{
+    await _watchIcu('events/bulk-delete','PUT',ids.map(id=>({external_id:id})));
+    ids.forEach(id=>delete sent[id]);
+    DB.set('watch_sent',sent);
+    showToast(`⌚ Removed ${ids.length} upcoming gym day${ids.length!==1?'s':''} from your watch`,'var(--t2)');
+  }catch(e){showToast(`⚠️ Couldn't remove them from intervals.icu — ${e.message||e}`,'var(--red)');}
+  if(S.screen==='settings')render();
+}
+function toggleWatchPush(){
+  const on=!DB.get(WATCH_KEY,false);
+  if(on&&!DB.get('icu_key',null)){showToast('Connect intervals.icu first — Ride sync → Ride sources','var(--amb)');return;}
+  DB.set(WATCH_KEY,on);
+  render();
+  if(on)watchPushGym(true);else _watchRemoveAll();
+}
+function rWatchSection(){
+  const key=DB.get('icu_key',null);
+  const on=!!DB.get(WATCH_KEY,false);
+  const last=DB.get('watch_last',null);
+  const sent=DB.get('watch_sent',{})||{};
+  const today=fd(new Date());
+  const upcoming=Object.values(sent).filter(x=>x.date>=today).length;
+  const ago=t=>{const m=Math.round((Date.now()-new Date(t).getTime())/60000);return m<1?'just now':m<60?`${m} min ago`:m<1440?`${Math.round(m/60)} h ago`:`${Math.round(m/1440)} d ago`;};
+  return`<div class="sec-hdr">⌚ Gym days on your watch</div>
+<div class="card">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="flex:1;font-size:13px;font-weight:700">Send my gym days to my Garmin watch</div>
+    <button onclick="toggleWatchPush()" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:8px;padding:5px 14px;font-size:12px;font-weight:700;color:${on?'#fff':'var(--t2)'};cursor:pointer">${on?'On':'Off'}</button>
+  </div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6">Each gym day in the next two weeks goes to your intervals.icu calendar, which passes it to Garmin Connect and on to your watch. On the watch every set shows the exercise, weight and reps — do the set, press lap, and a rest countdown starts. Changes to your plan are sent automatically.</div>
+  ${!key?`<div style="font-size:12px;color:var(--amb);margin-top:10px">Connect intervals.icu first (🚴 Ride sync → Ride sources).</div>`:''}
+  ${on?`<div style="font-size:12px;line-height:1.6;margin-top:10px;background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:9px 11px"><b>One-time setup in intervals.icu:</b> Settings → Garmin → tick <b>Upload planned workouts</b>. It sends about a week ahead, so each gym day appears on the watch within the week before it.</div>`:''}
+  ${on&&last?.at?`<div style="font-size:11px;color:var(--t2);margin-top:10px">${upcoming} upcoming gym day${upcoming!==1?'s':''} on your calendar · last sent ${ago(last.at)}</div>`:''}
+  ${on&&last?.err?`<div style="font-size:11px;color:var(--red);margin-top:6px;word-break:break-word">Last attempt failed: ${_esc(last.err)}</div>`:''}
+  ${on?`<button class="btn btn-s" style="margin-top:10px" onclick="watchPushGym(true)">⌚ Send now</button>`:''}
+</div>`;
+}
+function _watchNote(ds){
+  if(!_watchOn())return'';
+  const x=(DB.get('watch_sent',{})||{})['tb-'+ds];
+  if(!x)return'';
+  return`<div style="font-size:11px;color:var(--t2);margin:-4px 2px 12px">⌚ Sent to your watch — press lap after each set</div>`;
+}
+
 /* ── INTERVALS.ICU INSPECTOR ─────────────────────────────────────────────────
    A read-only probe, not a feature. Two things about intervals.icu can't be
    settled from its docs and decide what's worth building next:
@@ -4145,7 +4333,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -4184,6 +4372,7 @@ const DB = {
     catch(e){_storageWriteFailed(k,e);}
     // Track changed sync keys so saveToCloud can write only the diff.
     if(!_suppressDirty&&_isSyncKey(k)&&!_dirtyKeys.has(k)){_dirtyKeys.add(k);_persistDirty();}
+    if(k.startsWith('plan_'))_watchPushSoon(); // v3.37: keep the watch's gym days in step with the plan
   },
   pk:(mon)=>'plan_'+fd(mon),
   lk:(d)=>'log_'+fd(d),
@@ -5872,6 +6061,7 @@ function initFirebase(){
             // Same ordering reason as above: this writes day logs, so it has to
             // follow the pull rather than race it.
             if(DB.get('icu_key',null))icuFetchStrength();
+            if(_watchOn())watchPushGym(false); // v3.37: refresh the watch's gym days
           });
         }
       }
@@ -6725,6 +6915,7 @@ ${rVitruvianCard(ds)}
 ${rRunsCard(ds)}
 ${rAskCoach(ds)}
 ${isGym&&dp.exercises?rExList(dp,log,{regen:true}):''}
+${isGym?_watchNote(ds):''}
 ${isRide?rRideCard(dp)+rLoggedGymOnRideDay(ds):''}
 ${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
 ${dp.type==='REST'?rRestCard():''}
@@ -11134,6 +11325,8 @@ ${(()=>{
 })()}
 
 ${rRideSyncSection()}
+
+${rWatchSection()}
 
 <div class="sec-hdr">🔬 Diagnostics</div>
 <div class="card">
