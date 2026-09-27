@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.37';
+const APP_VERSION='3.38';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.38',d:'Watch workouts are named with their exercise order',det:'On the watch every step showed only "Go — until lap press", with no exercise. The cause is on the intervals.icu → Garmin side: intervals.icu puts the step text in a field Garmin watches ignore for strength and cardio workouts (checked by decoding the exact file it sends, and by testing Workout and HIIT types on your watch; all showed "Go"). The workout\'s name does show, so it now lists the exercises in order, e.g. "Legs: Front Squat, Deadlift, Hack Squat, Leg Ext, Seated Calf, Ab Wheel", with lifts shortened where it helps (OHP, RDL, Pushdown). Each exercise is one block of sets with its rest timer, so the block you\'re on tells you which exercise it is. Weights stay in the app.'},
   {v:'3.37',d:'Gym days on your Garmin watch — each set shows up, press lap, rest countdown',det:'You asked whether gym days could go to your Garmin watch. Garmin gives outside apps no direct route for strength workouts, but intervals.icu, which you already use, can upload planned workouts to Garmin Connect. Turn on Settings → ⌚ Gym days on your watch and every gym day in the next two weeks goes to your intervals.icu calendar as a strength workout. On the watch each set appears as its own step, like "Bench Press 135lb x8": do the set, press lap, and a rest countdown starts (2 min on big lifts, 75 s on smaller ones, 45 s on core). Weights come from your log if you have started one, otherwise from the same targets the set logger would fill in; single-arm and single-leg lifts say "each side". Plan changes, swaps and new exercises are sent automatically, and a day that stops being a gym day is taken back off. It only ever touches workouts it created. One-time setup: in intervals.icu, Settings → Garmin → tick Upload planned workouts. The format was checked against intervals.icu\'s own workout reader before release, but how your particular watch lays it out is worth a look on the first day.'},
   {v:'3.36',d:'Garmin strength sets can now import themselves — reps and weight, after you check them',det:'A Garmin strength activity records exercise, reps and weight for every set. That is precisely what Apple Health cannot carry, and the reason gym logging has still needed a pasted summary. The app now looks for that data on each strength activity it pulls from intervals.icu. Nothing hardcodes a field path, because intervals.icu does not document whether it passes per-set data through or under what names: the reader walks the activity for anything set-shaped, recognising the usual spellings of reps, weight and exercise, and skipping rest blocks. If the shape turns out to be different the sets are simply missed, and the session still logs as before. NOTHING IS WRITTEN AUTOMATICALLY. Sets are parked on the day and the day card offers a review sheet first, showing every exercise and set, which weight unit was assumed, anything skipped for not matching your library, and where in the response the data was found. Two reasons for the gate: the unit is an inference (FIT stores kilograms, so kilograms is assumed unless a field name says otherwise) and importing updates your personal records, which the app still has no way to undo. Getting that wrong silently would be worse than not importing at all. On confirm the sets are written to that day and PRs go through the same path as manual logging, so assisted-machine inversion is honoured.'},
   {v:'3.35',d:'Settings gains a read-only intervals.icu inspector, to settle two questions about Garmin data',det:'A diagnostic, not a feature. Two things decide what is worth building next and cannot be answered from intervals.icu documentation. (1) Whether a Garmin strength activity carries per-set exercise, reps and weight. Apple Health has no field for those, which is why the Vitruvian bridge still asks you to paste a summary into Ask Coach; if Garmin sends them through, gym logging can become fully automatic. (2) What activity type an indoor ride arrives as. _icuToActivity passes the type through untouched and the indoor check only recognises VirtualRide, so if Garmin indoor cycling lands as a plain Ride then every trainer session is being labelled outdoor. That matters now that the Renpho AI Smart Bike can feed real power to a Garmin watch over Bluetooth, the same way it already pairs to Zwift. Settings to Diagnostics to Inspect fetches the last 90 days, then shows the raw JSON for the newest strength activity and the newest ride: the list row and the per-activity detail for each, plus every activity type seen. Copy it out and it answers both questions at once. It only reads, stores nothing and changes nothing.'},
@@ -3251,6 +3252,41 @@ function _watchWorkoutText(ds,ids,extra){
   }
   return blocks.join('\n\n')+'\n';
 }
+// v3.38: Garmin watches show only "Go / until lap press" for every step of an
+// intervals.icu strength workout — intervals.icu writes our text to the step
+// title (wkt_step_name), which watches ignore outside running/cycling, and never
+// to the notes they do display (checked by decoding its .fit, 2026-09-27). The
+// workout NAME does show, so it carries the exercise order; each exercise is one
+// block of sets, so the block you're on tells you which exercise it is.
+function _shortEx(n){
+  return String(n||'')
+    .replace(/Romanian Deadlift/,'RDL').replace(/Conventional /,'').replace(/Overhead Press/,'OHP')
+    .replace(/Lateral Raise/,'Lat Raise').replace(/Tricep Pushdown/,'Pushdown').replace(/Lat Pulldown/,'Pulldown')
+    .replace(/Seated Calf Raise/,'Seated Calf').replace(/Standing Calf Raise/,'Calf Raise').replace(/Ab Wheel Rollout/,'Ab Wheel')
+    .replace(/Barbell /g,'').replace(/Dumbbell/g,'DB').replace(/Single-Leg /g,'SL ').replace(/Single-Arm /g,'SA ')
+    .replace(/Close-Grip /g,'CG ').replace(/Reverse-Grip /g,'RG ').replace(/Extension/g,'Ext')
+    .replace(/^Machine /,'').replace(/&/g,'and').trim()
+    // "Barbell Row" would shrink to a bare "Row" — keep it as "BB Row"
+    .replace(/^([A-Za-z-]+)$/,m=>/^Barbell /.test(n)?'BB '+m:m);
+}
+function _watchName(type,ids){
+  const t=(WI[type]&&typeof WI[type].l==='function'?WI[type].l():'')||_typeShort(type).replace(/_/g,' ');
+  const names=(ids||[]).map(id=>_shortEx(EX[id]?.n)).filter(Boolean);
+  const build=()=>`${t}: ${names.join(', ')}`;
+  // Very long: trim the longest name by its leading word ("Lying Leg
+  // Curl" → "Leg Curl", "Cable Lat Raise" → "Lat Raise"), one word at a time.
+  while(build().length>100){ // Garmin took a 102-char name (tested 2026-09-27)
+    let li=-1;
+    // three-word names first, so "Shoulder Press" isn't cut to a bare "Press" early
+    for(const minWords of[3]){ // never trim to a bare "Press"/"Row"
+      names.forEach((x,i)=>{if(x.split(' ').length>=minWords&&(li<0||x.length>names[li].length))li=i;});
+      if(li>=0)break;
+    }
+    if(li<0)break;
+    names[li]=names[li].split(' ').slice(1).join(' ');
+  }
+  return build().slice(0,100);
+}
 // Upcoming gym days (today + 13) as intervals.icu events, keyed by external_id.
 function _watchWanted(){
   const today=fd(new Date()),end=fd(addDays(new Date(),13));
@@ -3262,7 +3298,7 @@ function _watchWanted(){
         if(!SLOTS[type]||!ids?.length)return;
         if(DB.get((extra?'extralog_':'log_')+dp.date,null)?.completed)return; // done — leave it be
         want[extId]={category:'WORKOUT',start_date_local:dp.date+'T00:00:00',type:'WeightTraining',
-          name:`${_typeShort(type)} day`,external_id:extId,description:_watchWorkoutText(dp.date,ids,extra)};
+          name:_watchName(type,ids),external_id:extId,description:_watchWorkoutText(dp.date,ids,extra)};
       };
       add('tb-'+dp.date,dp.type,dp.exercises,false);
       if(dp.extraGym)add('tb-'+dp.date+'-x',dp.extraGym.type,dp.extraGym.exercises,true);
