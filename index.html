@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.38';
+const APP_VERSION='3.39';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.39',d:'Send to watch from the gym day — and opening a day sends it',det:'You said going to Settings to send a workout was too much. Every upcoming gym day now has a ⌚ Send to watch button above its exercises; the first tap also switches the feature on, so later gym days keep themselves up to date. Once sent it reads "On your watch" with a Resend button. Opening a gym day also re-sends it by itself if anything changed (unchanged days cost nothing), on top of the sends that already happen when you open the app or change the plan. Past days and days marked done don\'t show the button.'},
   {v:'3.38',d:'Watch workouts are named with their exercise order',det:'On the watch every step showed only "Go — until lap press", with no exercise. The cause is on the intervals.icu → Garmin side: intervals.icu puts the step text in a field Garmin watches ignore for strength and cardio workouts (checked by decoding the exact file it sends, and by testing Workout and HIIT types on your watch; all showed "Go"). The workout\'s name does show, so it now lists the exercises in order, e.g. "Legs: Front Squat, Deadlift, Hack Squat, Leg Ext, Seated Calf, Ab Wheel", with lifts shortened where it helps (OHP, RDL, Pushdown). Each exercise is one block of sets with its rest timer, so the block you\'re on tells you which exercise it is. Weights stay in the app.'},
   {v:'3.37',d:'Gym days on your Garmin watch — each set shows up, press lap, rest countdown',det:'You asked whether gym days could go to your Garmin watch. Garmin gives outside apps no direct route for strength workouts, but intervals.icu, which you already use, can upload planned workouts to Garmin Connect. Turn on Settings → ⌚ Gym days on your watch and every gym day in the next two weeks goes to your intervals.icu calendar as a strength workout. On the watch each set appears as its own step, like "Bench Press 135lb x8": do the set, press lap, and a rest countdown starts (2 min on big lifts, 75 s on smaller ones, 45 s on core). Weights come from your log if you have started one, otherwise from the same targets the set logger would fill in; single-arm and single-leg lifts say "each side". Plan changes, swaps and new exercises are sent automatically, and a day that stops being a gym day is taken back off. It only ever touches workouts it created. One-time setup: in intervals.icu, Settings → Garmin → tick Upload planned workouts. The format was checked against intervals.icu\'s own workout reader before release, but how your particular watch lays it out is worth a look on the first day.'},
   {v:'3.36',d:'Garmin strength sets can now import themselves — reps and weight, after you check them',det:'A Garmin strength activity records exercise, reps and weight for every set. That is precisely what Apple Health cannot carry, and the reason gym logging has still needed a pasted summary. The app now looks for that data on each strength activity it pulls from intervals.icu. Nothing hardcodes a field path, because intervals.icu does not document whether it passes per-set data through or under what names: the reader walks the activity for anything set-shaped, recognising the usual spellings of reps, weight and exercise, and skipping rest blocks. If the shape turns out to be different the sets are simply missed, and the session still logs as before. NOTHING IS WRITTEN AUTOMATICALLY. Sets are parked on the day and the day card offers a review sheet first, showing every exercise and set, which weight unit was assumed, anything skipped for not matching your library, and where in the response the data was found. Two reasons for the gate: the unit is an inference (FIT stores kilograms, so kilograms is assumed unless a field name says otherwise) and importing updates your personal records, which the app still has no way to undo. Getting that wrong silently would be worse than not importing at all. On confirm the sets are written to that day and PRs go through the same path as manual logging, so assisted-machine inversion is honoured.'},
@@ -3307,10 +3308,10 @@ function _watchWanted(){
   return want;
 }
 let _watchTimer=null;
-function _watchPushSoon(){
+function _watchPushSoon(ms=6000){
   if(!_watchOn())return;
   clearTimeout(_watchTimer);
-  _watchTimer=setTimeout(()=>watchPushGym(false),6000);
+  _watchTimer=setTimeout(()=>watchPushGym(false),ms);
 }
 async function _watchIcu(path,method,body){
   const r=await fetch(`${ICU_API}/athlete/0/${path}`,{method,
@@ -3399,11 +3400,43 @@ function rWatchSection(){
   ${on?`<button class="btn btn-s" style="margin-top:10px" onclick="watchPushGym(true)">⌚ Send now</button>`:''}
 </div>`;
 }
+// v3.39: send from the gym day itself — no trip to Settings. The first tap
+// turns the feature on, which then keeps later gym days in step by itself.
 function _watchNote(ds){
-  if(!_watchOn())return'';
-  const x=(DB.get('watch_sent',{})||{})['tb-'+ds];
-  if(!x)return'';
-  return`<div style="font-size:11px;color:var(--t2);margin:-4px 2px 12px">⌚ Sent to your watch — press lap after each set</div>`;
+  if(S.guest||!DB.get('icu_key',null))return'';
+  if(ds<fd(new Date())||ds>fd(addDays(new Date(),13)))return'';
+  if(DB.get('log_'+ds,null)?.completed)return'';
+  const on=_watchOn();
+  const sent=on&&(DB.get('watch_sent',{})||{})['tb-'+ds];
+  const busy=S._watchSending===ds;
+  const label=busy?'Sending…':sent?'Resend':'⌚ Send to watch';
+  const sub=sent?'⌚ On your watch after a Garmin Connect sync — open it from the watch\'s calendar'
+    :'Send this workout to your Garmin watch';
+  return`<div style="display:flex;align-items:center;gap:10px;background:var(--s1);border:1px solid var(--bord);border-radius:12px;padding:9px 12px;margin-bottom:12px">
+  <div style="flex:1;min-width:0;font-size:11px;color:var(--t2);line-height:1.4">${sub}</div>
+  <button onclick="watchSendDay('${ds}')" ${busy?'disabled':''} style="flex-shrink:0;background:${sent?'var(--s2)':'var(--acc)'};border:1px solid ${sent?'var(--bord)':'var(--acc)'};border-radius:9px;color:${sent?'var(--al)':'#fff'};font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;${busy?'opacity:.6':''}">${label}</button>
+</div>`;
+}
+async function watchSendDay(ds){
+  if(S.guest){showToast('Sign in to send workouts to your watch','var(--amb)');return;}
+  if(!DB.get('icu_key',null)){showToast('Connect intervals.icu first — Settings → Ride sync → Ride sources','var(--amb)');return;}
+  if(!DB.get(WATCH_KEY,false))DB.set(WATCH_KEY,true);
+  const evs=Object.values(_watchWanted()).filter(e=>e.start_date_local.startsWith(ds));
+  if(!evs.length){showToast('Nothing to send for this day','var(--t2)');return;}
+  S._watchSending=ds;render();
+  try{
+    await _watchIcu('events/bulk?upsert=true','POST',evs);
+    const sent=DB.get('watch_sent',{})||{};
+    evs.forEach(e=>{sent[e.external_id]={date:ds,sig:e.name+'|'+e.description};});
+    DB.set('watch_sent',sent);
+    DB.set('watch_last',{at:new Date().toISOString(),sent:evs.length,removed:0,err:null});
+    showToast('⌚ Sent — sync Garmin Connect and it\'s on your watch','var(--grn)');
+    syncUp();
+  }catch(e){
+    showToast(`⚠️ Couldn't send — ${e.message||e}`,'var(--red)');
+  }
+  S._watchSending=null;render();
+  watchPushGym(false); // now that it's on, bring the other upcoming gym days up to date
 }
 
 /* ── INTERVALS.ICU INSPECTOR ─────────────────────────────────────────────────
@@ -6652,6 +6685,7 @@ function openDay(dateStr){
   // Reset collapse state for fresh day view
   S.exCollapsed=new Set();S.exExpanded=new Set();
   go('day',{_dir:'fwd'});
+  _watchPushSoon(1500); // v3.39: opening a gym day sends it if it changed (no-op otherwise)
 }
 
 /* ── RENDER ROOT ── */
@@ -6948,10 +6982,10 @@ ${(()=>{
 </div>`;
 })()}
 ${rVitruvianCard(ds)}
+${isGym||dp.extraGym?_watchNote(ds):''}
 ${rRunsCard(ds)}
 ${rAskCoach(ds)}
 ${isGym&&dp.exercises?rExList(dp,log,{regen:true}):''}
-${isGym?_watchNote(ds):''}
 ${isRide?rRideCard(dp)+rLoggedGymOnRideDay(ds):''}
 ${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
 ${dp.type==='REST'?rRestCard():''}
