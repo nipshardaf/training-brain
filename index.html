@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.40';
+const APP_VERSION='3.41';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.41',d:'Live mode: phone and watch work together during a workout',det:'You wanted to set weights on the phone and log on the watch. Now: change today\'s weights, reps or exercises on the phone and the watch picks it up within about 30 seconds (it buzzes and shows "updated from phone"); sets you have already done stay done, and a swapped exercise starts at set 1. Each set you finish on the watch shows up in the app within about 15 seconds while today\'s gym day is open, instead of only at the end. Phone = plan and weights, watch = tick sets and rest. Sets are best ticked on the watch: it can\'t see sets ticked on the phone. It all goes through intervals.icu, so it needs your phone nearby with Garmin Connect running, and each change takes 10 to 30 seconds. Also: long exercise names no longer overlap on the 51 mm watch.'},
   {v:'3.40',d:'Training Brain on your Garmin watch — sets come back to the app by themselves',det:'Garmin\'s own workout screen could only ever show "Go — until lap press", so there is now a Training Brain app for the watch itself. It reads today\'s gym workout from your intervals.icu calendar (the one the app already sends) and shows one set at a time: exercise, weight, reps and "Set 2 of 4". UP/DOWN change reps, hold UP to change the weight (the change carries to the rest of that exercise\'s sets), LAP marks a set done and starts the rest countdown, which buzzes at 10 seconds and at the end, and START opens a menu to skip an exercise, finish or discard. It records a normal Strength activity to Garmin Connect. When you finish, it leaves your sets on the intervals.icu calendar as a note; this app picks that note up when you open it (or come back to it), adds the sets to that day as done, checks PRs, saves to the cloud and then removes the note. Without phone signal at the end of a workout, the watch keeps the sets and sends them next time it has a connection.'},
   {v:'3.39',d:'Send to watch from the gym day — and opening a day sends it',det:'You said going to Settings to send a workout was too much. Every upcoming gym day now has a ⌚ Send to watch button above its exercises; the first tap also switches the feature on, so later gym days keep themselves up to date. Once sent it reads "On your watch" with a Resend button. Opening a gym day also re-sends it by itself if anything changed (unchanged days cost nothing), on top of the sends that already happen when you open the app or change the plan. Past days and days marked done don\'t show the button.'},
   {v:'3.38',d:'Watch workouts are named with their exercise order',det:'On the watch every step showed only "Go — until lap press", with no exercise. The cause is on the intervals.icu → Garmin side: intervals.icu puts the step text in a field Garmin watches ignore for strength and cardio workouts (checked by decoding the exact file it sends, and by testing Workout and HIIT types on your watch; all showed "Go"). The workout\'s name does show, so it now lists the exercises in order, e.g. "Legs: Front Squat, Deadlift, Hack Squat, Leg Ext, Seated Calf, Ab Wheel", with lifts shortened where it helps (OHP, RDL, Pushdown). Each exercise is one block of sets with its rest timer, so the block you\'re on tells you which exercise it is. Weights stay in the app.'},
@@ -3811,10 +3812,22 @@ const ICU_STRENGTH_TYPES=new Set(['WeightTraining','Strength','StrengthTraining'
 //   flags: a assisted, b bodyweight, t timed (reps = seconds), E each side, L/R side
 // Each note is applied once (log.watchNotes remembers it), saved to the cloud,
 // then removed from the calendar.
+// v3.41 LIVE MODE: the watch app now sends a snapshot of every finished set after
+// each set (TB2), updating one note per session in place:
+//   TB2;<date>;<session>;<final 0/1>;<workout>;<exercise>|<weight>|<unit>|<reps>|<flags>;...
+// A snapshot replaces that session's sets for each exercise, so re-reading it is
+// harmless, and the planned sets it uses up are taken from the not-done ones
+// still in the log (keeping any weights you changed on the phone). TB1 notes
+// from the first watch build are one final snapshot. Final notes are removed
+// once they're in the cloud.
+let _watchApplying=false; // our own log writes shouldn't bounce a plan update back to the watch
 function _watchApplyNote(n){
   const parts=String(n.description||'').split(';');
-  const ds=parts[1];
-  if(parts[0]!=='TB1'||!/^\d{4}-\d{2}-\d{2}$/.test(ds||''))return null;
+  let ds,sid,final,rows;
+  if(parts[0]==='TB1'){ds=parts[1];sid=n.external_id;final=true;rows=parts.slice(3);}
+  else if(parts[0]==='TB2'){ds=parts[1];sid=parts[2]||n.external_id;final=parts[3]==='1';rows=parts.slice(5);}
+  else return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(ds||''))return null;
   const when=new Date(ds+'T12:00:00');
   const key=_vitruvianLogKeyFor(when);
   const dp=(DB.get(DB.pk(getMon(when)),null)||[]).find(d=>d.date===ds);
@@ -3822,11 +3835,12 @@ function _watchApplyNote(n){
   const log=DB.get(key,null)||{date:ds,type:(isExtra?dp?.extraGym?.type:dp?.type)||'PUSH',exercises:[],completed:false};
   if(!Array.isArray(log.exercises))log.exercises=[];
   log.watchNotes=log.watchNotes||[];
-  if(log.watchNotes.includes(n.external_id))return{ds,sets:0,unknown:[],already:true};
+  const tag=n.external_id+'@'+(n.updated||'');
+  if(log.watchNotes.includes(tag))return{ds,added:0,unknown:[],final,already:true};
   const to=unit();
   const pool=[...(dp?.exercises||[]),...(dp?.extraGym?.exercises||[]),...log.exercises.map(e=>e.id)];
   const groups=[],unknown=[];
-  for(const row of parts.slice(3)){
+  for(const row of rows){
     const [name,w,u,reps,flags='']=row.split('|');
     if(!name)continue;
     const id=_matchExerciseByName(name,pool)||_matchExerciseByName(name);
@@ -3834,10 +3848,10 @@ function _watchApplyNote(n){
     const wn=parseFloat(w)||0;
     const from=u==='kg'?'kg':'lbs';
     const set={w:wn>0?(from===to?_fmtW(wn):_fmtW(_convertW(wn,to))):'',
-      r:flags.includes('t')?`${reps}s`:String(reps||''),done:true,u:to,_ownW:true,_ownR:true,_watch:true};
-    let g=groups[groups.length-1];
-    if(!g||g.id!==id){g={id,sets:[]};groups.push(g);}
-    // The app logs single-leg/arm lifts as L and R sets; the watch sends one per side pair.
+      r:flags.includes('t')?`${reps}s`:String(reps||''),done:true,u:to,_ownW:true,_ownR:true,_watch:true,_ws:sid};
+    let g=groups.find(x=>x.id===id);
+    if(!g){g={id,sets:[]};groups.push(g);}
+    // The app logs single-leg/arm lifts as L and R sets; the watch sends one per pair.
     if(EX[id]?.uni&&!flags.includes('L')&&!flags.includes('R')){
       g.sets.push({...set,side:'L'},{...set,side:'R'});
     }else{
@@ -3846,21 +3860,33 @@ function _watchApplyNote(n){
       g.sets.push(set);
     }
   }
-  if(groups.length){
-    for(const g of groups){
-      let le=log.exercises.find(e=>e.id===g.id);
-      if(!le){le={id:g.id,sets:[]};log.exercises.push(le);}
-      // The watch is what you actually did: its sets replace this exercise's
-      // logged sets; planned sets beyond them stay as not-done.
-      const planned=Array.isArray(le.sets)?le.sets:[];
-      le.sets=[...g.sets,...planned.slice(g.sets.length).filter(x=>!x.done)];
-      g.sets.forEach(x=>{const wv=parseFloat(x.w),rv=parseInt(x.r);if(wv&&rv&&!/s$/.test(x.r))checkPR(g.id,wv,rv);});
-    }
-    log.completed=true;
+  let added=0;
+  const touched=new Set(groups.map(g=>g.id));
+  // Exercises this session had logged but the snapshot no longer has (a discard):
+  // take the watch sets back out and put that many planned sets back.
+  for(const le of log.exercises){
+    if(touched.has(le.id))continue;
+    const mine=(le.sets||[]).filter(x=>x._ws===sid);
+    if(!mine.length)continue;
+    le.sets=[...le.sets.filter(x=>x._ws!==sid),...mine.map(x=>({w:x.w,r:x.r,done:false,u:x.u,...(x.side?{side:x.side}:{})}))];
   }
-  log.watchNotes.push(n.external_id);
-  DB.set(key,log);
-  return{ds,sets:groups.reduce((a,g)=>a+g.sets.length,0),unknown,already:false};
+  for(const g of groups){
+    let le=log.exercises.find(e=>e.id===g.id);
+    if(!le){le={id:g.id,sets:[]};log.exercises.push(le);}
+    const cur=Array.isArray(le.sets)?le.sets:[];
+    const prev=cur.filter(x=>x._ws===sid).length;
+    const rest=cur.filter(x=>x._ws!==sid);
+    const restDone=rest.filter(x=>x.done), restTodo=rest.filter(x=>!x.done);
+    const use=Math.max(0,g.sets.length-prev);
+    le.sets=[...restDone,...g.sets,...restTodo.slice(use)];
+    added+=use;
+    g.sets.slice(prev).forEach(x=>{const wv=parseFloat(x.w),rv=parseInt(x.r);if(wv&&rv&&!/s$/.test(x.r))checkPR(g.id,wv,rv);});
+  }
+  if(final&&groups.length)log.completed=true;
+  log.watchNotes=[...log.watchNotes.filter(t=>!t.startsWith(n.external_id+'@')),tag].slice(-40);
+  _watchApplying=true;
+  try{DB.set(key,log);}finally{_watchApplying=false;}
+  return{ds,added,unknown,final,already:false};
 }
 let _watchImporting=false;
 async function watchImportSets(manual=false){
@@ -3871,36 +3897,46 @@ async function watchImportSets(manual=false){
     const r=await fetch(`${ICU_API}/athlete/0/events?oldest=${fd(addDays(new Date(),-21))}&newest=${fd(addDays(new Date(),1))}&category=NOTE`,
       {headers:{Authorization:_icuAuthHeader(key)}});
     if(!r.ok)throw new Error('HTTP '+r.status);
-    const notes=(await r.json()).filter(e=>/^tb-sets-/.test(e?.external_id||'')&&/^TB1;/.test(e?.description||''));
+    const notes=(await r.json()).filter(e=>/^tb-(sets|live)-/.test(e?.external_id||'')&&/^TB[12];/.test(e?.description||''));
     if(!notes.length){if(manual)showToast('⌚ No new sets from the watch','var(--t2)');return;}
-    const handled=[],unknown=new Set(),byDay={};
+    const finals=[],unknown=new Set();let added=0,changed=false;const days=new Set();
+    const stale=fd(addDays(new Date(),-2));
     for(const n of notes){
       const res=_watchApplyNote(n);
       if(!res)continue;
-      handled.push(n.external_id);
+      if(!res.already)changed=true;
       res.unknown.forEach(x=>unknown.add(x));
-      if(res.sets)byDay[res.ds]=(byDay[res.ds]||0)+res.sets;
+      added+=res.added;
+      if(res.added)days.add(res.ds);
+      // Remove a note once final — or if the watch never finished it (2+ days old).
+      if(res.final||res.ds<stale)finals.push(n.external_id);
     }
-    if(!handled.length)return;
-    // Only take the notes down once the sets are safely in the cloud; if that
-    // fails they stay, and watchNotes stops them being added twice next time.
-    if(S.fbUser&&_fbDb){await saveToCloud();if(DB.get('fb_last_sync_err',null))return;}
-    try{
-      await fetch(`${ICU_API}/athlete/0/events/bulk-delete`,{method:'PUT',
-        headers:{Authorization:_icuAuthHeader(key),'Content-Type':'application/json'},
-        body:JSON.stringify(handled.map(id=>({external_id:id})))});
-    }catch(_){}
-    const days=Object.keys(byDay).sort();
-    if(days.length){
-      const n=days.reduce((a,d)=>a+byDay[d],0);
-      showToast(`⌚ ${n} set${n!==1?'s':''} from your watch added to ${days.map(_dayLbl).join(', ')}${unknown.size?` · couldn't match: ${[...unknown].join(', ')}`:''}`,'var(--grn)');
-      render();
+    if(changed&&S.fbUser&&_fbDb)await saveToCloud();
+    if(finals.length&&!DB.get('fb_last_sync_err',null)){
+      try{
+        await fetch(`${ICU_API}/athlete/0/events/bulk-delete`,{method:'PUT',
+          headers:{Authorization:_icuAuthHeader(key),'Content-Type':'application/json'},
+          body:JSON.stringify(finals.map(id=>({external_id:id})))});
+      }catch(_){}
     }
+    if(added){
+      showToast(`⌚ ${added} set${added!==1?'s':''} from your watch${days.size>1?` (${[...days].map(_dayLbl).join(', ')})`:''}${unknown.size?` · couldn't match: ${[...unknown].join(', ')}`:''}`,'var(--grn)');
+    }
+    // Don't redraw under your thumb while you're typing a weight.
+    if(changed&&!/INPUT|TEXTAREA/.test(document.activeElement?.tagName||''))render();
   }catch(e){
     if(manual)showToast(`⚠️ Couldn't check for watch sets — ${e.message||e}`,'var(--red)');
     console.warn('[watch sets]',e);
   }finally{_watchImporting=false;}
 }
+// While today's gym day (or its log) is on screen, look for new watch sets
+// every 15 s, so they tick off as you go.
+setInterval(()=>{
+  if(document.visibilityState!=='visible'||S.guest||!S.fbUser||!DB.get('icu_key',null))return;
+  if(!(S.screen==='day'||S.screen==='log'))return;
+  if(!S.viewDate||fd(S.viewDate)!==fd(new Date()))return;
+  watchImportSets(false);
+},15000);
 
 async function icuFetchStrength(manual=false){
   const key=DB.get('icu_key',null);
@@ -4543,6 +4579,9 @@ const DB = {
     // Track changed sync keys so saveToCloud can write only the diff.
     if(!_suppressDirty&&_isSyncKey(k)&&!_dirtyKeys.has(k)){_dirtyKeys.add(k);_persistDirty();}
     if(k.startsWith('plan_'))_watchPushSoon(); // v3.37: keep the watch's gym days in step with the plan
+    // v3.41 live mode: today's weights/reps edited on the phone reach the watch too
+    // (but not the app's own writes of sets that came from the watch).
+    else if(!_watchApplying&&(k==='log_'+fd(new Date())||k==='extralog_'+fd(new Date())))_watchPushSoon(3000);
   },
   pk:(mon)=>'plan_'+fd(mon),
   lk:(d)=>'log_'+fd(d),
