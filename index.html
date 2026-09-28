@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.41';
+const APP_VERSION='3.42';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.42',d:'Watch sets no longer need their weights typed in twice',det:'Sets ticked on the watch were coming in as 0 lb, and typing a weight on the phone only filled sets you had not done yet, so every ticked set had to be typed in by hand. Now: a watch set without a weight takes the weight you had on the phone for that set (or the set before it), typing a weight once fills every set of that exercise you ticked on the watch without one, and anything you fix on the phone is kept when the watch sends its next set. Best way to use it: set the weight once per exercise on the phone, tick sets on the watch.'},
   {v:'3.41',d:'Live mode: phone and watch work together during a workout',det:'You wanted to set weights on the phone and log on the watch. Now: change today\'s weights, reps or exercises on the phone and the watch picks it up within about 30 seconds (it buzzes and shows "updated from phone"); sets you have already done stay done, and a swapped exercise starts at set 1. Each set you finish on the watch shows up in the app within about 15 seconds while today\'s gym day is open, instead of only at the end. Phone = plan and weights, watch = tick sets and rest. Sets are best ticked on the watch: it can\'t see sets ticked on the phone. It all goes through intervals.icu, so it needs your phone nearby with Garmin Connect running, and each change takes 10 to 30 seconds. Also: long exercise names no longer overlap on the 51 mm watch.'},
   {v:'3.40',d:'Training Brain on your Garmin watch — sets come back to the app by themselves',det:'Garmin\'s own workout screen could only ever show "Go — until lap press", so there is now a Training Brain app for the watch itself. It reads today\'s gym workout from your intervals.icu calendar (the one the app already sends) and shows one set at a time: exercise, weight, reps and "Set 2 of 4". UP/DOWN change reps, hold UP to change the weight (the change carries to the rest of that exercise\'s sets), LAP marks a set done and starts the rest countdown, which buzzes at 10 seconds and at the end, and START opens a menu to skip an exercise, finish or discard. It records a normal Strength activity to Garmin Connect. When you finish, it leaves your sets on the intervals.icu calendar as a note; this app picks that note up when you open it (or come back to it), adds the sets to that day as done, checks PRs, saves to the cloud and then removes the note. Without phone signal at the end of a workout, the watch keeps the sets and sends them next time it has a connection.'},
   {v:'3.39',d:'Send to watch from the gym day — and opening a day sends it',det:'You said going to Settings to send a workout was too much. Every upcoming gym day now has a ⌚ Send to watch button above its exercises; the first tap also switches the feature on, so later gym days keep themselves up to date. Once sent it reads "On your watch" with a Resend button. Opening a gym day also re-sends it by itself if anything changed (unchanged days cost nothing), on top of the sends that already happen when you open the app or change the plan. Past days and days marked done don\'t show the button.'},
@@ -3848,7 +3849,8 @@ function _watchApplyNote(n){
     const wn=parseFloat(w)||0;
     const from=u==='kg'?'kg':'lbs';
     const set={w:wn>0?(from===to?_fmtW(wn):_fmtW(_convertW(wn,to))):'',
-      r:flags.includes('t')?`${reps}s`:String(reps||''),done:true,u:to,_ownW:true,_ownR:true,_watch:true,_ws:sid};
+      r:flags.includes('t')?`${reps}s`:String(reps||''),done:true,u:to,_ownW:wn>0,_ownR:true,_watch:true,_ws:sid,
+      _wr:`${w}|${u}|${reps}|${flags}`}; // what the watch sent, to spot phone edits on a resend
     let g=groups.find(x=>x.id===id);
     if(!g){g={id,sets:[]};groups.push(g);}
     // The app logs single-leg/arm lifts as L and R sets; the watch sends one per pair.
@@ -3874,10 +3876,27 @@ function _watchApplyNote(n){
     let le=log.exercises.find(e=>e.id===g.id);
     if(!le){le={id:g.id,sets:[]};log.exercises.push(le);}
     const cur=Array.isArray(le.sets)?le.sets:[];
-    const prev=cur.filter(x=>x._ws===sid).length;
+    const old=cur.filter(x=>x._ws===sid);
+    const prev=old.length;
     const rest=cur.filter(x=>x._ws!==sid);
     const restDone=rest.filter(x=>x.done), restTodo=rest.filter(x=>!x.done);
     const use=Math.max(0,g.sets.length-prev);
+    // v3.42: the watch only knows the weights the phone had sent it, and it
+    // resends the whole session after every set. So:
+    //  - a set it already sent and hasn't changed keeps what you did to it on
+    //    the phone (a weight typed in afterwards, fixed reps);
+    //  - a set with no weight takes the weight you'd put on the phone for that
+    //    set, or the one before it, instead of wiping it.
+    let lastW=null;
+    g.sets.forEach((x,i)=>{
+      const was=i<prev?old[i]:restTodo[i-prev];
+      if(i<prev&&was&&was._wr===x._wr){g.sets[i]=was;}
+      else if(!x.w){
+        const src=was?.w?was:lastW;
+        if(src){x.w=src.w;x.u=src.u;}
+      }
+      if(g.sets[i].w)lastW=g.sets[i];
+    });
     le.sets=[...restDone,...g.sets,...restTodo.slice(use)];
     added+=use;
     g.sets.slice(prev).forEach(x=>{const wv=parseFloat(x.w),rv=parseInt(x.r);if(wv&&rv&&!/s$/.test(x.r))checkPR(g.id,wv,rv);});
@@ -5783,7 +5802,7 @@ function _carryForward(ei,si,field){
   for(let j=si+1;j<sets.length;j++){
     const x=sets[j];
     if(x[own])break;   // a set you changed yourself starts its own run
-    if(x.done)continue; // never rewrite a ticked set
+    if(x.done&&!(x._watch&&!x._ownW))continue; // never rewrite a ticked set — except a watch set still waiting for its weight
     x[field]=sets[si][field];
     if(field==='w'){x.u=sets[si].u;delete x.plates;}
   }
