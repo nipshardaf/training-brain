@@ -1014,10 +1014,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.46';
+const APP_VERSION='3.47';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.47',d:'Pick your gym days for the week',det:'Tapping the refresh button on the week (or Generate) now asks which days you can get to the gym, pre-ticked with a suggestion, and it asks once at the start of each new week too. Your gym days get the right sessions for that many days (3 days: Push, Pull, Legs), most-needed first and spaced out; rides go on the best of the other days, always leaving at least one rest day. Past days and days you have already trained stay as they are. To change your mind mid-week (train more or less), tap the "Gym days … Change" bar at the top of the week. Also: the app now checks for a new version every time you switch back to it, not only when it is launched fresh, so fixes reach you sooner.'},
   {v:'3.46',d:'Gym weeks are planned by muscle group, looking back at last week',det:'The gym split is now based on how many gym days the week has, so every muscle group gets trained: 1 day Full Body, 2 Upper + Legs, 3 Push, Pull, Legs, 4 adds a new Shoulders & Arms session, 5 adds a second Legs, 6 is Push, Pull, Legs twice. Before, a Push, Pull, Legs, Upper rotation ran on from week to week, so some weeks had no legs and others repeated chest and back. The planner looks back over last week: muscles you trained longest ago (anything you missed) come first, and a session only counts as missed if its muscles went untrained, so skipping Upper after doing Push and Pull is not a miss. Sessions are spread out: never the same muscles two days running (Sunday into Monday included), legs away from the long ride, no ride the day after a ride or legs, and a rest day after two training days in a row. Tap the refresh button on this week to rebuild it.'},
   {v:'3.45',d:'Missing a gym day no longer scrambles the week',det:'Before, a missed day slid the whole rest of the week along by a day: rides moved onto rainy days (still showing the sunny forecast), rest days moved, a session fell off the week every time, and a missed ride pushed the gym back too. Now only gym sessions move: the one you missed becomes your next gym day and the others follow in order, while rides, rest days and the forecast stay put. Whatever no longer fits this week is first next week. And if you do a different session than the plan says (the watch had an older copy, say), the plan follows what you actually did and the session you replaced takes its later slot. The week also updates before anything is sent to your watch, so the watch has the new order.'},
   {v:'3.44',d:'Weeks plan themselves; tick sets on the phone or the watch',det:'Each new week now builds itself when you open the app (it used to wait until you had finished every session of the week before). A week also never fails to build any more: your last location is remembered, and with no location or no forecast it plans without weather instead of showing an error. With the watch: sets ticked on the phone are skipped on the watch within about 30 seconds, so you can use either for any set; a weight changed on the watch carries to the rest of that exercise; the "Watch session" card shows as soon as you press start on the watch; and starting on the watch before opening the log no longer leaves the phone\'s log with only some of the exercises. (Needs watch app 1.0.1.)'},
@@ -4647,7 +4648,7 @@ const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emai
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
-function _isSyncKey(k){return k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
+function _isSyncKey(k){return k.startsWith('gym_days_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
 // v3.33: the dirty set is persisted (_sync_dirty). It used to live only in memory,
 // so sets logged with no signal were forgotten when the app closed — and the next
 // open's pull (cloud wins) replaced them with the cloud's older copy of that day.
@@ -4952,6 +4953,7 @@ function _placeSessions(wdays,gymIdx,locked,order,avoidLegs){
     });
   };
   perm(0,[],{...asgn});
+  _placeSessions.cost=best?bestC:0; // lets a caller weigh this placement against others
   return best||asgn;
 }
 
@@ -5165,7 +5167,8 @@ function _preWeekContext(){
   if(d1.rode)ridePenalty+=d1.long?60:40; // the day after a ride (a long one: more)
   if(d2.rode&&d1.rode)ridePenalty+=40;   // it would be a third ride in a row
   if(d1.legs)ridePenalty+=40;            // the day after legs
-  return{ridePenalty,firstRest:(d2.trained&&d1.trained)||d1.long,rodeYesterday:d1.rode};
+  return{ridePenalty,firstRest:(d2.trained&&d1.trained)||d1.long,rodeYesterday:d1.rode,
+    legsYesterday:d1.legs,d1:d1.trained,d2:d2.trained};
 }
 function buildWeek(wdays){
   const bikePref=DB.get('bike_pref','weather');
@@ -5256,6 +5259,69 @@ function buildWeek(wdays){
       if(_ramped>=1&&_ramped<=3)weekCap=_ramped;
     }
   }
+  // v3.47: the gym days you picked for this week (openWeekPicker). They get the
+  // sessions for that many gym days (_gymOrder/_placeSessions); rides go on the
+  // other days by weather and spacing, always leaving at least one rest day. Past
+  // days aren't re-planned: one that was a gym day you didn't do shows as skipped
+  // (its muscles already count as untrained when the sessions are ordered).
+  const _chosen=DB.get('gym_days_'+fd(S.weekStart),null);
+  if(Array.isArray(_chosen)){
+    const todayStr=fd(new Date()),idxs=[0,1,2,3,4,5,6];
+    const open=i=>!locked[wdays[i].date]&&wdays[i].date>=todayStr;
+    const gymDays=idxs.filter(i=>open(i)&&_chosen.includes(wdays[i].date));
+    // Ride days and session placement are chosen together: every choice of ride
+    // days is tried and the whole week scored — ride weather, no shared muscles on
+    // neighbouring days, legs away from rides, no long runs of training days (the
+    // end of last week counts). Deciding rides first and legs after left weeks like
+    // gym, gym, ride, gym in a row with a free day unused.
+    const fixed=wdays.map(w=>locked[w.date]).filter(d=>d&&_MUSC[d.type]).map(d=>d.type);
+    const order=_gymOrder(gymDays.length+fixed.length,fixed);
+    let n=0,freeIdx=[];
+    if(bikePref!=='none'){
+      const _g=profile.goals||(profile.goal?[profile.goal]:[]);
+      const _bp=blendGoalProfile(_g,profile.goalRanks);
+      const target=Math.max(1,Math.min(3,Math.round(targetDays*_bp.cardio_ratio)));
+      const ridden=idxs.filter(i=>stravaRideOnDate(wdays[i].date)).length;
+      freeIdx=idxs.filter(i=>open(i)&&!gymDays.includes(i)&&!stravaRideOnDate(wdays[i].date));
+      n=Math.max(0,Math.min(2,target-ridden,freeIdx.length-1)); // keep a rest day
+    }
+    const trainedFixed=i=>!!locked[wdays[i]?.date]||!!stravaRideOnDate(wdays[i].date);
+    let best={cost:Infinity,rides:[],asgn:{}};
+    const tryPlan=rides=>{ // rides[0] = the long ride
+      const avoid=new Set([...(rides.length?[rides[0]-1,rides[0]+1]:[]),...(_pre.rodeYesterday?[0]:[])]);
+      const asgn=_placeSessions(wdays,gymDays,locked,order,avoid);
+      let c=_placeSessions.cost||0;
+      rides.forEach((i,k)=>{
+        if(bikePref!=='indoor')c-=(wdays[i].score||0)*(k===0?0.5:0.3); // better weather for rides
+        if(i===0)c+=_pre.ridePenalty;
+        if((i>0&&asgn[i-1]==='LEGS')||(i===0&&_pre.legsYesterday))c+=40; // ride the day after legs
+      });
+      if(rides.length===2&&Math.abs(rides[0]-rides[1])===1)c+=30; // rides back to back
+      const tr=i=>i<0?(i===-1?_pre.d1:_pre.d2):(gymDays.includes(i)||rides.includes(i)||trainedFixed(i));
+      let run=0;for(let i=-2;i<7;i++){run=tr(i)?run+1:0;if(i>=0&&run>=3)c+=25;} // 3+ training days in a row
+      if(c<best.cost)best={cost:c,rides:[...rides],asgn};
+    };
+    if(n===0)tryPlan([]);
+    else for(const a of freeIdx){if(n===1)tryPlan([a]);else for(const b of freeIdx)if(b!==a)tryPlan([a,b]);}
+    const rideType={},asgn=best.asgn;
+    best.rides.forEach((i,k)=>{
+      const out=bikePref!=='indoor'&&(wdays[i].score||0)>=45;
+      rideType[i]=(k===0?'LONG_':'SHORT_')+(out?'OUTDOOR':'INDOOR');
+    });
+    return wdays.map((w,i)=>{
+      if(locked[w.date])return{...locked[w.date],weather:w};
+      if(w.date<todayStr){
+        const ex=existingPlan?.find(d=>d.date===w.date);
+        if(ex&&_MUSC[ex.type])return{date:w.date,type:'SKIPPED',skipped:ex.type,weather:w};
+        return ex?{...ex,weather:w}:mk(w,'REST');
+      }
+      if(rideType[i])return mk(w,rideType[i]);
+      if(stravaRideOnDate(w.date))return mk(w,'REST'); // already rode — the row shows the ride
+      if(asgn[i])return mk(w,asgn[i]);
+      return mk(w,'REST');
+    });
+  }
+
   if(weekCap&&weekCap>=1&&weekCap<=3){
     const numTrain=weekCap;
     // Available (non-locked) days, ranked by score (best weather first)
@@ -7021,6 +7087,10 @@ function rWeek(){
   applyAutoSkipShift();
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
+  // v3.47: once a week, ask which days you can get to the gym (the automatic
+  // build has already given you a suggested week to start from).
+  if(plan&&!S.guest&&+S.weekStart===+getMon(new Date())&&!DB.get('week_picker_'+fd(S.weekStart),false))
+    setTimeout(()=>{if(S.screen==='week'&&!document.getElementById('swap-modal')&&!DB.get('week_picker_'+fd(S.weekStart),false))openWeekPicker(true);},500);
   const sun=addDays(S.weekStart,6);
   const lbl=`${S.weekStart.getDate()} ${MNAMES[S.weekStart.getMonth()]} – ${sun.getDate()} ${MNAMES[sun.getMonth()]}`;
   const today=new Date();
@@ -7035,11 +7105,12 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
 <div class="week-nav">
   <button class="wnav-btn" onclick="shiftWeek(-1)">‹</button>
   <div class="week-label">${lbl}</div>
-  ${plan?`<button onclick="genPlan()" title="Regenerate plan" style="background:none;border:none;font-size:15px;cursor:pointer;padding:4px 6px;color:var(--t2);line-height:1;opacity:0.7">🔄</button>`:''}
+  ${plan?`<button onclick="openWeekPicker()" title="Plan this week" style="background:none;border:none;font-size:15px;cursor:pointer;padding:4px 6px;color:var(--t2);line-height:1;opacity:0.7">🔄</button>`:''}
   ${plan?(()=>{const wc=DB.get('week_capacity_'+fd(S.weekStart),null);
     return`<button onclick="openShortWeek()" title="Short week" style="background:${wc?'rgba(124,58,237,.15)':'none'};border:${wc?'1px solid var(--acc)':'none'};border-radius:8px;font-size:15px;cursor:pointer;padding:3px 7px;color:${wc?'var(--acc)':'var(--t2)'};line-height:1;opacity:${wc?'1':'0.7'};font-weight:${wc?'700':'400'}">⏱️${wc?` ${wc}d`:''}</button>`;})():''}
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
+${rGymDaysBar(plan)}
 ${rAskCoach()}
 ${rRideOnGymDayBanner()}
 ${rComebackBanner()}
@@ -7109,7 +7180,7 @@ ${rCatchUpBanner()}
   <div class="empty-icon">${p==='none'?'🏋️':p==='indoor'?'🏠':'🌤️'}</div>
   <div class="empty-title">Ready to generate your plan</div>
   <div style="font-size:13px;color:var(--t2);margin-bottom:16px;text-align:center;line-height:1.6">Tap Generate to build your full week. To change your cycling preference, go to <strong>My Training</strong>.</div>
-  <button class="btn btn-p" onclick="genPlan()">${p==='weather'?'🌤️ Generate (outdoor + gym)':p==='indoor'?'🏠 Generate (indoor + gym)':'🏋️ Generate (gym only)'}</button>
+  <button class="btn btn-p" onclick="openWeekPicker()">${p==='weather'?'🌤️ Generate (outdoor + gym)':p==='indoor'?'🏠 Generate (indoor + gym)':'🏋️ Generate (gym only)'}</button>
 </div>`;
 })();})()}
 ${(()=>{
@@ -11346,7 +11417,7 @@ ${(()=>{const _bp=DB.get('bike_pref','weather');const _pr3=DB.get('user_profile'
 <div class="card">
 ${_hasCy?`<div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:8px">Workout preference</div>
 <div style="display:flex;gap:6px;margin-bottom:14px">${_cyOpts.map(o=>`<button onclick="DB.set('bike_pref','${o.v}');render()" style="flex:1;padding:8px 4px;border-radius:10px;border:1px solid ${_bp===o.v?'var(--acc)':'var(--bord)'};background:${_bp===o.v?'rgba(124,58,237,.12)':'var(--s1)'};color:${_bp===o.v?'var(--acc)':'var(--t2)'};font-size:12px;font-weight:${_bp===o.v?'700':'500'};cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px"><span style="font-size:16px">${o.i}</span>${o.l}</button>`).join('')}</div>`:''}
-<button onclick="S.weekStart=getMon(new Date());go('week');genPlan()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
+<button onclick="S.weekStart=getMon(new Date());go('week');openWeekPicker()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--t1);font-size:13px;font-weight:700;padding:11px;cursor:pointer">🔄 Regenerate plan for this week</button>
 </div>`;})()}
 
 <div class="sec-hdr">${_T('history')}</div>
@@ -12899,6 +12970,75 @@ function _autoBuildWeek(){
   });
 }
 
+// v3.47: "Which days can you get to the gym?" — opened by 🔄 / Generate and once
+// when a new week starts. Pre-ticked with the current plan (or what the planner
+// would suggest); past days and days you've already trained can't be changed.
+function openWeekPicker(auto=false){
+  const ws=S.weekStart,todayStr=fd(new Date());
+  DB.set('week_picker_'+fd(ws),true);
+  const saved=DB.get('gym_days_'+fd(ws),null);
+  let sel;
+  if(Array.isArray(saved))sel=saved;
+  else{
+    let base=DB.get(DB.pk(ws),null);
+    if(!base){try{base=buildWeek([...Array(7)].map((_,i)=>({date:fd(addDays(ws,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0})));}catch(_){base=[];}}
+    sel=(base||[]).filter(d=>_MUSC[d.type]).map(d=>d.date);
+  }
+  S._wp={sel:new Set(sel.filter(ds=>ds>=todayStr)),auto};
+  closeSwap();
+  const modal=document.createElement('div');
+  modal.className='swap-modal';modal.id='swap-modal';
+  modal.innerHTML=`<div class="swap-ov" onclick="closeSwap()"></div><div class="swap-sheet" id="wp-sheet"></div>`;
+  document.body.appendChild(modal);
+  _wpRender();
+  requestAnimationFrame(()=>modal.classList.add('on'));
+}
+function _wpRender(){
+  const el=document.getElementById('wp-sheet');if(!el||!S._wp)return;
+  const ws=S.weekStart,todayStr=fd(new Date());
+  const DN=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  let doneN=0;
+  const chips=[...Array(7)].map((_,i)=>{
+    const ds=fd(addDays(ws,i));
+    const lg=DB.get('log_'+ds,null);
+    const did=!!(_MUSC[lg?.type]&&lg.exercises?.some(e=>e.sets?.some(x=>x.done)));
+    if(did)doneN++;
+    const past=ds<todayStr,on=did||S._wp.sel.has(ds),dis=did||past;
+    return`<button ${dis?'disabled':''} onclick="_wpToggle('${ds}')" style="flex:1;min-width:0;padding:9px 0;border-radius:12px;border:1px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'var(--acc)':'var(--s2)'};color:${on?'#fff':'var(--txt)'};opacity:${past&&!did?.4:1};font-weight:700;font-size:11px;line-height:1.35;cursor:${dis?'default':'pointer'};-webkit-appearance:none">${DN[i]}<br><span style="font-size:15px">${addDays(ws,i).getDate()}</span>${did?'<br><span style="font-size:9px">✓ done</span>':''}</button>`;
+  }).join('');
+  const n=S._wp.sel.size+doneN;
+  const names=n?(_WEEK_SET[Math.min(6,n)]||[]).map(t=>typeof WI[t]?.l==='function'?WI[t].l():t).join(', '):'';
+  const rides=DB.get('bike_pref','weather')!=='none';
+  el.innerHTML=`<div class="swap-title">${S._wp.auto?'New week — which':'Which'} days can you get to the gym?</div>
+  <div style="display:flex;gap:5px;margin:6px 0 12px">${chips}</div>
+  <div style="font-size:13px;color:var(--t2);line-height:1.55;margin-bottom:14px">${n?`<b style="color:var(--txt)">${n} gym day${n!==1?'s':''}</b> → ${names}${n>6?' (6 at most)':''}`:'No gym days this week.'}${rides?'<br>Rides go on the best of the other days, keeping at least one rest day.':''}</div>
+  <button class="btn btn-p" onclick="_wpBuild()">📅 Build my week</button>
+  <button class="swap-cancel" onclick="closeSwap()">${S._wp.auto?'Keep the suggested week':'Cancel'}</button>`;
+}
+// v3.47: the week's gym days at a glance, with a one-tap way to change them —
+// mid-week too (want to train more or less). This week and future weeks only.
+function rGymDaysBar(plan){
+  if(!plan||S.guest||fd(S.weekStart)<fd(getMon(new Date())))return'';
+  const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const days=[...plan].sort((a,b)=>a.date.localeCompare(b.date)).filter(d=>_MUSC[d.type]).map(d=>DN[new Date(d.date+'T12:00:00').getDay()]);
+  return`<button onclick="openWeekPicker()" style="width:100%;display:flex;align-items:center;gap:8px;background:var(--s1);border:1px solid var(--bord);border-radius:12px;padding:10px 12px;margin:0 0 12px;cursor:pointer;color:var(--txt);font-size:13px;text-align:left;-webkit-appearance:none">
+  <span style="font-size:16px">📅</span>
+  <span style="flex:1;min-width:0"><b>Gym days:</b> ${days.length?days.join(' · '):'none'}</span>
+  <span style="color:var(--al);font-weight:700;font-size:12px">Change</span>
+</button>`;
+}
+function _wpToggle(ds){
+  if(!S._wp)return;
+  if(S._wp.sel.has(ds))S._wp.sel.delete(ds);else S._wp.sel.add(ds);
+  _wpRender();
+}
+function _wpBuild(){
+  if(!S._wp)return;
+  DB.set('gym_days_'+fd(S.weekStart),[...S._wp.sel].sort());
+  S._wp=null;closeSwap();
+  genPlan();
+}
+
 function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;render();}
 
 function toggleHomeDay(dateStr){
@@ -13160,6 +13300,15 @@ function init(){
     });
   }
 }
+// v3.47: an installed app brought back from the background doesn't relaunch, so it
+// could keep running an old version for days. Coming back now asks the service
+// worker to re-check the page; it shows the Reload bar when there's a newer one.
+let _verCheckAt=0;
+function _checkForUpdate(){
+  if(!('serviceWorker' in navigator)||Date.now()-_verCheckAt<5*60*1000)return;
+  _verCheckAt=Date.now();
+  fetch(location.pathname,{cache:'no-cache'}).catch(()=>{});
+}
 function showUpdateToast(){
   if(document.getElementById('tb-update-toast'))return;
   const d=document.createElement('div');
@@ -13326,6 +13475,7 @@ document.addEventListener('visibilitychange',()=>{
     if(_dirtyKeys.size&&S.fbUser&&!S.guest){clearTimeout(_syncTimer);saveToCloud();}
     return;
   }
+  _checkForUpdate(); // v3.47
   const now=Date.now();
   if(now-_lastVisibilitySync<10000)return; // 10s debounce
   _lastVisibilitySync=now;
