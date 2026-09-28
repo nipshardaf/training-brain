@@ -979,7 +979,7 @@ const WI = {
   LONG_INDOOR:  {l:()=>{const s=getRideSession('LONG_INDOOR');  return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('LONG_INDOOR');  return `${s.total} min · Zone 2 · Indoor`;}},
   SHORT_INDOOR: {l:()=>{const s=getRideSession('SHORT_INDOOR'); return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('SHORT_INDOOR'); return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
-  SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Day passed without a workout — moved to the next available day.'},
+  SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Gym session missed — it moved to your next gym day.'},
   FULL_BODY:    {l:()=>'Full Body',         i:_icon('gym-weights.png','💪'),     c:'#7c3aed',d:()=>'One-session full-body — squat · hinge · press · pull · shoulder · core'},
 };
 
@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.44';
+const APP_VERSION='3.45';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.45',d:'Missing a gym day no longer scrambles the week',det:'Before, a missed day slid the whole rest of the week along by a day: rides moved onto rainy days (still showing the sunny forecast), rest days moved, a session fell off the week every time, and a missed ride pushed the gym back too. Now only gym sessions move: the one you missed becomes your next gym day and the others follow in order, while rides, rest days and the forecast stay put. Whatever no longer fits this week is first next week. And if you do a different session than the plan says (the watch had an older copy, say), the plan follows what you actually did and the session you replaced takes its later slot. The week also updates before anything is sent to your watch, so the watch has the new order.'},
   {v:'3.44',d:'Weeks plan themselves; tick sets on the phone or the watch',det:'Each new week now builds itself when you open the app (it used to wait until you had finished every session of the week before). A week also never fails to build any more: your last location is remembered, and with no location or no forecast it plans without weather instead of showing an error. With the watch: sets ticked on the phone are skipped on the watch within about 30 seconds, so you can use either for any set; a weight changed on the watch carries to the rest of that exercise; the "Watch session" card shows as soon as you press start on the watch; and starting on the watch before opening the log no longer leaves the phone\'s log with only some of the exercises. (Needs watch app 1.0.1.)'},
   {v:'3.43',d:'The app knows when you\'re training with your watch',det:'As soon as your first set arrives from the watch, the gym day and the log show a green "Watch session live" card: how many sets came from the watch, when the last one arrived, and how many still need a weight. Sets ticked on the watch show a watch icon instead of a tick. On days you don\'t use the watch nothing changes, and with "Gym days on my watch" turned off the app no longer checks for watch sets at all.'},
   {v:'3.42',d:'Watch sets no longer need their weights typed in twice',det:'Sets ticked on the watch were coming in as 0 lb, and typing a weight on the phone only filled sets you had not done yet, so every ticked set had to be typed in by hand. Now: a watch set without a weight takes the weight you had on the phone for that set (or the set before it), typing a weight once fills every set of that exercise you ticked on the watch without one, and anything you fix on the phone is kept when the watch sends its next set. Best way to use it: set the weight once per exercise on the phone, tick sets on the watch.'},
@@ -3280,8 +3281,9 @@ function _shortEx(n){
     // "Barbell Row" would shrink to a bare "Row" — keep it as "BB Row"
     .replace(/^([A-Za-z-]+)$/,m=>/^Barbell /.test(n)?'BB '+m:m);
 }
+function _watchLabel(type){return(WI[type]&&typeof WI[type].l==='function'?WI[type].l():'')||_typeShort(type).replace(/_/g,' ');}
 function _watchName(type,ids){
-  const t=(WI[type]&&typeof WI[type].l==='function'?WI[type].l():'')||_typeShort(type).replace(/_/g,' ');
+  const t=_watchLabel(type);
   const names=(ids||[]).map(id=>_shortEx(EX[id]?.n)).filter(Boolean);
   const build=()=>`${t}: ${names.join(', ')}`;
   // Very long: trim the longest name by its leading word ("Lying Leg
@@ -3332,6 +3334,7 @@ async function _watchIcu(path,method,body){
 }
 async function watchPushGym(manual=false){
   if(!_watchOn()){if(manual)showToast('Turn on "Gym days on my watch" first','var(--amb)');return;}
+  applyAutoSkipShift(); // v3.45: the watch gets the plan after any missed day
   const today=fd(new Date());
   const want=_watchWanted();
   const sent=DB.get('watch_sent',{})||{}; // external_id → {date, sig}
@@ -3954,6 +3957,18 @@ function _watchApplyNote(n){
   }
   if(final&&groups.length)log.completed=true;
   log.watchNotes=[...log.watchNotes.filter(t=>!t.startsWith(n.external_id+'@')),tag].slice(-40);
+  // v3.45: the watch ran a different session than the plan now has for this day
+  // (its copy was older) — the plan follows what you did, and so does the log.
+  const doneLbl=String((parts[0]==='TB1'?parts[2]:parts[4])||'').split(':')[0].trim();
+  const doneType=[...GYM_SEQ,'FULL_BODY'].find(t=>_watchLabel(t)===doneLbl);
+  if(!isExtra&&groups.length&&doneType&&dp&&dp.type!==doneType){
+    const nd=_followDoneType(ds,doneType);
+    if(nd){
+      log.type=nd.type;
+      log.exercises=log.exercises.filter(le=>(le.sets||[]).some(x=>x.done)||(nd.exercises||[]).includes(le.id));
+      for(const id of nd.exercises||[])if(EX[id]&&!log.exercises.some(le=>le.id===id))log.exercises.push({id,sets:makeSets(id,'okay',getLastLog(id))});
+    }
+  }
   log.watchAt=new Date().toISOString(); // v3.43: "last set from your watch … ago"
   // v3.44: the session the watch is running now. Done sets from it aren't marked
   // "done" in the plan sent to the watch (it counts those itself); every other
@@ -4849,6 +4864,19 @@ function getLastGymType(){
 // e.g. user did Pull (Wed) then Push (Fri) — old logic: next=Pull (repeats),
 //      new logic: next=Legs (longest gap, never done in 14 days).
 function getMostNeededGymType(){
+  // v3.45: sessions that missed days pushed out of last week go first (unless
+  // one has been done since — a mid-week re-plan).
+  const doneWk=new Set();
+  const wkPlan=DB.get(DB.pk(S.weekStart),null)||[];
+  for(let i=0;i<7;i++){
+    const ds=fd(addDays(S.weekStart,i));if(ds>=fd(new Date()))break;
+    const dp=wkPlan.find(x=>x.date===ds);
+    if(dp&&DB.get('log_'+ds,null)?.exercises?.some(e=>e.sets?.some(s=>s.done)))doneWk.add(dp.type);
+  }
+  const carried=(DB.get(DB.pk(addDays(S.weekStart,-7)),null)||[])
+    .filter(d=>GYM_SEQ.includes(d.carryOut)).sort((a,b)=>a.date.localeCompare(b.date))
+    .map(d=>d.carryOut).filter(t=>!doneWk.has(t));
+  if(carried.length)return carried[0];
   // v2.82: PRIMARY signal — anything planned in the last 7 days that wasn't done?
   // A directly-missed workout is the clearest "catch this up" signal there is.
   // We anchor the new week's rotation on the EARLIEST missed type so the user's
@@ -4910,6 +4938,7 @@ function getMissedLastWeek(){
     if(day.date>=today)continue; // only count days that have passed
     const log=DB.get('log_'+day.date,null);
     const hasGymLog=log?.exercises?.some(e=>e.sets?.some(s=>s.done));
+    if(gymTypes.has(day.carryOut))missedGym.push({type:day.carryOut,date:day.date}); // v3.45: pushed out of the week
     if(gymTypes.has(day.type)&&!hasGymLog){
       missedGym.push({type:day.type,date:day.date});
     }else if(rideTypes.has(day.type)){
@@ -4946,79 +4975,68 @@ function _dayWasDone(d){
   if(typeof stravaRideOnDate==='function'&&stravaRideOnDate(d.date))return true;
   return false;
 }
+// v3.45: a missed GYM day slides only the gym sessions. The missed session takes
+// the next gym day still ahead, each later gym session moves to the gym day after
+// it, and the one that no longer fits goes first next week (carryOut on the
+// skipped day). Rides, rest days and each day's forecast stay on their dates, and
+// a missed ride moves nothing. v2.83–3.44 slid the WHOLE week a day per miss:
+// rides landed on rainy days showing the sunny day's forecast, rest days moved, a
+// session fell off each time, and last week's misses (rides too) were dragged in
+// on top of the new week's own catch-up. Runs on the current week whenever the
+// plan is shown, pulled or sent to the watch; idempotent. Never touches days with
+// logged work or locked days.
+function _isGymDay(t){return GYM_SEQ.includes(t)||t==='FULL_BODY';}
+function _gymPart(d){const p={};for(const k in d)if(k!=='date'&&k!=='weather')p[k]=d[k];return p;}
+function _setGymPart(d,p){for(const k of Object.keys(d))if(k!=='date'&&k!=='weather')delete d[k];Object.assign(d,p);}
 function applyAutoSkipShift(){
-  // Only operate on the currently-displayed week, and only if it's the current week.
-  const todayMon=getMon(new Date());
-  if(+S.weekStart!==+todayMon)return false;
-  const pk=DB.pk(S.weekStart);
+  if(S.fbUser&&!S.guest&&!_pulledOk)return false; // another device may have logged those days
+  const mon=getMon(new Date()),pk=DB.pk(mon);
   const plan=DB.get(pk,null);
   if(!plan||!plan.length)return false;
   const sorted=[...plan].sort((a,b)=>a.date.localeCompare(b.date));
   const todayStr=fd(new Date());
-  let changed=false;
-
-  // Reusable: cascade ONE payload into this week — slot it into the first non-completed,
-  // non-SKIPPED day, pushing later payloads down by one. Trailing payloads fall off (they
-  // become catch-up signal for NEXT week via getMostNeededGymType).
-  function _cascadeIn(carry){
-    for(let j=0;j<sorted.length;j++){
-      const futDay=sorted[j];
-      if(_dayWasDone(futDay))break;
-      if(futDay.type==='SKIPPED')continue;
-      const next=_dayPayload(futDay);
-      _setDayPayload(futDay,carry);
-      carry=next;
+  const missedDays=sorted.filter(d=>d.date<todayStr&&_isGymDay(d.type)&&!d.locked&&!_dayWasDone(d));
+  if(!missedDays.length)return false;
+  const slots=sorted.filter(g=>g.date>=todayStr&&_isGymDay(g.type)&&!g.locked&&!_dayWasDone(g));
+  // Oldest missed session first, then the ones already ahead, in their order — so
+  // missing two days before opening the app gives the same order as one at a time.
+  const queue=[...missedDays.map(_gymPart),...slots.map(_gymPart)];
+  slots.forEach(g=>_setGymPart(g,queue.shift()));
+  // What's left over didn't fit this week: first next week, in order.
+  missedDays.forEach((d,i)=>_setGymPart(d,{type:'SKIPPED',skipped:d.type,carryOut:queue[i]?.type}));
+  DB.set(pk,sorted);
+  return true;
+}
+// v3.45: you did a different gym session than the plan has for that day (the
+// watch had an older copy, say). The day becomes what you did, and the session it
+// replaced takes that session's later slot, so nothing is done twice or lost. If
+// what you did wasn't coming up again, the replaced session slides along the later
+// gym days like a missed one. A rest day you trained on becomes that session, and
+// its later slot turns into rest. Ride days and locked days are left alone.
+function _followDoneType(ds,doneType){
+  const pk=DB.pk(getMon(new Date(ds+'T12:00:00')));
+  const plan=DB.get(pk,null);if(!plan)return null;
+  const sorted=[...plan].sort((a,b)=>a.date.localeCompare(b.date));
+  const dp=sorted.find(d=>d.date===ds);
+  if(!dp||dp.type===doneType||dp.locked||!_isGymDay(doneType))return null;
+  if(!_isGymDay(dp.type)&&dp.type!=='REST')return null;
+  const later=sorted.filter(d=>d.date>ds&&_isGymDay(d.type)&&!d.locked&&!_dayWasDone(d));
+  const same=later.find(d=>d.type===doneType);
+  const replaced=_gymPart(dp);
+  if(same){
+    const mine=_gymPart(same);
+    _setGymPart(same,_isGymDay(replaced.type)?replaced:{type:'REST'});
+    _setGymPart(dp,mine);
+  }else{
+    _setGymPart(dp,{type:doneType,exercises:genSession(doneType)});
+    if(_isGymDay(replaced.type)){
+      let carry=replaced;
+      for(const g of later){const next=_gymPart(g);_setGymPart(g,carry);carry=next;}
+      dp.carryOut=carry.type; // no longer fits this week — first next week
     }
   }
-
-  // v2.84: also pull in LAST week's trailing misses. Scan back from last Sunday: each
-  // workout day with no log gets cascaded into this week. Stops at the first day that
-  // WAS done (so we never drag earlier complete sessions forward). Most-recent miss
-  // cascades first so the OLDEST miss ends up on Monday (chronological catch-up).
-  const lastMonDate=getMon(addDays(S.weekStart,-7));
-  const lastPk=DB.pk(lastMonDate);
-  const lastPlan=DB.get(lastPk,null);
-  if(lastPlan&&lastPlan.length){
-    const lastSorted=[...lastPlan].sort((a,b)=>a.date.localeCompare(b.date));
-    const carryIns=[]; // most-recent miss first (matches cascade-order requirement)
-    for(let li=lastSorted.length-1;li>=0;li--){
-      const ld=lastSorted[li];
-      if(_dayWasDone(ld))break;                         // hit a completed day — stop
-      if(ld.type==='SKIPPED'||ld.type==='REST')continue; // not a missed workout
-      carryIns.push({orig:_dayPayload(ld),dayRef:ld});
-    }
-    if(carryIns.length){
-      for(const c of carryIns){
-        _cascadeIn(c.orig);
-        _setDayPayload(c.dayRef,{type:'SKIPPED',weather:c.orig.weather||{score:0,code:1,tmax:15,tmin:5,rain:0,wind:10}});
-      }
-      DB.set(lastPk,lastSorted);
-      changed=true;
-    }
-  }
-
-  for(let i=0;i<sorted.length;i++){
-    const day=sorted[i];
-    if(day.date>=todayStr)break;          // only past days
-    if(day.type==='SKIPPED'||day.type==='REST')continue;
-    if(_dayWasDone(day))continue;
-    // This day was missed — carry its payload forward, cascading later uncompleted days
-    const orig=_dayPayload(day); // capture original (incl. weather) before cascade clobbers it
-    let carry=orig;
-    for(let j=i+1;j<sorted.length;j++){
-      const futDay=sorted[j];
-      if(_dayWasDone(futDay))break;       // hit a locked day — stop cascading
-      if(futDay.type==='SKIPPED')continue; // step over earlier skipped slots
-      const next=_dayPayload(futDay);
-      _setDayPayload(futDay,carry);
-      carry=next;
-    }
-    // Preserve weather so the day-row renderer (which reads day.weather) keeps working
-    _setDayPayload(day,{type:'SKIPPED',weather:orig.weather||{score:0,code:1,tmax:15,tmin:5,rain:0,wind:10}});
-    changed=true;
-  }
-  if(changed)DB.set(pk,sorted);
-  return changed;
+  DB.set(pk,sorted);
+  return dp;
 }
 
 // "You rode on a planned gym day" prompt, surfaced on the WEEK view. The same
@@ -6593,7 +6611,7 @@ async function loadFromCloud(manual=false){
     }finally{_suppressDirty=false;}
     _pulledOk=true;
     if(keptLocal)debouncedSync();
-    setTimeout(_autoBuildWeek,0); // v3.44
+    setTimeout(()=>{_autoBuildWeek();applyAutoSkipShift();},0); // v3.44 / v3.45
     DB.set('fb_last_pull',new Date().toISOString());
     DB.set('fb_last_pull_remote_ts',remoteUpdated||'');
     DB.set('fb_last_pull_err',null);
@@ -13260,6 +13278,7 @@ document.addEventListener('visibilitychange',()=>{
   _lastVisibilitySync=now;
   _autoPullIfNewer('visibilitychange');
   _autoBuildWeek(); // v3.44: opened on a new week
+  applyAutoSkipShift(); // v3.45: a day may have passed
   if(S.fbUser&&!S.guest&&DB.get('icu_key',null))watchImportSets(); // back from the gym
 });
 
