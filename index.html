@@ -544,6 +544,16 @@ const SLOTS = {
     ['hammer','preacher','cable_curl','incline_curl','db_curl'],             // 5. Bicep isolation
     ['tri_push','tri_oh','skull','diamond_pu'],                             // 6. Tricep isolation
   ],
+  // SHOULDERS_ARMS (v3.46) — the 4th/5th gym session with Push/Pull/Legs: delts and
+  // arms, what PPL gives least, without another heavy chest or back day.
+  SHOULDERS_ARMS:[
+    ['ohp','db_spress','arnold','pike_pu'],                                // 1. Shoulder press
+    ['lat_raise','cable_lat'],                                             // 2. Lateral delts
+    ['face_pull','rear_fly'],                                              // 3. Rear delts
+    ['bb_curl','db_curl','cable_curl','preacher','incline_curl'],          // 4. Biceps
+    ['tri_push','skull','tri_oh','dips','assisted_dip','diamond_pu'],      // 5. Triceps
+    ['hammer'],                                                            // 6. Hammer curl — brachialis / forearms
+  ],
   // FULL_BODY (v2.85) — short-week template. One session covering every major
   // pattern: squat, hinge, horizontal push, vertical pull, shoulder/arm, core.
   // Used when the user flags a time-strapped week (1-2 sessions).
@@ -974,6 +984,7 @@ const WI = {
   PULL:         {l:()=>_T('wt_pull'),      i:_icon('pull-workout.png','🏋️'),   c:'#2563eb',d:()=>_T('wi_pull_d')},
   LEGS:         {l:()=>_T('wt_legs'),      i:_icon('legs-workout.png','🏋️'),   c:'#059669',d:()=>_T('wi_legs_d')},
   UPPER_PUMP:   {l:()=>_T('wt_upper'),     i:_icon('gym-weights.png','🏋️'),    c:'#d97706',d:()=>_T('wi_upper_d')},
+  SHOULDERS_ARMS:{l:()=>'Shoulders & Arms',  i:_icon('gym-weights.png','💪'),    c:'#0891b2',d:()=>'Delts · Biceps · Triceps'}, // v3.46
   LONG_OUTDOOR: {l:()=>{const s=getRideSession('LONG_OUTDOOR'); return s.name;}, i:_icon('ride-day.png','🚴'), c:'#0891b2',d:()=>{const s=getRideSession('LONG_OUTDOOR'); return `${s.total} min · Zone 2 · Outdoor`;}},
   SHORT_OUTDOOR:{l:()=>{const s=getRideSession('SHORT_OUTDOOR');return s.name;},i:_icon('ride-day.png','🚴'), c:'#0891b2',d:()=>{const s=getRideSession('SHORT_OUTDOOR');return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Outdoor`;}},
   LONG_INDOOR:  {l:()=>{const s=getRideSession('LONG_INDOOR');  return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('LONG_INDOOR');  return `${s.total} min · Zone 2 · Indoor`;}},
@@ -1003,10 +1014,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.45';
+const APP_VERSION='3.46';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.46',d:'Gym weeks are planned by muscle group, looking back at last week',det:'The gym split is now based on how many gym days the week has, so every muscle group gets trained: 1 day Full Body, 2 Upper + Legs, 3 Push, Pull, Legs, 4 adds a new Shoulders & Arms session, 5 adds a second Legs, 6 is Push, Pull, Legs twice. Before, a Push, Pull, Legs, Upper rotation ran on from week to week, so some weeks had no legs and others repeated chest and back. The planner looks back over last week: muscles you trained longest ago (anything you missed) come first, and a session only counts as missed if its muscles went untrained, so skipping Upper after doing Push and Pull is not a miss. Sessions are spread out: never the same muscles two days running (Sunday into Monday included), legs away from the long ride, no ride the day after a ride or legs, and a rest day after two training days in a row. Tap the refresh button on this week to rebuild it.'},
   {v:'3.45',d:'Missing a gym day no longer scrambles the week',det:'Before, a missed day slid the whole rest of the week along by a day: rides moved onto rainy days (still showing the sunny forecast), rest days moved, a session fell off the week every time, and a missed ride pushed the gym back too. Now only gym sessions move: the one you missed becomes your next gym day and the others follow in order, while rides, rest days and the forecast stay put. Whatever no longer fits this week is first next week. And if you do a different session than the plan says (the watch had an older copy, say), the plan follows what you actually did and the session you replaced takes its later slot. The week also updates before anything is sent to your watch, so the watch has the new order.'},
   {v:'3.44',d:'Weeks plan themselves; tick sets on the phone or the watch',det:'Each new week now builds itself when you open the app (it used to wait until you had finished every session of the week before). A week also never fails to build any more: your last location is remembered, and with no location or no forecast it plans without weather instead of showing an error. With the watch: sets ticked on the phone are skipped on the watch within about 30 seconds, so you can use either for any set; a weight changed on the watch carries to the rest of that exercise; the "Watch session" card shows as soon as you press start on the watch; and starting on the watch before opening the log no longer leaves the phone\'s log with only some of the exercises. (Needs watch app 1.0.1.)'},
   {v:'3.43',d:'The app knows when you\'re training with your watch',det:'As soon as your first set arrives from the watch, the gym day and the log show a green "Watch session live" card: how many sets came from the watch, when the last one arrived, and how many still need a weight. Sets ticked on the watch show a watch icon instead of a tick. On days you don\'t use the watch nothing changes, and with "Gym days on my watch" turned off the app no longer checks for watch sets at all.'},
@@ -3281,7 +3293,7 @@ function _shortEx(n){
     // "Barbell Row" would shrink to a bare "Row" — keep it as "BB Row"
     .replace(/^([A-Za-z-]+)$/,m=>/^Barbell /.test(n)?'BB '+m:m);
 }
-function _watchLabel(type){return(WI[type]&&typeof WI[type].l==='function'?WI[type].l():'')||_typeShort(type).replace(/_/g,' ');}
+function _watchLabel(type){return((WI[type]&&typeof WI[type].l==='function'?WI[type].l():'')||_typeShort(type).replace(/_/g,' ')).replace(/&/g,'and');} // intervals.icu escapes &
 function _watchName(type,ids){
   const t=_watchLabel(type);
   const names=(ids||[]).map(id=>_shortEx(EX[id]?.n)).filter(Boolean);
@@ -4754,7 +4766,7 @@ function verdict(score){
 }
 
 /* ── WEEK GENERATION ── */
-const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP'];
+const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
 
 /* ── GOAL PROFILES (v2.59) ──
  * Each goal in profile.goals maps to a profile defining how the generator
@@ -4857,69 +4869,90 @@ function getLastGymType(){
   return'UPPER_PUMP'; // default so PUSH comes next
 }
 
-// Returns the gym type with the LONGEST gap since it was last completed.
-// Used to anchor next week's rotation so neglected muscle groups get priority.
-// v2.64: addresses the case where the rotation-continuation logic would
-// otherwise repeat a recently-done type ahead of a long-skipped one.
-// e.g. user did Pull (Wed) then Push (Fri) — old logic: next=Pull (repeats),
-//      new logic: next=Legs (longest gap, never done in 14 days).
-function getMostNeededGymType(){
-  // v3.45: sessions that missed days pushed out of last week go first (unless
-  // one has been done since — a mid-week re-plan).
-  const doneWk=new Set();
-  const wkPlan=DB.get(DB.pk(S.weekStart),null)||[];
-  for(let i=0;i<7;i++){
-    const ds=fd(addDays(S.weekStart,i));if(ds>=fd(new Date()))break;
-    const dp=wkPlan.find(x=>x.date===ds);
-    if(dp&&DB.get('log_'+ds,null)?.exercises?.some(e=>e.sets?.some(s=>s.done)))doneWk.add(dp.type);
+// v3.46: the gym week is planned by MUSCLE GROUP, not by session name. Before, a
+// Push→Pull→Legs→Upper rotation ran on from week to week: with 3 gym days some
+// weeks had no legs and chest/back/arms three times, and a "missed" Upper counted
+// even after Push and Pull were done. Now each week gets a set of sessions for its
+// number of gym days that trains every group, most-needed first, spaced out.
+const _MUSC={PUSH:['chest','delts','triceps'],PULL:['back','biceps'],LEGS:['legs'],
+  UPPER_PUMP:['chest','back','delts','biceps','triceps'],SHOULDERS_ARMS:['delts','biceps','triceps'],
+  FULL_BODY:['chest','back','delts','biceps','triceps','legs']};
+const _WEEK_SET=[[],['FULL_BODY'],['UPPER_PUMP','LEGS'],['PUSH','PULL','LEGS'],['PUSH','PULL','LEGS','SHOULDERS_ARMS'],
+  ['PUSH','PULL','LEGS','SHOULDERS_ARMS','LEGS'],['PUSH','PULL','LEGS','PUSH','PULL','LEGS']];
+// Gym sessions with done sets, fromStr ≤ date < toStr: [{date,type}]
+function _loggedGym(fromStr,toStr){
+  const out=[];
+  for(let d=new Date(fromStr+'T12:00:00');fd(d)<toStr;d=addDays(d,1)){
+    const ds=fd(d),lg=DB.get('log_'+ds,null);
+    if(_MUSC[lg?.type]&&lg.exercises?.some(e=>e.sets?.some(x=>x.done)))out.push({date:ds,type:lg.type});
   }
-  const carried=(DB.get(DB.pk(addDays(S.weekStart,-7)),null)||[])
-    .filter(d=>GYM_SEQ.includes(d.carryOut)).sort((a,b)=>a.date.localeCompare(b.date))
-    .map(d=>d.carryOut).filter(t=>!doneWk.has(t));
-  if(carried.length)return carried[0];
-  // v2.82: PRIMARY signal — anything planned in the last 7 days that wasn't done?
-  // A directly-missed workout is the clearest "catch this up" signal there is.
-  // We anchor the new week's rotation on the EARLIEST missed type so the user's
-  // first gym day of the new week hits whatever they skipped longest ago.
-  const missedRecently=[];
-  for(let i=1;i<=7;i++){
-    const d=addDays(new Date(),-i);
-    const plan=DB.get(DB.pk(getMon(d)),null);
-    const dp=plan?.find(x=>x.date===fd(d));
-    if(dp&&GYM_SEQ.includes(dp.type)){
-      const log=DB.get(DB.lk(d),null);
-      const done=log?.exercises?.some(e=>e.sets?.some(s=>s.done));
-      if(!done)missedRecently.push({type:dp.type,daysAgo:i});
+  return out;
+}
+// When each muscle group was last trained before beforeStr ('' = not in 3 weeks).
+function _muscleLast(beforeStr){
+  const last={chest:'',back:'',delts:'',biceps:'',triceps:'',legs:''};
+  for(const x of _loggedGym(fd(addDays(new Date(beforeStr+'T12:00:00'),-21)),beforeStr))
+    for(const m of _MUSC[x.type])if(x.date>last[m])last[m]=x.date;
+  return last;
+}
+// The sessions still to place this week, most needed first: the set for the week's
+// number of gym days, minus what's already done or fixed this week, ordered by the
+// muscles trained longest ago — so whatever you missed last week comes first.
+function _gymOrder(total,fixedTypes){
+  const set=[...(_WEEK_SET[Math.max(1,Math.min(6,total||3))])];
+  for(const t of fixedTypes||[]){
+    const k=set.indexOf(t);
+    if(k>=0){set.splice(k,1);continue;}
+    // Not in the set (Upper in a 3-day week, say): it stands in for every session it fully covers.
+    for(let j=set.length-1;j>=0;j--)if(_MUSC[set[j]].every(m=>(_MUSC[t]||[]).includes(m)))set.splice(j,1);
+  }
+  const today=fd(new Date()),ws=fd(S.weekStart);
+  const last=_muscleLast(ws>today?ws:today);
+  const need=t=>_MUSC[t].map(m=>last[m]).sort()[0]; // its longest-untrained group
+  return set.map((t,i)=>({t,i})).sort((x,y)=>need(x.t).localeCompare(need(y.t))||x.i-y.i).map(x=>x.t);
+}
+function getMostNeededGymType(){return _gymOrder(3,[])[0];}
+// Put the sessions on the gym days in date order, most needed first — but never the
+// same muscles as the day before (the last day of last week counts), and legs not
+// on the days in avoidLegs (next to the long ride, right after a ride).
+// Tries every arrangement (≤ 720 for 6 gym days) and keeps the best: first no
+// shared muscles on neighbouring days, then legs off avoidLegs, then the most-needed
+// sessions earliest. (Filling day by day greedily left legs as the only session for
+// the day after the long ride.)
+function _placeSessions(wdays,gymIdx,locked,order,avoidLegs){
+  const asgn={};
+  const days=[...gymIdx].sort((x,y)=>x-y);
+  const free=days.filter(i=>!locked[wdays[i]?.date]);
+  days.forEach(i=>{const d=wdays[i]?.date;if(locked[d])asgn[i]=locked[d].type;});
+  let pool=[...order];
+  while(pool.length<free.length)pool.push(...(order.length?order:_WEEK_SET[3]));
+  pool=pool.slice(0,free.length);
+  const yLog=DB.get('log_'+fd(addDays(S.weekStart,-1)),null);
+  const yType=yLog?.exercises?.some(e=>e.sets?.some(x=>x.done))?yLog.type:null;
+  const typeAt=(i,cur)=>i<0?yType:(cur[i]||null);
+  const overlap=(a,b)=>!!(a&&b)&&_MUSC[a]?.some(m=>(_MUSC[b]||[]).includes(m));
+  const cost=cur=>{
+    let c=0;
+    for(const i of free){
+      const t=cur[i];
+      if(overlap(t,typeAt(i-1,cur)))c+=100;
+      if(i+1<7&&locked[wdays[i+1]?.date]&&overlap(t,cur[i+1]))c+=100; // a fixed day after it
+      if(avoidLegs.has(i)&&_MUSC[t].includes('legs'))c+=50;
     }
-  }
-  if(missedRecently.length){
-    // Most overdue (largest daysAgo) goes first. Walking GYM_SEQ from there picks up
-    // any later misses naturally — e.g. missed LEGS (5d ago) + UPPER (2d ago) →
-    // rotation = LEGS, UPPER, PUSH, PULL → both missed types come first.
-    missedRecently.sort((a,b)=>b.daysAgo-a.daysAgo);
-    return missedRecently[0].type;
-  }
-
-  // FALLBACK: nothing was planned-but-skipped — use longest-gap logic.
-  // Track how many days ago each gym type was last completed.
-  const lastSeen={PUSH:-Infinity,PULL:-Infinity,LEGS:-Infinity,UPPER_PUMP:-Infinity};
-  for(let i=1;i<=14;i++){
-    const d=addDays(new Date(),-i);
-    const log=DB.get(DB.lk(d),null);
-    if(log?.exercises?.some(e=>e.sets.some(s=>s.done))){
-      const plan=DB.get(DB.pk(getMon(d)),null);
-      const dp=plan?.find(x=>x.date===fd(d));
-      if(dp&&GYM_SEQ.includes(dp.type)){
-        if(lastSeen[dp.type]===-Infinity)lastSeen[dp.type]=i;
-      }
-    }
-  }
-  // Any type never seen in the window? It's the highest-priority skipped type.
-  for(const t of GYM_SEQ){
-    if(lastSeen[t]===-Infinity)return t;
-  }
-  // All types done recently — return the one done longest ago.
-  return Object.entries(lastSeen).sort((a,b)=>b[1]-a[1])[0][0];
+    free.forEach((i,r)=>{c+=Math.abs(pool.indexOf(cur[i])-r);}); // most needed first
+    return c;
+  };
+  let best=null,bestC=Infinity;
+  const perm=(k,used,cur)=>{
+    if(k===free.length){const c=cost(cur);if(c<bestC){bestC=c;best={...cur};}return;}
+    const tried=new Set();
+    pool.forEach((t,j)=>{
+      if(used[j]||tried.has(t))return;tried.add(t);
+      used[j]=true;cur[free[k]]=t;perm(k+1,used,cur);used[j]=false;delete cur[free[k]];
+    });
+  };
+  perm(0,[],{...asgn});
+  return best||asgn;
 }
 
 // v2.80: Inspect the PRIOR week (Mon→Sun before this one) and return what was planned
@@ -4930,24 +4963,27 @@ function getMissedLastWeek(){
   const lastMon=getMon(addDays(S.weekStart,-7));
   const lastPlan=DB.get(DB.pk(lastMon),null);
   if(!lastPlan)return{gym:[],rides:0,total:0};
-  const gymTypes=new Set(['PUSH','PULL','LEGS','UPPER_PUMP']);
+  const gymTypes=new Set(['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS']);
   const rideTypes=new Set(['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR']);
   const today=fd(new Date());
   const missedGym=[];let missedRides=0;
+  const plannedM=new Set(); // v3.46
   for(const day of lastPlan){
     if(day.date>=today)continue; // only count days that have passed
     const log=DB.get('log_'+day.date,null);
-    const hasGymLog=log?.exercises?.some(e=>e.sets?.some(s=>s.done));
-    if(gymTypes.has(day.carryOut))missedGym.push({type:day.carryOut,date:day.date}); // v3.45: pushed out of the week
-    if(gymTypes.has(day.type)&&!hasGymLog){
-      missedGym.push({type:day.type,date:day.date});
-    }else if(rideTypes.has(day.type)){
+    for(const g of [...(_MUSC[day.type]||[]),...(_MUSC[day.carryOut]||[])])plannedM.add(g);
+    if(rideTypes.has(day.type)){
       // Ride is "done" if Strava synced an activity OR user logged a ride manually
       const hasStrava=(typeof stravaRideOnDate==='function')&&!!stravaRideOnDate(day.date);
       const hasManual=log?.ride?.dur!=null;
       if(!hasStrava&&!hasManual)missedRides++;
     }
   }
+  // v3.46: a group is missed only if it went untrained all week — a skipped Upper
+  // after Push and Pull were done isn't a miss.
+  const trained=new Set(_loggedGym(fd(lastMon),fd(addDays(lastMon,7))).flatMap(x=>_MUSC[x.type]));
+  const GN={chest:'Chest',back:'Back',delts:'Shoulders',biceps:'Arms',triceps:'Arms',legs:'Legs'};
+  for(const g of plannedM)if(!trained.has(g)&&!missedGym.some(x=>x.type===GN[g]))missedGym.push({type:GN[g]});
   return{gym:missedGym,rides:missedRides,total:missedGym.length+missedRides};
 }
 
@@ -5049,7 +5085,7 @@ function rRideOnGymDayBanner(){
   const plan=DB.get(DB.pk(S.weekStart),null);
   if(!plan||!plan.length)return'';
   // Only the types replaceGymWithRide can actually cascade
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
   const todayStr=fd(new Date());
   const days=[...plan].sort((a,b)=>b.date.localeCompare(a.date));
   for(const dp of days){
@@ -5093,14 +5129,15 @@ function rCatchUpBanner(){
   if(DB.get('catchup_dismissed_'+fd(S.weekStart),false))return'';
   const m=getMissedLastWeek();
   if(!m.total)return'';
-  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper'};
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper',SHOULDERS_ARMS:'Shoulders & Arms'};
   const gymNames=[...new Set(m.gym.map(g=>tl[g.type]||g.type))];
   const parts=[];
   if(gymNames.length)parts.push(gymNames.join(' + '));
   if(m.rides)parts.push(`${m.rides} ride${m.rides>1?'s':''}`);
   // What did the planner prioritise?
-  const needed=getMostNeededGymType();
-  const prioritised=tl[needed]||needed;
+  // v3.46: the first gym session still ahead this week
+  const _ng=(DB.get(DB.pk(S.weekStart),null)||[]).filter(d=>d.date>=fd(new Date())&&_MUSC[d.type]).sort((a,b)=>a.date.localeCompare(b.date))[0];
+  const prioritised=_ng?(typeof WI[_ng.type]?.l==='function'?WI[_ng.type].l():_ng.type):(tl[getMostNeededGymType()]||'');
   const gymCaughtUp=gymNames.length>0;
   return`<div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.35);border-radius:14px;padding:12px 14px;margin:0 0 12px;display:flex;align-items:flex-start;gap:10px;font-size:13px;line-height:1.5">
   <div style="font-size:18px;line-height:1;flex-shrink:0">🔄</div>
@@ -5112,6 +5149,24 @@ function rCatchUpBanner(){
 </div>`;
 }
 
+// v3.46: the end of last week counts for spacing. The planner only looked inside
+// the week, so a ride (or legs) on Sunday could be followed by a ride on Monday,
+// and two training days could be followed by a third.
+function _preWeekContext(){
+  const day=n=>{
+    const ds=fd(addDays(S.weekStart,-n));
+    const r=stravaRideOnDate(ds),lg=DB.get('log_'+ds,null);
+    const lifted=!!lg?.exercises?.some(e=>e.sets?.some(x=>x.done));
+    const rode=!!r||lg?.ride?.dur!=null;
+    return{rode,long:!!r&&(r.moving_time||0)>=90*60,legs:lifted&&(lg.type==='LEGS'||lg.type==='FULL_BODY'),trained:rode||lifted};
+  };
+  const d2=day(2),d1=day(1);
+  let ridePenalty=0; // taken off the first day's score as a ride day
+  if(d1.rode)ridePenalty+=d1.long?60:40; // the day after a ride (a long one: more)
+  if(d2.rode&&d1.rode)ridePenalty+=40;   // it would be a third ride in a row
+  if(d1.legs)ridePenalty+=40;            // the day after legs
+  return{ridePenalty,firstRest:(d2.trained&&d1.trained)||d1.long,rodeYesterday:d1.rode};
+}
 function buildWeek(wdays){
   const bikePref=DB.get('bike_pref','weather');
   const profile=DB.get('user_profile',{});
@@ -5126,6 +5181,9 @@ function buildWeek(wdays){
   }
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
   const rankedAsc=[...ranked].reverse(); // worst weather first — used to pick rest days
+  const _pre=_preWeekContext(); // v3.46
+  // v3.46: after two training days in a row, the first day is the first choice for rest.
+  if(_pre.firstRest){const k=rankedAsc.findIndex(r=>r.i===0);if(k>0)rankedAsc.unshift(...rankedAsc.splice(k,1));}
 
   // Lock days that already have completed activity — preserve on refresh.
   // Keyed by DATE STRING (not position) so a previously disordered plan can't corrupt a fresh rebuild.
@@ -5219,24 +5277,12 @@ function buildWeek(wdays){
   // Assign gym types, respecting locked days. v2.64: starts the rotation from
   // the MOST-NEEDED type (longest gap) rather than just "next after last done".
   // This catches skipped muscle groups proactively.
-  function assignGym(gymDays,asgn){
-    const sorted=[...gymDays].sort((a,b)=>a-b);
-    // If there's a locked day in the future, its type anchors the rotation
-    // (continue PPL from after it). Otherwise, start at the most-needed type.
-    let lockedType=null;
-    for(const i of sorted){const d=wdays[i]?.date;if(locked[d]){lockedType=locked[d].type;break;}}
-    let si;
-    if(lockedType){
-      si=(GYM_SEQ.indexOf(lockedType)+1)%GYM_SEQ.length;
-    }else{
-      const needed=getMostNeededGymType();
-      si=GYM_SEQ.indexOf(needed);
-    }
-    for(const i of sorted){
-      const d=wdays[i]?.date;
-      if(locked[d]){asgn[i]=locked[d].type;}
-      else{asgn[i]=GYM_SEQ[si];si=(si+1)%GYM_SEQ.length;}
-    }
+  // v3.46: the sessions come from _gymOrder (the set for this many gym days, most
+  // needed first; what's done this week counts) and _placeSessions spaces them out.
+  function assignGym(gymDays,asgn,avoidLegs=new Set()){
+    const fixed=wdays.map(w=>locked[w.date]).filter(d=>d&&_MUSC[d.type]).map(d=>d.type);
+    const free=gymDays.filter(i=>!locked[wdays[i]?.date]);
+    Object.assign(asgn,_placeSessions(wdays,gymDays,locked,_gymOrder(free.length+fixed.length,fixed),avoidLegs));
   }
 
   // ── Gym only (no cardio/rides) ────────────────────────────────────────────
@@ -5285,32 +5331,32 @@ function buildWeek(wdays){
     // v2.64: pre-pass uses the same most-needed-first rotation as assignGym
     // so the simulated walk matches what assignGym will produce, and legsIdx
     // correctly identifies where LEGS will land.
-    const needed=getMostNeededGymType();
-    let si=GYM_SEQ.indexOf(needed);
-    for(const i of tentativeGymDays){
-      const ld=locked[wdays[i]?.date];
-      if(ld){if(ld.type==='LEGS')legsIdx=i;}
-      else{if(GYM_SEQ[si]==='LEGS')legsIdx=i;si=(si+1)%GYM_SEQ.length;}
-    }
+    const fixed=wdays.map(w=>locked[w.date]).filter(d=>d&&_MUSC[d.type]).map(d=>d.type);
+    const tas=_placeSessions(wdays,tentativeGymDays,locked,_gymOrder(tentativeGymDays.length+fixed.length,fixed),new Set(_pre.rodeYesterday?[0]:[]));
+    for(const i of tentativeGymDays)if(legsIdx<0&&tas[i]==='LEGS')legsIdx=i;
   }
-  const postLegsIdx=legsIdx>=0?(legsIdx+1)%7:-1;
+  const postLegsIdx=legsIdx>=0&&legsIdx<6?legsIdx+1:-1; // v3.46: Sunday's "day after" is next week, not this Monday
 
   // Pick actual ride days: long on best weather first, then short avoiding adjacency
-  const longCandidates=[..._rideAvail];
+  // v3.46: weather, minus the first day when the end of last week makes it too
+  // soon for a ride (_preWeekContext). ws keeps the weather score for indoor/outdoor.
+  const _adj=r=>r.s-(r.i===0?_pre.ridePenalty:0);
+  const longCandidates=_rideAvail.map(r=>({...r,ws:r.s,s:_adj(r)})).sort((a,b)=>b.s-a.s);
   const r1=numRides>=1?longCandidates[0]:null;
   // Penalise day immediately before/after the long ride AND day after LEGS
-  const postLongIdx=r1!=null?(r1.i+1)%7:-1;
-  const preLongIdx=r1!=null?(r1.i+6)%7:-1;
-  const shortCandidates=[..._rideAvail].map(r=>({...r,s:
-    r.i===postLegsIdx?r.s-40:
-    r.i===postLongIdx?r.s-60:  // day after long ride — strongest penalty
-    r.i===preLongIdx?r.s-40:   // day before long ride — moderate penalty
-    r.s})).sort((a,b)=>b.s-a.s);
+  // (within this week — v3.46: they used to wrap Sunday round to this Monday)
+  const postLongIdx=r1!=null&&r1.i<6?r1.i+1:-1;
+  const preLongIdx=r1!=null&&r1.i>0?r1.i-1:-1;
+  const shortCandidates=_rideAvail.map(r=>({...r,ws:r.s,s:_adj(r)+(
+    r.i===postLegsIdx?-40:
+    r.i===postLongIdx?-60:  // day after long ride — strongest penalty
+    r.i===preLongIdx?-40:   // day before long ride — moderate penalty
+    0)})).sort((a,b)=>b.s-a.s);
   const r2=numRides>=2?(shortCandidates.find(r=>r.i!==r1?.i)||null):null;
   const rideSet=new Set([...(r1?[r1.i]:[]),...(r2?[r2.i]:[])]);
 
-  const t1=r1?(bikePref==='indoor'?'LONG_INDOOR':r1.s>=OT?'LONG_OUTDOOR':'LONG_INDOOR'):null;
-  const t2=r2?(bikePref==='indoor'?'SHORT_INDOOR':r2.s>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR'):null;
+  const t1=r1?(bikePref==='indoor'?'LONG_INDOOR':r1.ws>=OT?'LONG_OUTDOOR':'LONG_INDOOR'):null;
+  const t2=r2?(bikePref==='indoor'?'SHORT_INDOOR':r2.ws>=OT?'SHORT_OUTDOOR':'SHORT_INDOOR'):null;
 
   // Remaining days (no new ride, no Strava ride, not locked) → gym or rest
   const nonRide=[0,1,2,3,4,5,6].filter(i=>!rideSet.has(i)&&!stravaRideIdx.has(i)&&!locked[wdays[i]?.date]);
@@ -5319,7 +5365,8 @@ function buildWeek(wdays){
   );
   const gymDays=nonRide.filter(i=>!restSet.has(i));
   const asgn={};
-  assignGym(gymDays,asgn);
+  // v3.46: legs off the day before/after the long ride and the day after a ride
+  assignGym(gymDays,asgn,new Set([...(r1?[r1.i-1,r1.i+1]:[]),...(_pre.rodeYesterday?[0]:[])]));
 
   return wdays.map((w,i)=>{
     let type;
@@ -7133,7 +7180,7 @@ function rDay(){
   const wi=WI[dp.type]||WI.REST;
   const w=dp.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
-  const isGym=['PUSH','PULL','LEGS','UPPER_PUMP'].includes(dp.type);
+  const isGym=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'].includes(dp.type);
   const ct=isRide?'ride':isGym?'gym':'rest';
   const log=DB.get(DB.lk(S.viewDate),null);
   const v=verdict(w.score);
@@ -7528,7 +7575,7 @@ async function getWeeklyAdvisor(weekStartDate,force=false){
   const goalDesc=_goals.map(g=>_gm[g]||g).join(' + ')||'general fitness';
   const _rSet=RIDE_TYPE_SET;
   // Human-readable labels for workout types sent to AI (never raw constants)
-  const _typeLabel={PUSH:'Push (Chest/Shoulders/Triceps)',PULL:'Pull (Back/Biceps)',LEGS:'Legs',UPPER_PUMP:'Upper Body (Full Upper)',FULL_BODY:'Full Body',LONG_OUTDOOR:'Long Outdoor Ride',SHORT_OUTDOOR:'Short Outdoor Ride',LONG_INDOOR:'Long Indoor Ride',SHORT_INDOOR:'Short Indoor Ride',REST:'Rest & Mobility',SKIPPED:'Skipped'};
+  const _typeLabel={PUSH:'Push (Chest/Shoulders/Triceps)',PULL:'Pull (Back/Biceps)',LEGS:'Legs',UPPER_PUMP:'Upper Body (Full Upper)',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body',LONG_OUTDOOR:'Long Outdoor Ride',SHORT_OUTDOOR:'Short Outdoor Ride',LONG_INDOOR:'Long Indoor Ride',SHORT_INDOOR:'Short Indoor Ride',REST:'Rest & Mobility',SKIPPED:'Skipped'};
   const _tl=t=>_typeLabel[t]||t;
   // Count weeks with actual gym sessions logged (Option A: experience context)
   let weeksOfGymHistory=0;
@@ -8053,7 +8100,7 @@ function buildAskPrompt(question){
   const ydayLog=DB.get('log_'+ydayStr,null);
   const ydayRide=stravaRideOnDate(ydayStr);
   // Format today's plan + weather
-  const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',FULL_BODY:'Full body',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest',SKIPPED:'Skipped'};
+  const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full body',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest',SKIPPED:'Skipped'};
   const todayPlanStr=todayPlan?`${_typeLabel[todayPlan.type]||todayPlan.type}${todayPlan.weather?` · weather ${todayPlan.weather.tmin}-${todayPlan.weather.tmax}°C, rain ${todayPlan.weather.rain}mm`:''}`:'no plan';
   const todayDoneStr=todayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?'GYM ALREADY DONE TODAY':todayRide?`RIDE ALREADY LOGGED TODAY: ${+((todayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((todayRide.moving_time||0)/60)}min`:'nothing logged yet';
   const ydayStr2=ydayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?`Yesterday: gym (${ydayLog.type})`:ydayRide?`Yesterday: rode ${+((ydayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((ydayRide.moving_time||0)/60)}min`:'Yesterday: rest';
@@ -8062,7 +8109,7 @@ function buildAskPrompt(question){
   // Full current week plan — important for "swap day X" type questions so AI sees
   // what's on each day. v2.73: gym days also list their exercises (with prescribed
   // sets×reps) so the AI can swap exercises and set targets by name.
-  const _gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const _gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
   const weekPlanLines=[];
   if(wPlan){
     for(const day of [...wPlan].sort((a,b)=>a.date.localeCompare(b.date))){
@@ -8218,12 +8265,12 @@ const COACH_TOOLS=[{
     },
     {
       name:'change_day_type',
-      description:"Change a single day's plan to a different workout type. Used to set a day to REST, or change PUSH→PULL, or convert a gym day to a ride day. Setting a gym day to REST auto-cascades the displaced gym work forward to later gym days. Valid types: PUSH, PULL, LEGS, UPPER_PUMP, LONG_OUTDOOR, SHORT_OUTDOOR, LONG_INDOOR, SHORT_INDOOR, REST.",
+      description:"Change a single day's plan to a different workout type. Used to set a day to REST, or change PUSH→PULL, or convert a gym day to a ride day. Setting a gym day to REST auto-cascades the displaced gym work forward to later gym days. Valid types: PUSH, PULL, LEGS, UPPER_PUMP, SHOULDERS_ARMS, LONG_OUTDOOR, SHORT_OUTDOOR, LONG_INDOOR, SHORT_INDOOR, REST.",
       parameters:{
         type:'OBJECT',
         properties:{
           date:{type:'STRING',description:'Date in YYYY-MM-DD format'},
-          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
+          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
         },
         required:['date','new_type']
       }
@@ -8235,14 +8282,14 @@ const COACH_TOOLS=[{
         type:'OBJECT',
         properties:{
           date:{type:'STRING',description:'Ride day date in YYYY-MM-DD'},
-          gym_type:{type:'STRING',description:'Gym workout type to add',enum:['PUSH','PULL','LEGS','UPPER_PUMP']}
+          gym_type:{type:'STRING',description:'Gym workout type to add',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS']}
         },
         required:['date','gym_type']
       }
     },
     {
       name:'replace_gym_with_ride',
-      description:"Convert a planned gym day to a ride day when the user actually rode that day instead. Cascades the displaced gym workout forward to later in the week. Only valid when the target day is currently a gym day (PUSH/PULL/LEGS/UPPER_PUMP) AND a Strava ride exists for that date. Use when the user says something like 'I biked today instead of doing gym'.",
+      description:"Convert a planned gym day to a ride day when the user actually rode that day instead. Cascades the displaced gym workout forward to later in the week. Only valid when the target day is currently a gym day (PUSH/PULL/LEGS/UPPER_PUMP/SHOULDERS_ARMS) AND a Strava ride exists for that date. Use when the user says something like 'I biked today instead of doing gym'.",
       parameters:{
         type:'OBJECT',
         properties:{
@@ -8516,7 +8563,7 @@ const COACH_TOOL_HANDLERS={
       const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
       const plan=DB.get(pk,null);
       const d=plan?.find(x=>x.date===date);
-      const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+      const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
       if(!d||!gymTypes.includes(d.type))return{ok:false,msg:'Not a gym day'};
       if(!stravaRideOnDate(date))return{ok:false,msg:'No Strava ride on that date'};
       const res=replaceGymWithRide(date);
@@ -8839,7 +8886,7 @@ function _dayLbl(dateStr){
   return DNAMES[d.getDay()]+' '+d.getDate();
 }
 function _typeShort(t){
-  const m={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',LONG_OUTDOOR:'Long Ride (Outdoor)',SHORT_OUTDOOR:'Short Ride (Outdoor)',LONG_INDOOR:'Long Ride (Indoor)',SHORT_INDOOR:'Short Ride (Indoor)',REST:'Rest'};
+  const m={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',LONG_OUTDOOR:'Long Ride (Outdoor)',SHORT_OUTDOOR:'Short Ride (Outdoor)',LONG_INDOOR:'Long Ride (Indoor)',SHORT_INDOOR:'Short Ride (Indoor)',REST:'Rest'};
   return m[t]||t;
 }
 
@@ -9351,7 +9398,7 @@ ${sec(_T('wr_s_sequence'),review.sequence)}
 /* ── END-OF-WEEK + NEXT WEEK AI PLAN ── */
 function checkWeekCompletion(){
   if(!S.activeLog||S.guest)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
   const today=S.activeLog.date;
   const plan=DB.get(DB.pk(S.weekStart),null);
   if(!plan)return;
@@ -9400,7 +9447,7 @@ async function generateNextWeekWithAI(){
     S.weekStart=savedWS;
   }
   // Collect this week's gym sessions
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
   const thisPlan=DB.get(DB.pk(S.weekStart),null)||[];
   const weekSessions=[];
   for(const day of thisPlan){
@@ -11902,7 +11949,7 @@ function setShortWeek(n){
 // Past days, locked days, and days with logged work are never touched.
 // Shared by openSwap (preview) and doSwap (apply) so they can't disagree.
 function _swapCounterpart(plan,ds,newType){
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','FULL_BODY'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
   const cur=plan&&plan.find(d=>d.date===ds);
   if(!cur)return null;
   const oldType=cur.type;
@@ -11923,7 +11970,7 @@ function _swapCounterpart(plan,ds,newType){
 }
 function openSwap(ds){
   const plan=DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null);
-  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',FULL_BODY:'Full Body'};
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body'};
   const dn=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T12:00:00').getDay()];
   const preview=t=>{
     const cp=_swapCounterpart(plan,ds,t);
@@ -11951,11 +11998,11 @@ function doSwap(ds,newType){
   const plan=DB.get(pk,null);if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
   const oldType=plan[di].type;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','FULL_BODY'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
   const wasGym=gymTypes.includes(oldType);
   const goingToRest=newType==='REST';
   const goingToGym=gymTypes.includes(newType);
-  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',FULL_BODY:'Full Body'};
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body'};
   const dayLong=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const dayName=d=>dayLong[new Date(d+'T12:00:00').getDay()];
   // v3.18: work out where the replaced session goes BEFORE this day changes,
@@ -12058,8 +12105,8 @@ function openAddGymSheet(ds){
   if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);
   if(di<0)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
-  const TL={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',REST:'Rest'};
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
+  const TL={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',REST:'Rest'};
   const dN=dt=>{const dn=new Date(dt+'T12:00:00').getDay();return['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dn];};
   // Next scheduled gym day and the full chain after the ride day
   const gymChain=plan.filter((d,i)=>i>di&&gymTypes.includes(d.type)&&!d.locked);
@@ -12098,7 +12145,7 @@ function addGymToRideDay(dateStr,gymType,shift){
   if(!plan)return;
   const di=plan.findIndex(d=>d.date===dateStr);
   if(di<0)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
   // Attach the extra gym session to this ride day
   plan[di].extraGym={type:gymType,exercises:genSession(gymType)};
   if(shift){
@@ -12192,7 +12239,7 @@ function replaceGymWithRide(dateStr){
   }
   const a=stravaRideOnDate(dateStr);
   if(!a)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP'];
+  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
   const displacedType=plan[di].type;
   if(!gymTypes.includes(displacedType))return;
   // Choose the ride plan type that fits the actual ride
@@ -12568,7 +12615,7 @@ function bindEnergy(){
       const ds=S.viewDate?fd(S.viewDate):null;
       const dp=plan?.find(d=>d.date===ds);
       const isRide=dp&&['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
-      const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP'].includes(dp.type);
+      const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'].includes(dp.type);
       const ct=isRide?'ride':isGym?'gym':'rest';
       // Update coach message — show default immediately, upgrade to AI quietly
       const card=document.getElementById('coach-card');
@@ -12841,9 +12888,15 @@ function _autoBuildWeek(){
   if((getLayoffDays()||0)>=28)return;
   if(DB.get('auto_week_'+mk,false))return; // once a week, so a deleted plan stays deleted
   DB.set('auto_week_'+mk,true);
-  const keep=S.weekStart;S.weekStart=mon;
-  genPlan(true).then(()=>{if(DB.get(DB.pk(mon),null))showToast('📅 This week\'s plan is ready','var(--grn)');});
-  S.weekStart=keep;
+  // v3.46: bring in the latest rides first — the last days of last week may not
+  // have synced yet, and the plan has to know about them.
+  const sync=DB.get('icu_key',null)&&!S.guest?Promise.resolve(icuFetchActivities()).catch(()=>{}):Promise.resolve();
+  sync.then(()=>{
+    if(DB.get(DB.pk(mon),null))return; // built meanwhile
+    const keep=S.weekStart;S.weekStart=mon;
+    const p=genPlan(true);S.weekStart=keep;
+    return p.then(()=>{if(DB.get(DB.pk(mon),null))showToast('📅 This week\'s plan is ready','var(--grn)');});
+  });
 }
 
 function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;render();}
@@ -12857,7 +12910,7 @@ function toggleHomeDay(dateStr){
   const plan=DB.get(pk,null);
   if(plan){
     const dp=plan.find(d=>d.date===dateStr);
-    const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP'];
+    const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
     if(dp&&GYM_SEQ.includes(dp.type)){
       dp.exercises=genSession(dp.type,'okay',on);
       DB.set(pk,plan);
