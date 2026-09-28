@@ -1003,10 +1003,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.43';
+const APP_VERSION='3.44';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.44',d:'Weeks plan themselves; tick sets on the phone or the watch',det:'Each new week now builds itself when you open the app (it used to wait until you had finished every session of the week before). A week also never fails to build any more: your last location is remembered, and with no location or no forecast it plans without weather instead of showing an error. With the watch: sets ticked on the phone are skipped on the watch within about 30 seconds, so you can use either for any set; a weight changed on the watch carries to the rest of that exercise; the "Watch session" card shows as soon as you press start on the watch; and starting on the watch before opening the log no longer leaves the phone\'s log with only some of the exercises. (Needs watch app 1.0.1.)'},
   {v:'3.43',d:'The app knows when you\'re training with your watch',det:'As soon as your first set arrives from the watch, the gym day and the log show a green "Watch session live" card: how many sets came from the watch, when the last one arrived, and how many still need a weight. Sets ticked on the watch show a watch icon instead of a tick. On days you don\'t use the watch nothing changes, and with "Gym days on my watch" turned off the app no longer checks for watch sets at all.'},
   {v:'3.42',d:'Watch sets no longer need their weights typed in twice',det:'Sets ticked on the watch were coming in as 0 lb, and typing a weight on the phone only filled sets you had not done yet, so every ticked set had to be typed in by hand. Now: a watch set without a weight takes the weight you had on the phone for that set (or the set before it), typing a weight once fills every set of that exercise you ticked on the watch without one, and anything you fix on the phone is kept when the watch sends its next set. Best way to use it: set the weight once per exercise on the phone, tick sets on the watch.'},
   {v:'3.41',d:'Live mode: phone and watch work together during a workout',det:'You wanted to set weights on the phone and log on the watch. Now: change today\'s weights, reps or exercises on the phone and the watch picks it up within about 30 seconds (it buzzes and shows "updated from phone"); sets you have already done stay done, and a swapped exercise starts at set 1. Each set you finish on the watch shows up in the app within about 15 seconds while today\'s gym day is open, instead of only at the end. Phone = plan and weights, watch = tick sets and rest. Sets are best ticked on the watch: it can\'t see sets ticked on the phone. It all goes through intervals.icu, so it needs your phone nearby with Garmin Connect running, and each change takes 10 to 30 seconds. Also: long exercise names no longer overlap on the 51 mm watch.'},
@@ -3211,11 +3212,14 @@ function _cueName(n){return String(n||'').replace(/[\r\n]+/g,' ').replace(/&/g,'
 // The sets to show: what's in the day's log if it has one (your edits included),
 // otherwise the same targets the logger would prefill.
 function _watchSets(ds,id,extra){
-  const le=DB.get((extra?'extralog_':'log_')+ds,null)?.exercises?.find(e=>e.id===id);
+  const lg=DB.get((extra?'extralog_':'log_')+ds,null);
+  const le=lg?.exercises?.find(e=>e.id===id);
   const sets=le?.sets?.length?le.sets:makeSets(id,'okay',getLastLog(id));
   return sets.map(x=>({
     w:x.w!==''&&x.w!=null?_fmtW(parseFloat(_wToCurrentUnit(x.w,x.u))||0):'',
     r:String(x.r==null?'':x.r).trim(),side:x.side,
+    // v3.44: ticked on the phone (or by an earlier watch session) — the watch skips it
+    done:!!x.done&&(!x._ws||x._ws!==lg?.watchSid),
   }));
 }
 function _watchWorkoutText(ds,ids,extra){
@@ -3242,8 +3246,10 @@ function _watchWorkoutText(ds,ids,extra){
       :(x.w&&parseFloat(x.w)>0?`${x.w}${u}`:(ex.bw?'bodyweight':''));
     const setLines=x=>{
       const ri=repInfo(x.r),both=uni||ri.side;
-      if(ri.secs)return both?[`- ${name} left ${ri.secs}s`,`- ${name} right ${ri.secs}s`]:[`- ${name} ${ri.secs}s`];
-      return[`- ${name} ${[load(x),ri.t?`x${ri.t}`:'',both?'each side':''].filter(Boolean).join(' ')} 1s press lap`];
+      const dn=x.done?' done':'';
+      // "done" must come before a hold's duration — intervals.icu drops text after it
+      if(ri.secs)return both?[`- ${name} left${dn} ${ri.secs}s`,`- ${name} right${dn} ${ri.secs}s`]:[`- ${name}${dn} ${ri.secs}s`];
+      return[`- ${name} ${[load(x),ri.t?`x${ri.t}`:'',both?'each side':'',x.done?'done':''].filter(Boolean).join(' ')} 1s press lap`];
     };
     const rest=`- Rest ${_fmtRest(_restSecs(id))}`;
     // Consecutive identical sets become one repeat ("Bench Press 4x").
@@ -3407,7 +3413,7 @@ function rWatchSection(){
 // v3.43: a day you're logging with the watch is spotted from the sets it has
 // sent (they're tagged _watch). Nothing changes on a day without them.
 function _watchLive(ds){
-  let n=0,miss=0,at=null;
+  let n=0,miss=0,at=null,started=false;
   for(const k of['log_','extralog_']){
     const lg=DB.get(k+ds,null);if(!lg)continue;
     (lg.exercises||[]).forEach(le=>(le.sets||[]).forEach(x=>{
@@ -3416,8 +3422,9 @@ function _watchLive(ds){
       if(!x.w&&!EX[le.id]?.bw&&!/s$/.test(String(x.r||'')))miss++; // bodyweight and timed sets don't need one
     }));
     if(lg.watchAt&&(!at||lg.watchAt>at))at=lg.watchAt;
+    if(lg.watchSid)started=true;
   }
-  return n?{n,miss,at}:null;
+  return n||started?{n,miss,at}:null;
 }
 function _agoShort(t){
   const m=Math.round((Date.now()-new Date(t).getTime())/60000);
@@ -3430,9 +3437,9 @@ function _watchLiveCard(ds){
   <span style="font-size:18px;line-height:1.2">⌚</span>
   <div style="flex:1;min-width:0;font-size:11px;color:var(--t2);line-height:1.45">
     <div style="font-size:12px;font-weight:700;color:var(--t1)">${done?'Logged with your watch':'Watch session live'}</div>
-    ${w.n} set${w.n!==1?'s':''} from your watch${w.at?` · last one ${_agoShort(w.at)}`:''}
+    ${w.n?`${w.n} set${w.n!==1?'s':''} from your watch${w.at?` · last one ${_agoShort(w.at)}`:''}`:`Started on your watch ${w.at?_agoShort(w.at):''} — sets appear here as you tick them`}
     ${w.miss?`<div style="color:var(--amb);font-weight:600">${w.miss} still need a weight — type it in once and it fills them</div>`:''}
-    ${done?'':'<div>Set weights here, tick sets on the watch (it can\'t see sets ticked here).</div>'}
+    ${done?'':'<div>Set weights here, tick sets on either — the watch skips sets ticked here within about 30 s.</div>'}
   </div>
 </div>`;
 }
@@ -3867,7 +3874,9 @@ function _watchApplyNote(n){
   const key=_vitruvianLogKeyFor(when);
   const dp=(DB.get(DB.pk(getMon(when)),null)||[]).find(d=>d.date===ds);
   const isExtra=key.startsWith('extralog_');
-  const log=DB.get(key,null)||{date:ds,type:(isExtra?dp?.extraGym?.type:dp?.type)||'PUSH',exercises:[],completed:false};
+  // v3.44: a watch that starts before the phone gets the whole planned log, not
+  // just the exercises it has sent so far.
+  const log=DB.get(key,null)||_freshLog(ds,(isExtra?dp?.extraGym?.type:dp?.type)||'PUSH',isExtra?dp?.extraGym?.exercises:dp?.exercises);
   if(!Array.isArray(log.exercises))log.exercises=[];
   log.watchNotes=log.watchNotes||[];
   const tag=n.external_id+'@'+(n.updated||'');
@@ -3933,13 +3942,27 @@ function _watchApplyNote(n){
     });
     le.sets=[...restDone,...g.sets,...restTodo.slice(use)];
     added+=use;
+    // A weight changed on the watch carries to the sets still to come, as on the phone.
+    const lastOwn=g.sets.filter(x=>x._ownW&&x.w).pop();
+    if(lastOwn){
+      for(const x of le.sets.slice(le.sets.indexOf(lastOwn)+1)){
+        if(x.done||x._ownW)continue;
+        x.w=lastOwn.w;x.u=lastOwn.u;delete x.plates;
+      }
+    }
     g.sets.slice(prev).forEach(x=>{const wv=parseFloat(x.w),rv=parseInt(x.r);if(wv&&rv&&!/s$/.test(x.r))checkPR(g.id,wv,rv);});
   }
   if(final&&groups.length)log.completed=true;
   log.watchNotes=[...log.watchNotes.filter(t=>!t.startsWith(n.external_id+'@')),tag].slice(-40);
   log.watchAt=new Date().toISOString(); // v3.43: "last set from your watch … ago"
+  // v3.44: the session the watch is running now. Done sets from it aren't marked
+  // "done" in the plan sent to the watch (it counts those itself); every other
+  // ticked set is. A discarded session is forgotten.
+  const sidChanged=log.watchSid!==sid;
+  if(final&&!groups.length)delete log.watchSid;else log.watchSid=sid;
   _watchApplying=true;
   try{DB.set(key,log);}finally{_watchApplying=false;}
+  if(sidChanged&&!final)_watchPushSoon(1500); // so it knows which sets are already done
   return{ds,added,unknown,final,already:false};
 }
 let _watchImporting=false;
@@ -6570,6 +6593,7 @@ async function loadFromCloud(manual=false){
     }finally{_suppressDirty=false;}
     _pulledOk=true;
     if(keptLocal)debouncedSync();
+    setTimeout(_autoBuildWeek,0); // v3.44
     DB.set('fb_last_pull',new Date().toISOString());
     DB.set('fb_last_pull_remote_ts',remoteUpdated||'');
     DB.set('fb_last_pull_err',null);
@@ -9451,16 +9475,16 @@ function startLog(ds,extra){
   const lk=extra?('extralog_'+ds):DB.lk(S.viewDate);
   let log=DB.get(lk,null);
   if(!log){
-    log={date:ds,type:logType,exercises:logExIds.map(id=>{
-      const ex=EX[id];
-      const last=getLastLog(id);
-      return{id,sets:makeSets(id,S.energy||'okay',last)};
-    }),completed:false};
+    log=_freshLog(ds,logType,logExIds,S.energy);
     DB.set(lk,log);
   }
   S.activeLog=log;S.activeLogKey=lk;S.openLogEx=0;go('log');
 }
 
+// A new day's log: every planned exercise with its prefilled sets.
+function _freshLog(ds,type,ids,energy){
+  return{date:ds,type,exercises:(ids||[]).filter(id=>EX[id]).map(id=>({id,sets:makeSets(id,energy||'okay',getLastLog(id))})),completed:false};
+}
 /* Save active log to the correct key (handles extra gym logs on ride days) */
 function _saveLog(){
   if(!S.activeLog)return;
@@ -12739,33 +12763,69 @@ function importCSV(text){
 }
 
 /* ── GENERATE PLAN ── */
-function genPlan(){
+async function genPlan(quiet=false){
   // Re-show the catch-up banner after a regenerate so the user can see what the
   // new plan accounted for (v2.81).
   DB.set('catchup_dismissed_'+fd(S.weekStart),false);
-  const bikePref=DB.get('bike_pref','weather');
-  if(bikePref!=='weather'){
-    // No location needed — build plan directly with placeholder weather data
-    const wdays=Array.from({length:7},(_,i)=>({
-      date:fd(addDays(S.weekStart,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0
-    }));
-    const plan=buildWeek(wdays);
-    DB.set(DB.pk(S.weekStart),plan);
+  const ws=S.weekStart; // the week asked for, even if you move to another one while it builds
+  // Placeholder weather: no location needed, and the fallback when there's no forecast.
+  const neutral=()=>Array.from({length:7},(_,i)=>({
+    date:fd(addDays(ws,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0
+  }));
+  const save=wdays=>{
+    const keep=S.weekStart;S.weekStart=ws; // buildWeek reads S.weekStart
+    try{DB.set(DB.pk(ws),buildWeek(wdays));}finally{S.weekStart=keep;}
     render();
-    upgradeWeekExercisesWithAI(DB.pk(S.weekStart)); // v3.26: background AI upgrade
-    return;
+    upgradeWeekExercisesWithAI(DB.pk(ws)); // v3.26: background AI upgrade
+  };
+  const bikePref=DB.get('bike_pref','weather');
+  if(bikePref!=='weather'){save(neutral());return;}
+  // v3.44: never leave you without a plan. Your last location is remembered, and
+  // with no location or no forecast the week is planned without weather (before,
+  // you got an error and no plan). quiet = the automatic weekly build: no GPS
+  // prompt, no messages.
+  const noWeather=why=>{
+    save(neutral());
+    if(!quiet)showToast(`🌤️ ${why} — planned without weather. Tap 🔄 on the week later to plan rides around the forecast.`,'var(--amb)');
+  };
+  const withLoc=async(lat,lon)=>{
+    let wdays;
+    try{wdays=await fetchWeather(lat,lon,fd(ws),!quiet);}
+    catch(e){noWeather("Couldn't get the forecast");return;}
+    save(wdays);
+  };
+  const saved=DB.get('last_loc',null);
+  if(quiet){
+    if(saved){withLoc(saved.lat,saved.lon);return;}
+    let st='prompt';
+    try{st=(await navigator.permissions.query({name:'geolocation'})).state;}catch(_){}
+    if(st!=='granted'){noWeather('');return;}
   }
-  const btn=document.querySelector('.btn-p,.btn-s');
+  if(!navigator.geolocation){saved?withLoc(saved.lat,saved.lon):noWeather('No location');return;}
+  const btn=quiet?null:document.querySelector('.btn-p,.btn-s');
   if(btn){btn.textContent='📡 Fetching weather…';btn.disabled=true;}
-  navigator.geolocation.getCurrentPosition(async pos=>{
-    try{
-      const wdays=await fetchWeather(pos.coords.latitude,pos.coords.longitude,fd(S.weekStart),true);
-      const plan=buildWeek(wdays);
-      DB.set(DB.pk(S.weekStart),plan);
-      render();
-      upgradeWeekExercisesWithAI(DB.pk(S.weekStart)); // v3.26: background AI upgrade
-    }catch(e){alert('Could not fetch weather. Check your connection.');render();}
-  },()=>{alert('Location access is needed to fetch your local weather forecast.');render();});
+  navigator.geolocation.getCurrentPosition(pos=>{
+    // Rounded to about 1 km — plenty for a forecast — and kept on this device only.
+    DB.set('last_loc',{lat:+pos.coords.latitude.toFixed(2),lon:+pos.coords.longitude.toFixed(2),t:Date.now()});
+    withLoc(pos.coords.latitude,pos.coords.longitude);
+  },()=>{saved?withLoc(saved.lat,saved.lon):noWeather('No location access');},{timeout:12000,maximumAge:6*3600*1000});
+}
+// v3.44: each new week plans itself when you open the app. Before, the next week
+// was only built from the end-of-week prompt after finishing every session, so a
+// missed session meant Monday opened with no plan (and nothing for the watch).
+function _autoBuildWeek(){
+  if(S.fbUser&&!S.guest&&!_pulledOk)return; // wait for the cloud copy — it may already have this week
+  const mon=getMon(new Date()),mk=fd(mon);
+  if(DB.get(DB.pk(mon),null))return;
+  // Only for someone already using plans (last week or the one before had one);
+  // new users and long breaks go through onboarding / the comeback card.
+  if(!DB.get(DB.pk(addDays(mon,-7)),null)&&!DB.get(DB.pk(addDays(mon,-14)),null))return;
+  if((getLayoffDays()||0)>=28)return;
+  if(DB.get('auto_week_'+mk,false))return; // once a week, so a deleted plan stays deleted
+  DB.set('auto_week_'+mk,true);
+  const keep=S.weekStart;S.weekStart=mon;
+  genPlan(true).then(()=>{if(DB.get(DB.pk(mon),null))showToast('📅 This week\'s plan is ready','var(--grn)');});
+  S.weekStart=keep;
 }
 
 function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;render();}
@@ -12957,6 +13017,7 @@ function init(){
   }
   const today=new Date();
   S.weekStart=getMon(today);
+  if(!S.fbUser)setTimeout(_autoBuildWeek,500); // v3.44 (signed-in users build after the cloud pull)
   // Handle Strava OAuth callback (?code=... in URL after redirect)
   const _qp=new URLSearchParams(window.location.search);
   const _stravaCode=_qp.get('code');
@@ -13198,6 +13259,7 @@ document.addEventListener('visibilitychange',()=>{
   if(now-_lastVisibilitySync<10000)return; // 10s debounce
   _lastVisibilitySync=now;
   _autoPullIfNewer('visibilitychange');
+  _autoBuildWeek(); // v3.44: opened on a new week
   if(S.fbUser&&!S.guest&&DB.get('icu_key',null))watchImportSets(); // back from the gym
 });
 
