@@ -84,20 +84,27 @@ This is a single-file PWA deployed via GitHub Pages from `main`. Uncommitted cha
 - Branch work (only auto-push to current branch, never force-push to `main`)
 
 ### Standard publish flow
+Run from the repo root (works in either chat):
 ```bash
-git -C "C:\Users\htse\training-brain" add index.html
-git -C "C:\Users\htse\training-brain" commit -m "$(cat <<'EOF'
-vX.Y: <one-line summary>
+git pull --rebase
+# edit index.html: bump APP_VERSION and add an entry at the top of the inline CHANGELOG
+git add index.html
+git commit -m "vX.Y: <one-line summary>
 
-<2-4 line description of what changed and why>
-
-Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
-EOF
-)"
-git -C "C:\Users\htse\training-brain" push
+<2-4 line description of what changed and why>"
+git push
 ```
+Then update the "Current state" section above (version + what changed) and push that too.
 
-Then briefly confirm with the user: `Shipped — <short-hash>` plus a one-line note about what they should see after reload.
+Tell the user in plain words what changed and that the app shows a "New version ready —
+Reload" bar (or pick it up on the next launch).
+
+**Firebase copy:** https://training-631c1.web.app is NOT updated by a push. Only the local
+PC chat can deploy it. If you shipped from the cloud chat, add
+"deploy v<X.Y> to Firebase" to Open items so the PC chat does it next time.
+
+**Can't test in a browser here?** Say so. At least check the JS still parses, e.g. extract
+the main `<script>` and run `node --check` on it if node exists, before pushing.
 
 ### Verification after push
 If the user reports not seeing the new version:
