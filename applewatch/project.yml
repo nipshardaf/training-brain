@@ -19,7 +19,6 @@ targets:
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         WKApplication: true
         WKWatchOnly: true
-        WKRunsIndependentlyOfCompanionApp: true
         WKBackgroundModes: [workout-processing]
         NSHealthShareUsageDescription: Training Brain reads your heart rate during gym sessions.
         NSHealthUpdateUsageDescription: Training Brain saves your gym sessions as Strength workouts in Apple Health.
