@@ -35,12 +35,19 @@ jobs:
         working-directory: applewatch
         run: |
           RT=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.watchOS-[0-9-]+' | tail -1)
+          if [ -z "$RT" ]; then
+            echo "::notice::no watchOS simulator installed — downloading one"
+            xcodebuild -downloadPlatform watchOS > dl.log 2>&1 || { tail -5 dl.log | sed 's/^/::error::/'; exit 1; }
+            RT=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.watchOS-[0-9-]+' | tail -1)
+          fi
           DEV=$(xcrun simctl list devicetypes | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.Apple-Watch-Ultra[A-Za-z0-9-]*' | tail -1)
-          echo "runtime $RT device $DEV"
-          UDID=$(xcrun simctl create tbwatch "$DEV" "$RT")
+          echo "::notice::runtime=$RT device=$DEV"
+          UDID=$(xcrun simctl create tbwatch "$DEV" "$RT") || { echo "::error::could not create the simulator ($DEV / $RT)"; exit 1; }
           xcrun simctl boot "$UDID"
           xcrun simctl bootstatus "$UDID" -b
-          xcrun simctl install "$UDID" build/Debug-watchsimulator/TrainingBrain.app
+          APP=$(find build -name "TrainingBrain.app" -type d | head -1)
+          echo "::notice::app=$APP"
+          xcrun simctl install "$UDID" "$APP" || { echo "::error::install failed ($APP)"; exit 1; }
           mkdir -p shots
           for s in ready set weight rest done; do
             xcrun simctl terminate "$UDID" com.nipshardaf.trainingbrain.watch >/dev/null 2>&1 || true
