@@ -1,5 +1,70 @@
 # Training Brain — Working Notes for Claude
 
+## Current state — READ FIRST (updated 2026-09-29)
+
+Two Claude chats work on this repo, and this section is how they stay in sync:
+- **Local PC chat** ("Training Brain — Apple Watch app", runs on the user's Windows PC,
+  reachable from Mac/iPhone via Remote Control). It has the Garmin Connect IQ SDK and
+  simulator, the Firebase CLI (deploys the web.app copy), the user's Chrome (Garmin
+  store uploads) and USB access to the Garmin watch. Watch builds and Firebase deploys
+  happen there.
+- **Cloud chat** ("Training brain project"). Repo access only.
+
+Rules for both: `git pull --rebase` before editing; after shipping, update this section
+(version, what changed, open items) in the same push. Never put secrets in the repo.
+
+### App — v3.47 (`index.html`)
+- Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
+  (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
+- Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
+  when a newer `APP_VERSION` is found; v3.47 also re-checks whenever the app is resumed.
+- **Gym planning is by muscle group (v3.46).** The session set comes from the number of
+  gym days: 1 Full Body · 2 Upper+Legs · 3 Push/Pull/Legs · 4 +Shoulders & Arms
+  (`SHOULDERS_ARMS`) · 5 +Legs · 6 PPL×2 (`_WEEK_SET`). Order = muscles trained longest
+  ago first (`_gymOrder`, 21 days of logs). Placement is a permutation search: no shared
+  muscles on neighbouring days (Sunday→Monday counts), legs off the days around the long
+  ride, most-needed first (`_placeSessions`). "Missed" is muscle-based (`getMissedLastWeek`).
+- **The user picks gym days (v3.47).** `openWeekPicker` → `gym_days_<monday>`. It opens
+  from 🔄/Generate and once per new week, and the "Gym days … Change" bar handles
+  mid-week changes. Rides are placed on the other days jointly with the sessions
+  (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
+  least one rest day is kept.
+- **Missed gym days (v3.45)** slide only gym sessions (rides/rest/weather stay on their
+  dates); overflow → `carryOut`, first next week. If the watch logs a different session
+  than planned, the plan follows (`_followDoneType`).
+- New weeks auto-build on open after the cloud pull (`_autoBuildWeek`). `genPlan` never
+  fails (remembered location, no-weather fallback).
+- Set logger: carry-forward, plates helper (barbell only), "last time"/"why this weight".
+  Watch sets inherit phone weights (v3.42); ⌚ marks on watch sets; "Watch session live"
+  card (v3.43).
+
+### Watches ↔ app (via intervals.icu, key in the user's app settings)
+- The app pushes each gym day as a WORKOUT event, `external_id` `tb-<date>`
+  (`tb-<date>-x` for an extra session). Step text is like
+  `- Bench Press 135lb x8 1s press lap`; sets ticked on the phone get `done` (before
+  the duration on holds, e.g. `- Plank done 45s`).
+- Watches send NOTE `tb-live-<date>-<session>` with
+  `TB2;date;session;final(0/1);workout name;ex|w|unit|reps|flags;…`, which the app
+  imports (`_watchApplyNote`, idempotent per `external_id@updated`). An empty note at
+  start = "session started". Only ever touch `tb-*` events on the user's calendar.
+- **Garmin epix Pro 51mm**: Connect IQ app 1.0.1, private beta on the Connect IQ store.
+  Source is on the PC only (`C:\Users\htse\garmin-dev\tbwatch`), not in this repo.
+- **Apple Watch Ultra**: `applewatch/` (SwiftUI, watchOS 10+, XcodeGen, watch-only app,
+  HealthKit strength workout, Digital Crown for weight/reps, 15 s polling). CI:
+  `.github/workflows/applewatch.yml` builds it on a GitHub Mac and pushes simulator
+  screenshots to the `applewatch-shots` branch. Being installed on the user's MacBook Air
+  M1 via Xcode (see `applewatch/README.md`).
+
+### Open items
+- User: paste `worker.js` (v12, AI proxy auth) into Cloudflare.
+- User: remove the old USB-sideloaded Garmin copy (next USB connection, PC chat).
+- Verify on real devices: Garmin heart rate, phone ticks skipping on the watch, week picker.
+- Apple Watch: first install on the real watch; decide on the $99 Developer Program (TestFlight).
+- Garmin free-Strength sessions: does intervals.icu keep sets? Waiting for Settings →
+  Diagnostics → Inspect output; otherwise parse the original .FIT.
+- Renpho indoor bike: try pairing it to the Apple Watch Ultra (else Garmin HR broadcast).
+  The user's current split idea: Apple Watch on the bike, Garmin in the gym.
+
 ## Auto-publish rule (MANDATORY)
 
 **After every meaningful change to `index.html`, commit AND push without being asked.**
@@ -44,7 +109,7 @@ If the user reports not seeing the new version:
 ## Architecture
 
 - Everything lives in `index.html` (~6000+ lines): HTML shell, all CSS, all JS, all data tables
-- `sw.js` — service worker, network-first for `index.html`, cache-first for assets
+- `sw.js` — service worker, stale-while-revalidate for `index.html` (Reload bar on a new version), cache-first for assets
 - Storage: `localStorage` via `DB.get/set`, mirrored to Firebase via `_syncKeys` array in `saveToCloud`
 - `S` — central state object (current screen, active log, etc.)
 - `render()` — re-renders the current screen based on `S.screen`
