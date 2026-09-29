@@ -47,7 +47,8 @@ jobs:
           xcrun simctl bootstatus "$UDID" -b
           APP=$(find build -name "TrainingBrain.app" -type d | head -1)
           echo "::notice::app=$APP"
-          xcrun simctl install "$UDID" "$APP" || { echo "::error::install failed ($APP)"; exit 1; }
+          /usr/libexec/PlistBuddy -c Print "$APP/Info.plist" | head -40
+          xcrun simctl install "$UDID" "$APP" 2> inst.log || { grep -v '^$' inst.log | head -8 | sed 's/^/::error::/'; exit 1; }
           mkdir -p shots
           for s in ready set weight rest done; do
             xcrun simctl terminate "$UDID" com.nipshardaf.trainingbrain.watch >/dev/null 2>&1 || true
