@@ -1,0 +1,38 @@
+# Training Brain for Apple Watch — generate the Xcode project with:  xcodegen
+# (see README.md). A standalone watch app: no iPhone app needed.
+name: TrainingBrain
+options:
+  bundleIdPrefix: com.nipshardaf
+  deploymentTarget:
+    watchOS: "10.0"
+targets:
+  TrainingBrain:
+    type: application
+    platform: watchOS
+    sources:
+      - path: Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Training Brain
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        WKApplication: true
+        WKRunsIndependentlyOfCompanionApp: true
+        WKBackgroundModes: [workout-processing]
+        NSHealthShareUsageDescription: Training Brain reads your heart rate during gym sessions.
+        NSHealthUpdateUsageDescription: Training Brain saves your gym sessions as Strength workouts in Apple Health.
+    entitlements:
+      path: Sources/TrainingBrain.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nipshardaf.trainingbrain.watch
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "4"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

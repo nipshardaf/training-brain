@@ -1,0 +1,63 @@
+# Builds the Apple Watch app on a GitHub Mac and takes simulator screenshots of
+# the demo workout. Errors show as annotations on the run; screenshots are pushed
+# to the applewatch-shots branch.
+name: Apple Watch build
+on:
+  push:
+    branches: [main]
+    paths: ['applewatch/**', '.github/workflows/applewatch.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        working-directory: applewatch
+        run: |
+          brew install xcodegen
+          xcodegen
+      - name: Build for the watch simulator
+        working-directory: applewatch
+        run: |
+          set +e
+          xcodebuild -project TrainingBrain.xcodeproj -target TrainingBrain -sdk watchsimulator \
+            -configuration Debug SYMROOT="$PWD/build" CODE_SIGNING_ALLOWED=NO build > build.log 2>&1
+          status=$?
+          grep -E "error:" build.log | sed -E 's#^.*/applewatch/([^:]+):([0-9]+):([0-9]+): error: (.*)$#::error file=applewatch/\1,line=\2,col=\3::\4#' | sort -u | head -40
+          grep -E "error:" build.log | grep -v "/applewatch/" | sed -E 's#^(.*)$#::error::\1#' | sort -u | head -10
+          tail -5 build.log
+          exit $status
+      - name: Screenshots
+        working-directory: applewatch
+        run: |
+          RT=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.watchOS-[0-9-]+' | tail -1)
+          DEV=$(xcrun simctl list devicetypes | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.Apple-Watch-Ultra[A-Za-z0-9-]*' | tail -1)
+          echo "runtime $RT device $DEV"
+          UDID=$(xcrun simctl create tbwatch "$DEV" "$RT")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          xcrun simctl install "$UDID" build/Debug-watchsimulator/TrainingBrain.app
+          mkdir -p shots
+          for s in ready set weight rest done; do
+            xcrun simctl terminate "$UDID" com.nipshardaf.trainingbrain.watch >/dev/null 2>&1 || true
+            xcrun simctl launch "$UDID" com.nipshardaf.trainingbrain.watch -demo -demoState "$s"
+            sleep 8
+            xcrun simctl io "$UDID" screenshot "shots/$s.png"
+          done
+          ls -la shots
+      - name: Publish screenshots
+        run: |
+          mv applewatch/shots /tmp/shots
+          git config user.name "applewatch-ci"
+          git config user.email "applewatch-ci@users.noreply.github.com"
+          git checkout --orphan applewatch-shots
+          git rm -rf -q .
+          cp /tmp/shots/*.png .
+          echo "$GITHUB_SHA" > commit.txt
+          git add *.png commit.txt
+          git commit -q -m "Apple Watch screenshots for $GITHUB_SHA"
+          git push -f -q origin applewatch-shots
