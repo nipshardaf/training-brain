@@ -1014,10 +1014,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.47';
+const APP_VERSION='3.48';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.48',d:'Ride days wait for your watch, not Strava',det:'A ride day with nothing synced used to say "Waiting for Strava" and pop up "Strava disconnected" on every launch, although your rides now come from your Apple Watch or Garmin through intervals.icu. It now says "Waiting for your ride", its Sync now checks intervals.icu, and it explains that the Renpho app on its own does not send rides anywhere, so log those with the note button. The Strava pop-up only appears if you tap a Strava sync yourself.'},
   {v:'3.47',d:'Pick your gym days for the week',det:'Tapping the refresh button on the week (or Generate) now asks which days you can get to the gym, pre-ticked with a suggestion, and it asks once at the start of each new week too. Your gym days get the right sessions for that many days (3 days: Push, Pull, Legs), most-needed first and spaced out; rides go on the best of the other days, always leaving at least one rest day. Past days and days you have already trained stay as they are. To change your mind mid-week (train more or less), tap the "Gym days … Change" bar at the top of the week. Also: the app now checks for a new version every time you switch back to it, not only when it is launched fresh, so fixes reach you sooner.'},
   {v:'3.46',d:'Gym weeks are planned by muscle group, looking back at last week',det:'The gym split is now based on how many gym days the week has, so every muscle group gets trained: 1 day Full Body, 2 Upper + Legs, 3 Push, Pull, Legs, 4 adds a new Shoulders & Arms session, 5 adds a second Legs, 6 is Push, Pull, Legs twice. Before, a Push, Pull, Legs, Upper rotation ran on from week to week, so some weeks had no legs and others repeated chest and back. The planner looks back over last week: muscles you trained longest ago (anything you missed) come first, and a session only counts as missed if its muscles went untrained, so skipping Upper after doing Push and Pull is not a miss. Sessions are spread out: never the same muscles two days running (Sunday into Monday included), legs away from the long ride, no ride the day after a ride or legs, and a rest day after two training days in a row. Tap the refresh button on this week to rebuild it.'},
   {v:'3.45',d:'Missing a gym day no longer scrambles the week',det:'Before, a missed day slid the whole rest of the week along by a day: rides moved onto rainy days (still showing the sunny forecast), rest days moved, a session fell off the week every time, and a missed ride pushed the gym back too. Now only gym sessions move: the one you missed becomes your next gym day and the others follow in order, while rides, rest days and the forecast stay put. Whatever no longer fits this week is first next week. And if you do a different session than the plan says (the watch had an older copy, say), the plan follows what you actually did and the session you replaced takes its later slot. The week also updates before anything is sent to your watch, so the watch has the new order.'},
@@ -2178,8 +2179,12 @@ async function stravaFetchActivities(manual=false){
   const token=await _stravaAccessToken();
   if(!token){
     // Distinguish "never connected" (silent) from "connection died" (tell them).
-    if(DB.get('strava_token',null)&&DB.get('strava_auth_expired',false)){
-      showToast('🟠 Strava disconnected — tap Settings → Strava to reconnect','var(--amb)');
+    // v3.48: only when you tapped Sync — this used to fire on every automatic check,
+    // and with intervals.icu connected Strava isn't where rides come from anyway.
+    if(manual&&DB.get('strava_token',null)&&DB.get('strava_auth_expired',false)){
+      showToast(DB.get('icu_key',null)
+        ?'Strava isn\'t connected — your rides come in through intervals.icu'
+        :'🟠 Strava disconnected — tap Settings → Strava to reconnect','var(--amb)');
       render();
     }
     return;
@@ -7516,23 +7521,36 @@ function rRideCard(dp){
   if(!actual&&!isFuture){
     const r=manual||{};
     const hasManualData=r.dur!=null;
-    const stravaConnected=!!DB.get('strava_token',null);
-    const lastSync=DB.get('strava_last_sync',null);
+    // v3.48: rides come from intervals.icu when it's connected (Strava's API went
+    // paid-only); this card used to wait on Strava regardless.
+    const icuOn=!!DB.get('icu_key',null);
+    const stravaConnected=!icuOn&&!!DB.get('strava_token',null)&&!DB.get('strava_auth_expired',false);
+    const autoSync=icuOn||stravaConnected;
+    const lastSync=DB.get(icuOn?'icu_last_sync':'strava_last_sync',null);
+    const syncFn=icuOn?'icuFetchActivities(true)':'stravaFetchActivities(true)';
     const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
-    const syncLabel=syncAge===null?'never':syncAge<2?'just now':syncAge<60?`${syncAge}m ago`:`${Math.round(syncAge/60)}h ago`;
-    const showCompact=stravaConnected&&!hasManualData&&!S.expandRideLog?.[dp.date];
+    const syncLabel=syncAge===null?'never':syncAge<2?'just now':syncAge<60?`${syncAge}m ago`:syncAge<2880?`${Math.round(syncAge/60)}h ago`:`${Math.round(syncAge/1440)}d ago`;
+    const showCompact=autoSync&&!hasManualData&&!S.expandRideLog?.[dp.date];
+    const syncBtn=(label,extra)=>icuOn
+      ?`<button onclick="${syncFn}" style="background:var(--s1);border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;flex:0 0 auto;${extra||''}">🔄 ${label}</button>`
+      :`<button onclick="${syncFn}" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.4);border-radius:9px;color:#fc4c02;font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;flex:0 0 auto;${extra||''}">🟠 ${label}</button>`;
     if(showCompact){
       // Compact card: just a sync button + manual log toggle
-      manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:11px 14px;margin-bottom:13px;display:flex;align-items:center;justify-content:space-between;gap:10px">
-  <div style="min-width:0;flex:1">
-    <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.5px">⏳ Waiting for Strava</div>
-    <div style="font-size:11px;color:var(--t2);margin-top:1px">Last sync: ${syncLabel}</div>
+      manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:11px 14px;margin-bottom:13px">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
+    <div style="min-width:0;flex:1">
+      <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.5px">⏳ ${icuOn?'Waiting for your ride':'Waiting for Strava'}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">${icuOn?'From your watch via intervals.icu':'Last sync'} · ${syncLabel}</div>
+    </div>
+    ${syncBtn('Sync now')}
+    <button onclick="expandRideLog('${dp.date}')" title="Log this ride manually" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:11px;font-weight:700;padding:7px 9px;cursor:pointer;flex:0 0 auto">📝</button>
   </div>
-  <button onclick="stravaFetchActivities(true)" style="background:rgba(252,76,2,.12);border:1px solid rgba(252,76,2,.4);border-radius:9px;color:#fc4c02;font-size:11px;font-weight:700;padding:7px 11px;cursor:pointer;flex:0 0 auto">🟠 Sync now</button>
-  <button onclick="expandRideLog('${dp.date}')" title="Log this ride manually" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:11px;font-weight:700;padding:7px 9px;cursor:pointer;flex:0 0 auto">📝</button>
+  ${icuOn?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:8px">Rides you record on your Apple Watch or Garmin show up here on their own. Rode with just the Renpho app? It doesn't send rides anywhere — tap 📝 to log it.</div>`:''}
 </div>`;
     }else{
-      const hint=stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
+      const hint=icuOn
+        ?'Rides recorded on your Apple Watch or Garmin arrive through intervals.icu on their own. Rode with just the Renpho app (it doesn\'t sync)? Log it here.'
+        :stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
       const fld=(id,label,unit,val)=>`<div>
         <label style="display:block;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}${unit?' · '+unit:''}</label>
         <input id="${id}" type="number" inputmode="decimal" value="${val!=null?val:''}" oninput="rideField('${dp.date}','${id.slice(3)}',this.value)"
@@ -7540,7 +7558,7 @@ function rRideCard(dp){
       manualHtml=`<div style="background:var(--s2);border-radius:14px;padding:13px 14px;margin-bottom:13px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
     <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.7px">📝 ${_T('rl_title')}</div>
-    ${stravaConnected?`<button onclick="stravaFetchActivities(true)" style="background:none;border:1px solid rgba(252,76,2,.4);border-radius:8px;color:#fc4c02;font-size:11px;font-weight:700;padding:3px 9px;cursor:pointer">🟠 Sync now · ${syncLabel}</button>`:''}
+    ${autoSync?syncBtn(`Sync now · ${syncLabel}`,'padding:3px 9px'):''}
   </div>
   <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:11px">${hint}</div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">
