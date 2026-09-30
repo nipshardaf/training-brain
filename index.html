@@ -1014,10 +1014,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.48';
+const APP_VERSION='3.49';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.49',d:'Strava is an option again, only when it is connected',det:'Strava stays available as a ride source. When it is properly connected it syncs alongside intervals.icu (the ride card checks both). When it is not connected, or its login has expired, the app no longer tries it on every launch and no longer talks about Strava. Screens that said your rides and fitness numbers come from Strava now say they come from your rides, whichever way they arrive. Reconnect it any time in Settings.'},
   {v:'3.48',d:'Ride days wait for your watch, not Strava',det:'A ride day with nothing synced used to say "Waiting for Strava" and pop up "Strava disconnected" on every launch, although your rides now come from your Apple Watch or Garmin through intervals.icu. It now says "Waiting for your ride", its Sync now checks intervals.icu, and it explains that the Renpho app on its own does not send rides anywhere, so log those with the note button. The Strava pop-up only appears if you tap a Strava sync yourself.'},
   {v:'3.47',d:'Pick your gym days for the week',det:'Tapping the refresh button on the week (or Generate) now asks which days you can get to the gym, pre-ticked with a suggestion, and it asks once at the start of each new week too. Your gym days get the right sessions for that many days (3 days: Push, Pull, Legs), most-needed first and spaced out; rides go on the best of the other days, always leaving at least one rest day. Past days and days you have already trained stay as they are. To change your mind mid-week (train more or less), tap the "Gym days … Change" bar at the top of the week. Also: the app now checks for a new version every time you switch back to it, not only when it is launched fresh, so fixes reach you sooner.'},
   {v:'3.46',d:'Gym weeks are planned by muscle group, looking back at last week',det:'The gym split is now based on how many gym days the week has, so every muscle group gets trained: 1 day Full Body, 2 Upper + Legs, 3 Push, Pull, Legs, 4 adds a new Shoulders & Arms session, 5 adds a second Legs, 6 is Push, Pull, Legs twice. Before, a Push, Pull, Legs, Upper rotation ran on from week to week, so some weeks had no legs and others repeated chest and back. The planner looks back over last week: muscles you trained longest ago (anything you missed) come first, and a session only counts as missed if its muscles went untrained, so skipping Upper after doing Push and Pull is not a miss. Sessions are spread out: never the same muscles two days running (Sunday into Monday included), legs away from the long ride, no ride the day after a ride or legs, and a rest day after two training days in a row. Tap the refresh button on this week to rebuild it.'},
@@ -1089,7 +1090,7 @@ const TRANS={
     rl_min:'min',rl_km:'km',rl_bpm:'bpm',rl_save:'Save ride',
     rl_notes_ph:'How did it feel? Route, weather…',rl_saved_toast:'✅ Ride logged',
     rl_need_dur:'Enter at least a ride duration',
-    rl_hint_nostrava:'Log today\'s ride below to keep your progress moving 🚴 — or connect Strava in Settings and rides sync in on their own.',
+    rl_hint_nostrava:'Log today\'s ride below to keep your progress moving 🚴 — or connect intervals.icu (or Strava) in Settings and rides sync in on their own.',
     rl_hint_strava:'Strava is connected 🟠 — this ride will sync in automatically once Strava finishes processing it, so you can skip the form. In a hurry? Log it manually below.',
     wr_card_title:'Your weekly review is ready',
     wr_card_sub:'Tap to generate your 8-week training analysis',
@@ -2398,6 +2399,11 @@ function rideSourceIcon(a){
   if(a._endurain)return'🏠';
   if(a._imported)return'⌚';
   return'🟠';
+}
+// v3.49: Strava is an optional ride source. It counts as connected only while it
+// has a login and neither that login nor Strava's side (the API app) has lapsed.
+function _stravaWorking(){
+  return!!DB.get('strava_token',null)&&!DB.get('strava_auth_expired',false)&&!DB.get('strava_app_inactive',false);
 }
 function stravaRideOnDate(dateStr){
   const acts=DB.get('strava_activities',[])||[];
@@ -6217,7 +6223,7 @@ function openWelcomeSheet(mode){
   document.getElementById('welcome-sheet')?.remove();
   const features=[
     {i:'📅',t:'Smart weekly plan',d:'Auto-generated from your activities, weather, and recovery'},
-    {i:'🚴',t:'Strava sync',d:'Auto-import rides — fitness, fatigue and form computed for you'},
+    {i:'🚴',t:'Ride sync',d:'Rides import from your Garmin or Apple Watch (via intervals.icu) or Strava — fitness, fatigue and form computed for you'},
     {i:'🏋️',t:'Gym tracking',d:'Sets, reps, PRs, weekly volume across muscle groups'},
     {i:'⚖️',t:'Body metrics',d:'Weight trend with goal target, W/kg, body composition'},
     {i:'💬',t:'AI Coach',d:'Ask anything — answers grounded in your actual data, can modify your plan'},
@@ -6236,7 +6242,7 @@ function openWelcomeSheet(mode){
   <div style="font-size:11px;font-weight:700;color:var(--acc);margin-bottom:6px">🚀 NEXT STEPS</div>
   <div style="font-size:11px;color:var(--t2);line-height:1.6">
     1. Tap <strong style="color:var(--al)">Generate plan</strong> to build your first week<br>
-    2. Connect <strong style="color:var(--al)">Strava</strong> in Settings to auto-sync rides<br>
+    2. Connect <strong style="color:var(--al)">intervals.icu</strong> (or Strava) in Settings to auto-sync rides<br>
     3. Tap any day to log your first workout<br>
     4. Check <strong style="color:var(--al)">My Training</strong> for charts and weight tracking
   </div>
@@ -7523,11 +7529,13 @@ function rRideCard(dp){
     const hasManualData=r.dur!=null;
     // v3.48: rides come from intervals.icu when it's connected (Strava's API went
     // paid-only); this card used to wait on Strava regardless.
+    // v3.49: Strava stays an option — used whenever it's actually connected (and
+    // then alongside intervals.icu), invisible when it isn't.
     const icuOn=!!DB.get('icu_key',null);
-    const stravaConnected=!icuOn&&!!DB.get('strava_token',null)&&!DB.get('strava_auth_expired',false);
+    const stravaConnected=_stravaWorking();
     const autoSync=icuOn||stravaConnected;
-    const lastSync=DB.get(icuOn?'icu_last_sync':'strava_last_sync',null);
-    const syncFn=icuOn?'icuFetchActivities(true)':'stravaFetchActivities(true)';
+    const lastSync=[icuOn&&DB.get('icu_last_sync',null),stravaConnected&&DB.get('strava_last_sync',null)].filter(Boolean).sort().pop()||null;
+    const syncFn=[icuOn&&'icuFetchActivities(true)',stravaConnected&&'stravaFetchActivities(true)'].filter(Boolean).join(';');
     const syncAge=lastSync?Math.round((Date.now()-new Date(lastSync).getTime())/60000):null;
     const syncLabel=syncAge===null?'never':syncAge<2?'just now':syncAge<60?`${syncAge}m ago`:syncAge<2880?`${Math.round(syncAge/60)}h ago`:`${Math.round(syncAge/1440)}d ago`;
     const showCompact=autoSync&&!hasManualData&&!S.expandRideLog?.[dp.date];
@@ -7540,7 +7548,7 @@ function rRideCard(dp){
   <div style="display:flex;align-items:center;justify-content:space-between;gap:10px">
     <div style="min-width:0;flex:1">
       <div style="font-size:11px;font-weight:700;color:var(--txt);text-transform:uppercase;letter-spacing:.5px">⏳ ${icuOn?'Waiting for your ride':'Waiting for Strava'}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:1px">${icuOn?'From your watch via intervals.icu':'Last sync'} · ${syncLabel}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:1px">${icuOn?`From your watch via intervals.icu${stravaConnected?' or Strava':''}`:'Last sync'} · ${syncLabel}</div>
     </div>
     ${syncBtn('Sync now')}
     <button onclick="expandRideLog('${dp.date}')" title="Log this ride manually" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:11px;font-weight:700;padding:7px 9px;cursor:pointer;flex:0 0 auto">📝</button>
@@ -7549,7 +7557,7 @@ function rRideCard(dp){
 </div>`;
     }else{
       const hint=icuOn
-        ?'Rides recorded on your Apple Watch or Garmin arrive through intervals.icu on their own. Rode with just the Renpho app (it doesn\'t sync)? Log it here.'
+        ?`Rides recorded on your Apple Watch or Garmin arrive through intervals.icu${stravaConnected?' (or Strava)':''} on their own. Rode with just the Renpho app (it doesn't sync)? Log it here.`
         :stravaConnected?_T('rl_hint_strava'):_T('rl_hint_nostrava');
       const fld=(id,label,unit,val)=>`<div>
         <label style="display:block;font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">${label}${unit?' · '+unit:''}</label>
@@ -7802,7 +7810,7 @@ function rWeeklyAdvisor(){
   }
   if(S._advisorNoData)return`<div class="card">
   <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 Weekly Advisor</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Looks like this is your first week on the app — welcome! Once you've got a few sessions logged or your Strava rides synced, I'll be able to give you a proper read on your training load, trends and what to focus on next.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Looks like this is your first week on the app — welcome! Once you've got a few sessions logged or your rides synced, I'll be able to give you a proper read on your training load, trends and what to focus on next.</div>
   <button onclick="loadWeeklyAdvisor(true)" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:8px 16px;cursor:pointer">↻ Check again</button>
 </div>`;
   if(!data)return`<div class="card">
@@ -8093,7 +8101,7 @@ function buildReviewPrompt(d){
   })();
   const fitTxt=d.fitness?`Fitness (CTL, 42-day): ${d.fitness.ctl} · Fatigue (ATL, 7-day): ${d.fitness.atl} · Form (TSB): ${d.fitness.tsb>0?'+':''}${d.fitness.tsb}
 7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'} · 28-day CTL change: ${d.fitness.ctl_28d_delta!=null?(d.fitness.ctl_28d_delta>0?'+':'')+d.fitness.ctl_28d_delta:'n/a'}
-Interpretation: TSB > +15 = peaked/fresh; +5 to -10 = productive training; -10 to -25 = carrying fatigue; < -25 = deep fatigue, prioritise recovery. Healthy CTL build rate is 3-5 points/week.`:'No fitness curve yet — set FTP and sync Strava to enable.';
+Interpretation: TSB > +15 = peaked/fresh; +5 to -10 = productive training; -10 to -25 = carrying fatigue; < -25 = deep fatigue, prioritise recovery. Healthy CTL build rate is 3-5 points/week.`:'No fitness curve yet — set FTP and sync rides to enable.';
   // Gym progress: tonnage trend + per-exercise 1RM trajectories
   const gpTxt=d.gymProgress?(()=>{
     const g=d.gymProgress;
@@ -10112,7 +10120,7 @@ function rCyclingProfile(){
     </div>
   </div>
   ${canEstimate?`<button onclick="estimateFtp()" style="width:100%;margin-top:9px;background:rgba(124,58,237,.1);color:var(--acc);border:1px dashed rgba(124,58,237,.4);border-radius:10px;font-size:12px;font-weight:700;padding:9px;cursor:pointer">📊 ${ftpSrc==='estimated'?'Re-estimate':'Estimate'} FTP from your rides</button>`:''}
-  ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${hasRides?'Tap the button above to auto-estimate from ride power data, or set it manually.':DB.get('strava_token',null)?'Update FTP on Strava and re-sync, or set it manually here.':'Connect Strava to auto-import, or enter manually.'}</div>`:''}
+  ${!ftp?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">💡 Setting your FTP unlocks IF, TSS, fitness (CTL), fatigue (ATL) and form (TSB) tracking. ${hasRides?'Tap the button above to auto-estimate from ride power data, or set it manually.':_stravaWorking()?'Update FTP on Strava and re-sync, or set it manually here.':'Enter it manually here.'}</div>`:''}
   ${ftp&&!wt?`<div style="font-size:11px;color:var(--t2);margin-top:9px;line-height:1.5">⚖️ Log your weight in the <strong style="color:var(--al)">Body Weight</strong> section below to compute W/kg.</div>`:''}
 </div>`;
 }
@@ -10134,7 +10142,7 @@ function showFitnessInfo(){
 <div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;padding:28px 20px calc(var(--sb)+28px);max-width:430px;margin:0 auto;width:100%;max-height:85vh;overflow-y:auto">
   <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 22px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:6px">💪 What these numbers mean</div>
-  <div style="font-size:12px;color:var(--t2);margin-bottom:18px;line-height:1.5">All three numbers come from your <strong style="color:var(--al)">Strava rides</strong>. You don't input anything — the app computes them from your ride duration, power, and your FTP.</div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:18px;line-height:1.5">All three numbers come from your <strong style="color:var(--al)">rides</strong> (synced from your watch, Strava, or logged by hand). You don't input anything — the app computes them from your ride duration, power, and your FTP.</div>
 
   <div style="background:var(--s2);border-radius:12px;padding:13px 14px;margin-bottom:10px">
     <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:4px">
@@ -12473,8 +12481,8 @@ function _glossBtn(term,size=13){
 function showActInfo(k){
   const info={
     gym:{i:_icon('gym-weights.png','🏋️',52),t:'Gym & Weights',d:'Strength training with barbells, dumbbells, cables and machines. Tracks your lifts, sets, reps and personal records automatically.'},
-    cycling:{i:_icon('cycling.png','🚴',52),t:'Cycling',d:'Road or trail rides tracked outdoors. Syncs automatically with Strava for speed, distance, elevation and power data.'},
-    running:{i:_icon('running.png','🏃',52),t:'Running',d:'Outdoor runs and treadmill sessions. Syncs with Strava for pace, distance, heart rate and route tracking.'},
+    cycling:{i:_icon('cycling.png','🚴',52),t:'Cycling',d:'Road or trail rides tracked outdoors. Syncs automatically from your Garmin or Apple Watch (via intervals.icu) or Strava for speed, distance, elevation and power data.'},
+    running:{i:_icon('running.png','🏃',52),t:'Running',d:'Outdoor runs and treadmill sessions. Syncs from your Garmin or Apple Watch (via intervals.icu) or Strava for pace, distance, heart rate and route tracking.'},
     cardio:{i:_icon('cardio-classes.png','🏊',52),t:'Cardio & Classes',d:'HIIT classes, rowing, elliptical, stair master, swimming, group fitness and more. Sessions logged manually as notes for now — full tracking coming soon.'},
   };
   const m=info[k];if(!m)return;
@@ -13284,7 +13292,9 @@ function init(){
   // on every launch just burns a request. The Settings card still shows the
   // state and "Check again" re-tests on demand. v3.08.
   const _stravaTok=DB.get('strava_token',null);
-  if(_stravaTok&&!_stravaCode&&!DB.get('strava_app_inactive',false)){
+  // v3.49: also not while the connection has expired — Strava only runs when it's
+  // actually connected; reconnecting in Settings turns it back on.
+  if(_stravaTok&&!_stravaCode&&!DB.get('strava_app_inactive',false)&&!DB.get('strava_auth_expired',false)){
     const _lastSync=DB.get('strava_last_sync',null);
     const _hourAgo=Date.now()-60*60*1000;
     if(!_lastSync||new Date(_lastSync).getTime()<_hourAgo){

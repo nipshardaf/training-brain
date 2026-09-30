@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.48 (`index.html`)
+### App — v3.49 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -34,7 +34,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   than planned, the plan follows (`_followDoneType`).
 - New weeks auto-build on open after the cloud pull (`_autoBuildWeek`). `genPlan` never
   fails (remembered location, no-weather fallback).
-- Rides: intervals.icu is the ride source (Apple Watch rides via an OAuth uploader app, Garmin via Garmin Connect). Strava is dead (paid API). The Renpho app alone syncs nowhere, so such rides are logged manually (v3.48 ride card says so).
+- Rides: intervals.icu is the ride source (Apple Watch rides via an OAuth uploader app, Garmin via Garmin Connect). Strava is an optional source, used only while `_stravaWorking()` (token, not expired, API app active) — then alongside intervals.icu (v3.49). The Renpho app alone syncs nowhere, so such rides are logged manually (v3.48 ride card says so).
 - Set logger: carry-forward, plates helper (barbell only), "last time"/"why this weight".
   Watch sets inherit phone weights (v3.42); ⌚ marks on watch sets; "Watch session live"
   card (v3.43).
