@@ -32,6 +32,7 @@ jobs:
           tail -5 build.log
           exit $status
       - name: Screenshots
+        continue-on-error: true   # a simulator hiccup shouldn't email a "build failed"
         working-directory: applewatch
         run: |
           RT=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.watchOS-[0-9-]+' | tail -1)
@@ -58,6 +59,7 @@ jobs:
           done
           ls -la shots
       - name: Publish screenshots
+        continue-on-error: true
         run: |
           mv applewatch/shots /tmp/shots
           git config user.name "applewatch-ci"
