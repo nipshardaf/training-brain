@@ -1014,10 +1014,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.49';
+const APP_VERSION='3.50';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.50',d:'Ride mode: connect straight to the Renpho bike',det:'A new Ride screen (the "Ride with my bike" button on today) connects to the Renpho bike over Bluetooth and shows live watts, cadence and speed, coloured against the day\'s watt target. A second connection takes heart rate from a chest strap. Finishing the ride uploads it to intervals.icu with full power data, so it appears in the app like any other ride (the Renpho app sends rides nowhere, which is why they were missing). You can set resistance from the screen, or have it hold a target power for you. On an iPhone this needs the free Bluefy browser, because Safari and the home-screen app cannot use Bluetooth. First version: not yet tried on the real bike, and the screen has a "Connection details" section to copy if something does not work.'},
   {v:'3.49',d:'Strava is an option again, only when it is connected',det:'Strava stays available as a ride source. When it is properly connected it syncs alongside intervals.icu (the ride card checks both). When it is not connected, or its login has expired, the app no longer tries it on every launch and no longer talks about Strava. Screens that said your rides and fitness numbers come from Strava now say they come from your rides, whichever way they arrive. Reconnect it any time in Settings.'},
   {v:'3.48',d:'Ride days wait for your watch, not Strava',det:'A ride day with nothing synced used to say "Waiting for Strava" and pop up "Strava disconnected" on every launch, although your rides now come from your Apple Watch or Garmin through intervals.icu. It now says "Waiting for your ride", its Sync now checks intervals.icu, and it explains that the Renpho app on its own does not send rides anywhere, so log those with the note button. The Strava pop-up only appears if you tap a Strava sync yourself.'},
   {v:'3.47',d:'Pick your gym days for the week',det:'Tapping the refresh button on the week (or Generate) now asks which days you can get to the gym, pre-ticked with a suggestion, and it asks once at the start of each new week too. Your gym days get the right sessions for that many days (3 days: Push, Pull, Legs), most-needed first and spaced out; rides go on the best of the other days, always leaving at least one rest day. Past days and days you have already trained stay as they are. To change your mind mid-week (train more or less), tap the "Gym days … Change" bar at the top of the week. Also: the app now checks for a new version every time you switch back to it, not only when it is launched fresh, so fixes reach you sooner.'},
@@ -7083,12 +7084,428 @@ function _renderInner(){
   else if(S.screen==='log')el.innerHTML=rLog();
   else if(S.screen==='prs')el.innerHTML=rPRs();
   else if(S.screen==='review')el.innerHTML=rReview();
+  else if(S.screen==='ride'){el.innerHTML=rRide();_rideDraw();}
   else if(S.screen==='settings')el.innerHTML=rSettings();
   bindEnergy();
   loadAllGifs();
   // Bind scroll observers on dynamic regions that may have just been rendered.
   // Each binder is no-op when its target isn't present or is already bound.
   if(typeof _bindAskScrollObserver==='function')_bindAskScrollObserver();
+}
+
+/* ── BIKE RIDE MODE (v3.50) ────────────────────────────────────────────────
+   Connects straight to the Renpho AI bike over Bluetooth, shows live watts /
+   cadence / speed, takes heart rate from a second Bluetooth device (a chest
+   strap), records the ride and uploads it to intervals.icu as a TCX file, so it
+   comes back into the app like any other ride. The Renpho app itself sends
+   rides nowhere, which is why they never showed up.
+   Needs Web Bluetooth: Chrome on Android/desktop, or on an iPhone the Bluefy
+   browser (Safari and home-screen apps have no Bluetooth).
+   Bike protocol: applewatch/BIKE_PROTOCOL.md — a private service, SLIP framing,
+   CRC-16. Not the standard Fitness Machine service. */
+const BIKE_SUFFIXES=['21a4-11e8-8812-000c2920efff','8210-4578-82f1-0b2fc1e5c7fb'];
+const Bike={dev:null,ch:null,buf:[],live:null,liveAt:0,status:'off',name:'',err:'',q:Promise.resolve(),
+  hr:null,hrAt:0,hrDev:null,hrName:'',hrStatus:'off',trace:[],seen:{},badCrc:0,retry:0};
+const Ride={state:'idle',start:0,elapsed:0,dist:0,kj:0,samples:[],timer:null,erg:false,targetW:0,range:null,
+  lastTq:null,deposit:false,wake:null,note:'',name:'Ride'};
+function _crc16(bytes){
+  let c=0xFFFF;
+  for(const b of bytes){c=((c<<8)|(c>>>8))&0xFFFF;c^=b&0xFF;c^=(c&0xFF)>>4;c^=(c<<12)&0xFFFF;c^=((c&0xFF)<<5)&0xFFFF;}
+  return c&0xFFFF;
+}
+// One message: cmd, sub, payload, CRC (big-endian), SLIP-escaped, closed with C0.
+function _bikeFrame(cmd,sub,payload=[]){
+  const body=[cmd&255,sub&255,...payload],crc=_crc16(body),out=[];
+  for(const b of [...body,crc>>8,crc&255]){
+    if(b===0xC0)out.push(0xDB,0xDC);else if(b===0xDB)out.push(0xDB,0xDD);else out.push(b);
+  }
+  out.push(0xC0);
+  return new Uint8Array(out);
+}
+// Notifications are at most 20 bytes, so a message can arrive in pieces: buffer
+// up to each C0, un-escape, check the CRC. Returns the complete messages.
+function _bikeFeed(bytes){
+  const msgs=[];
+  for(const b of bytes){
+    if(b!==0xC0){Bike.buf.push(b);continue;}
+    if(!Bike.buf.length)continue;
+    const m=[];let esc=false;
+    for(const x of Bike.buf){
+      if(esc){m.push(x===0xDC?0xC0:x===0xDD?0xDB:x);esc=false;}
+      else if(x===0xDB)esc=true;
+      else m.push(x);
+    }
+    Bike.buf=[];
+    if(m.length<4)continue;
+    if(_crc16(m.slice(0,-2))!==((m[m.length-2]<<8)|m[m.length-1])){Bike.badCrc++;continue;}
+    msgs.push({cmd:m[0],sub:m[1],p:m.slice(2,-2)});
+  }
+  if(Bike.buf.length>512)Bike.buf=[];
+  return msgs;
+}
+// Live data (00 50), big-endian: cadence, speed/1000 m/s, power/10 W, distance,
+// status, gear, torque*0.5, heart rate, calories/1000.
+function _bikeLive(p){
+  if(p.length<15)return null;
+  const u16=o=>(p[o]<<8)|p[o+1],u32=o=>((p[o]<<24)|(p[o+1]<<16)|(p[o+2]<<8)|p[o+3])>>>0;
+  const d={cad:u16(0),spd:u16(2)/1000,pw:u16(4)/10,dist:u32(6),status:u16(10),gear:p[12],torque:p[13]*0.5,hr:p[14],kcal:p.length>=19?u32(15)/1000:0};
+  if(d.pw>1000||d.spd>200||d.torque>50)return null; // the bike's own app drops these too
+  return d;
+}
+function _bikeTrace(dir,bytes){
+  Bike.trace.push(dir+' '+[...bytes].map(b=>b.toString(16).padStart(2,'0')).join(' '));
+  if(Bike.trace.length>40)Bike.trace.shift();
+}
+function _bikeOnMsg(m){
+  const k=m.cmd.toString(16).padStart(2,'0')+' '+m.sub.toString(16).padStart(2,'0');
+  Bike.seen[k]=(Bike.seen[k]||0)+1;
+  if(m.cmd===0&&m.sub===0x50){const d=_bikeLive(m.p);if(d){Bike.live=d;Bike.liveAt=Date.now();}}
+  else if(m.cmd===0&&m.sub===0x31)_bikeSend(1,0x31);   // the bike asks to disconnect — acknowledge
+  else if(m.cmd===0&&m.sub===0x52&&m.p.length){        // resistance knob turned N clicks
+    const n=m.p[0]>127?m.p[0]-256:m.p[0];
+    if(Ride.erg)rideTarget(n*5);else if(Ride.deposit)rideResist(n*0.5);
+  }
+}
+// Web Bluetooth allows one operation at a time per device: queue the writes.
+function _bikeSend(cmd,sub,payload=[]){
+  const f=_bikeFrame(cmd,sub,payload);
+  Bike.q=Bike.q.then(async()=>{
+    if(!Bike.ch)return false;
+    _bikeTrace('>',f);
+    try{
+      if(Bike.ch.writeValueWithoutResponse)await Bike.ch.writeValueWithoutResponse(f);else await Bike.ch.writeValue(f);
+      return true;
+    }catch(e){
+      try{await Bike.ch.writeValue(f);return true;}
+      catch(e2){Bike.err='send failed: '+(e2&&e2.message||e2);return false;}
+    }
+  });
+  return Bike.q;
+}
+async function _bikeAttach(){
+  const gatt=await Bike.dev.gatt.connect();
+  let ch=null;
+  for(const suf of BIKE_SUFFIXES){
+    try{const svc=await gatt.getPrimaryService('00000001-'+suf);ch=await svc.getCharacteristic('00000004-'+suf);break;}catch(_){}
+  }
+  if(!ch)throw new Error('that device doesn\'t have the bike service');
+  Bike.ch=ch;Bike.buf=[];
+  if(!ch._tbBound){
+    ch._tbBound=true;
+    ch.addEventListener('characteristicvaluechanged',e=>{
+      const v=e.target.value,bytes=new Uint8Array(v.buffer,v.byteOffset,v.byteLength);
+      _bikeTrace('<',bytes);
+      for(const m of _bikeFeed(bytes))_bikeOnMsg(m);
+    });
+  }
+  await ch.startNotifications();
+  Bike.status='on';Bike.err='';Bike.retry=0;
+  // What the Renpho app sends when a ride starts: show torque on the bike's display, then Start.
+  _bikeSend(0,0x46,[0]);
+  if(Ride.state==='riding')_bikeSend(0,0x40,[0,2]);
+  if(Ride.deposit)_bikeSend(0,0x45,[1]);
+}
+async function bikeConnect(all=false){
+  if(!navigator.bluetooth){showToast('This browser has no Bluetooth — on iPhone open the app in Bluefy','var(--amb)');return;}
+  const svcs=BIKE_SUFFIXES.map(x=>'00000001-'+x);
+  try{
+    Bike.status='connecting';Bike.err='';_rideDraw();
+    const opt=all?{acceptAllDevices:true,optionalServices:svcs}
+      :{filters:[{services:[svcs[0]]},{services:[svcs[1]]},{namePrefix:'R-Q'},{namePrefix:'RENPHO'},{namePrefix:'Renpho'}],optionalServices:svcs};
+    const dev=await navigator.bluetooth.requestDevice(opt);
+    Bike.dev=dev;Bike.name=dev.name||'Bike';
+    dev.addEventListener('gattserverdisconnected',_bikeDropped);
+    await _bikeAttach();
+    showToast('🚲 Bike connected','var(--grn)');
+  }catch(e){
+    const msg=String(e&&e.message||e);
+    Bike.status=Bike.dev&&Bike.ch?'lost':'off';
+    if(!/cancel|chooser/i.test(msg)){Bike.err=msg;showToast('⚠️ Bike: '+msg,'var(--red)');}
+  }
+  _rideDraw();
+}
+// Dropped mid-ride: keep trying for a couple of minutes without needing a tap.
+function _bikeDropped(){
+  Bike.ch=null;Bike.status='lost';_rideDraw();
+  const again=()=>{
+    if(Bike.status!=='lost'||!Bike.dev||Bike.retry>=24)return;
+    Bike.retry++;
+    _bikeAttach().then(()=>{showToast('🚲 Bike reconnected','var(--grn)');_rideDraw();}).catch(()=>setTimeout(again,5000));
+  };
+  setTimeout(again,2000);
+}
+// Second Bluetooth device: any standard heart-rate sensor (a Garmin HRM-Dual /
+// HRM-Pro strap, or a watch that broadcasts heart rate).
+async function bikeConnectHR(){
+  if(!navigator.bluetooth){showToast('This browser has no Bluetooth — on iPhone open the app in Bluefy','var(--amb)');return;}
+  try{
+    Bike.hrStatus='connecting';_rideDraw();
+    const dev=await navigator.bluetooth.requestDevice({filters:[{services:['heart_rate']}]});
+    Bike.hrDev=dev;Bike.hrName=dev.name||'Heart rate';
+    const attach=async()=>{
+      const gatt=await dev.gatt.connect();
+      const ch=await (await gatt.getPrimaryService('heart_rate')).getCharacteristic('heart_rate_measurement');
+      if(!ch._tbBound){
+        ch._tbBound=true;
+        ch.addEventListener('characteristicvaluechanged',e=>{
+          const v=e.target.value;
+          Bike.hr=(v.getUint8(0)&1)?v.getUint16(1,true):v.getUint8(1);Bike.hrAt=Date.now();
+        });
+      }
+      await ch.startNotifications();
+      Bike.hrStatus='on';_rideDraw();
+    };
+    let tries=0;
+    dev.addEventListener('gattserverdisconnected',()=>{
+      Bike.hrStatus='lost';Bike.hr=null;_rideDraw();
+      const again=()=>{if(Bike.hrStatus!=='lost'||tries>=24)return;tries++;attach().then(()=>{tries=0;}).catch(()=>setTimeout(again,5000));};
+      setTimeout(again,2000);
+    });
+    await attach();
+    showToast('❤️ Heart rate connected','var(--grn)');
+  }catch(e){
+    const msg=String(e&&e.message||e);
+    Bike.hrStatus='off';
+    if(!/cancel|chooser/i.test(msg))showToast('⚠️ Heart rate: '+msg,'var(--red)');
+  }
+  _rideDraw();
+}
+function _rideHr(d){
+  const now=Date.now();
+  if(Bike.hr&&now-Bike.hrAt<6000)return Bike.hr;      // your strap
+  return d&&d.hr?d.hr:0;                              // a strap paired to the bike itself
+}
+function _rideTick(){
+  const now=Date.now();
+  const d=Bike.live&&now-Bike.liveAt<4000?Bike.live:null;
+  if(Ride.state==='riding'){
+    Ride.elapsed++;
+    const spd=d?d.spd:0;
+    Ride.dist+=spd;                    // metres this second
+    Ride.kj+=(d?d.pw:0)/1000;
+    Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist)]);
+    if(Ride.erg&&d)_rideErg(d);
+    if(Ride.elapsed%15===0)_rideStash();
+  }
+  if(S.screen==='ride')_rideDraw();
+}
+// Hold a target power: torque = watts × 9.56 ÷ cadence (the bike app's formula),
+// moved by at most 1 N·m a second so the resistance never jumps.
+function _rideErg(d){
+  if(!d.cad||!Ride.targetW)return;
+  const cad=Math.min(170,Math.max(40,d.cad));
+  let tq=Math.round(Math.min(40,Math.max(1,Ride.targetW*9.56/cad))*2)/2;
+  if(Ride.lastTq!=null){
+    if(Math.abs(tq-Ride.lastTq)<0.5)return;
+    tq=Ride.lastTq+Math.max(-1,Math.min(1,tq-Ride.lastTq));
+  }
+  Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);
+}
+function _rideTakeControl(){
+  if(Ride.deposit)return;
+  Ride.deposit=true;_bikeSend(0,0x46,[0]);_bikeSend(0,0x45,[1]); // the app now sets resistance
+}
+function rideResist(delta){
+  if(Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
+  _rideTakeControl();
+  const base=Ride.lastTq!=null?Ride.lastTq:(Bike.live&&Bike.live.torque?Bike.live.torque:5);
+  const tq=Math.min(40,Math.max(1,Math.round((base+delta)*2)/2));
+  Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);_rideDraw();
+}
+function rideTarget(delta){
+  Ride.targetW=Math.min(600,Math.max(30,(Ride.targetW||100)+delta));_rideDraw();
+}
+function rideErgToggle(){
+  if(Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
+  Ride.erg=!Ride.erg;
+  if(Ride.erg){if(!Ride.targetW)Ride.targetW=100;_rideTakeControl();}
+  _rideDraw();
+}
+function rideKnob(){ // hand resistance back to the bike's own knob
+  Ride.erg=false;Ride.deposit=false;Ride.lastTq=null;_bikeSend(0,0x45,[0]);_rideDraw();
+}
+async function _rideWake(){
+  try{if(navigator.wakeLock&&(!Ride.wake||Ride.wake.released))Ride.wake=await navigator.wakeLock.request('screen');}catch(_){}
+}
+function rideStart(){
+  if(Ride.state==='idle'||Ride.state==='done'){Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';_bikeSend(0,0x40,[0,2]);}
+  else _bikeSend(0,0x40,[0,4]);
+  Ride.state='riding';_rideWake();_rideDraw();
+}
+function ridePause(){Ride.state='paused';_bikeSend(0,0x40,[0,3]);_rideStash();_rideDraw();}
+// An unfinished ride survives a reload or a closed tab (kept on this device only).
+function _rideStash(){
+  try{localStorage.setItem('ride_progress',JSON.stringify({day:fd(new Date()),start:Ride.start,elapsed:Ride.elapsed,dist:Ride.dist,kj:Ride.kj,samples:Ride.samples}));}catch(_){}
+}
+function _rideRestore(){
+  if(Ride.state!=='idle')return;
+  try{
+    const p=JSON.parse(localStorage.getItem('ride_progress')||'null');
+    if(!p||p.day!==fd(new Date())||!p.samples||p.samples.length<30)return;
+    Object.assign(Ride,{state:'paused',start:p.start,elapsed:p.elapsed,dist:p.dist,kj:p.kj,samples:p.samples,note:'Picked up your unfinished ride — Resume, or Finish to save it.'});
+  }catch(_){}
+}
+function _rideStats(){
+  const x=Ride.samples,n=x.length||1,avg=a=>a.length?a.reduce((p,c)=>p+c,0)/a.length:0;
+  const cad=x.map(v=>v[2]).filter(v=>v>0),hr=x.map(v=>v[4]).filter(v=>v>0);
+  return{secs:x.length,avgW:Math.round(avg(x.map(v=>v[1]))),maxW:Math.max(0,...x.map(v=>v[1])),avgCad:Math.round(avg(cad)),
+    avgHr:Math.round(avg(hr)),km:+(Ride.dist/1000).toFixed(2),kcal:Math.round(Ride.kj),n};
+}
+function _rideTcx(){
+  const iso=t=>new Date(t*1000).toISOString().replace(/\.\d+Z$/,'Z');
+  const x=Ride.samples,st=_rideStats();
+  const pts=x.map(v=>`<Trackpoint><Time>${iso(v[0])}</Time><DistanceMeters>${v[5]}</DistanceMeters>${v[4]?`<HeartRateBpm><Value>${v[4]}</Value></HeartRateBpm>`:''}<Cadence>${v[2]}</Cadence><Extensions><ns3:TPX><ns3:Speed>${v[3]}</ns3:Speed><ns3:Watts>${v[1]}</ns3:Watts></ns3:TPX></Extensions></Trackpoint>`).join('');
+  return`<?xml version="1.0" encoding="UTF-8"?><TrainingCenterDatabase xmlns="http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2" xmlns:ns3="http://www.garmin.com/xmlschemas/ActivityExtension/v2"><Activities><Activity Sport="Biking"><Id>${iso(x[0][0])}</Id><Lap StartTime="${iso(x[0][0])}"><TotalTimeSeconds>${st.secs}</TotalTimeSeconds><DistanceMeters>${Math.round(Ride.dist)}</DistanceMeters><Calories>${st.kcal}</Calories><Intensity>Active</Intensity><TriggerMethod>Manual</TriggerMethod><Track>${pts}</Track></Lap></Activity></Activities></TrainingCenterDatabase>`;
+}
+async function _rideUpload(job){
+  const key=DB.get('icu_key',null);
+  if(!key)throw new Error('intervals.icu isn\'t connected (Settings → Ride sync)');
+  const form=new FormData();
+  form.append('file',new Blob([job.tcx],{type:'application/xml'}),'ride.tcx');
+  const r=await fetch(`${ICU_API}/athlete/0/activities?name=${encodeURIComponent(job.name)}&external_id=${encodeURIComponent(job.id)}`,
+    {method:'POST',headers:{Authorization:_icuAuthHeader(key)},body:form});
+  if(!r.ok)throw new Error('HTTP '+r.status);
+  const j=await r.json(),id=j.id||(j.activities&&j.activities[0]&&j.activities[0].id);
+  if(id){ // it's an indoor ride
+    try{await fetch(`${ICU_API}/activity/${id}`,{method:'PUT',headers:{Authorization:_icuAuthHeader(key),'Content-Type':'application/json'},body:JSON.stringify({type:'VirtualRide',trainer:true})});}catch(_){}
+  }
+  return id;
+}
+async function rideFinish(){
+  if(Ride.samples.length<60){
+    if(!confirm('This ride is under a minute — discard it?'))return;
+    rideDiscard();return;
+  }
+  Ride.state='done';
+  _bikeSend(0,0x40,[0,5]);
+  if(Ride.deposit)rideKnob();
+  try{if(Ride.wake)Ride.wake.release();}catch(_){}
+  const job={tcx:_rideTcx(),name:Ride.name||'Ride',id:'tb-ride-'+Math.round(Ride.start/1000)};
+  // Kept on this phone until intervals.icu has it, so no signal doesn't lose the ride.
+  try{localStorage.setItem('ride_pending',JSON.stringify(job));localStorage.removeItem('ride_progress');}catch(_){}
+  Ride.note='Saving your ride…';_rideDraw();
+  await _ridePendingSend(true);
+}
+async function _ridePendingSend(fromRide=false){
+  let job=null;
+  try{job=JSON.parse(localStorage.getItem('ride_pending')||'null');}catch(_){}
+  if(!job||!DB.get('icu_key',null)){if(fromRide&&job){Ride.note='Saved on this phone. Connect intervals.icu in Settings and it uploads.';_rideDraw();}return;}
+  try{
+    await _rideUpload(job);
+    localStorage.removeItem('ride_pending');
+    if(fromRide){Ride.note='✅ Ride saved — it shows on today in a few seconds.';_rideDraw();}
+    else showToast('🚲 Your earlier bike ride is uploaded','var(--grn)');
+    setTimeout(()=>{icuFetchActivities(false).then(()=>{if(S.screen!=='ride')render();}).catch(()=>{});},4000);
+  }catch(e){
+    if(fromRide){Ride.note=`Saved on this phone — the upload didn't go through (${e.message||e}). It retries next time you open the app.`;_rideDraw();}
+  }
+}
+function rideDiscard(){
+  _bikeSend(0,0x40,[0,0]);
+  if(Ride.deposit)rideKnob();
+  Object.assign(Ride,{state:'idle',elapsed:0,dist:0,kj:0,samples:[],note:''});
+  try{localStorage.removeItem('ride_progress');}catch(_){}
+  _rideDraw();
+}
+function rideDiag(){
+  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n${Bike.trace.join('\n')}`;
+  if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
+  const el=document.getElementById('rd-diag');if(el)el.textContent=t;
+}
+// Today's planned ride gives the watts to aim for.
+function _rideContext(){
+  const ds=fd(new Date());
+  const dp=(DB.get(DB.pk(getMon(new Date())),null)||[]).find(d=>d.date===ds);
+  const sess=dp&&/OUTDOOR|INDOOR/.test(dp.type)?getRideSession(dp.type):null;
+  const info=sess?SESSION_INFO[sess.name]:null,ftp=DB.get('user_profile',{})?.ftp;
+  Ride.name=sess?sess.name:'Bike ride';
+  Ride.range=info&&ftp?[Math.round(ftp*info.lo),Math.round(ftp*info.hi)]:null;
+  if(!Ride.targetW&&Ride.range)Ride.targetW=Math.round((Ride.range[0]+Ride.range[1])/2/5)*5;
+  return sess;
+}
+function _rideEntry(){
+  return`<button onclick="go('ride',{_dir:'fwd'})" style="width:100%;display:flex;align-items:center;gap:10px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:11px 13px;margin-bottom:12px;cursor:pointer;color:var(--txt);text-align:left;-webkit-appearance:none">
+  <span style="font-size:20px">🚲</span>
+  <span style="flex:1;min-width:0"><b style="font-size:13px">Ride with my bike</b><br><span style="font-size:11px;color:var(--t2)">Live watts from the Renpho bike · saved automatically</span></span>
+  <span style="color:#60a5fa;font-weight:700;font-size:12px">Open</span>
+</button>`;
+}
+function rRide(){
+  const sess=_rideContext();
+  _rideRestore();
+  if(!Ride.timer)Ride.timer=setInterval(_rideTick,1000);
+  const tile=(id,label,big)=>`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:${big?'14px 8px':'10px 8px'};text-align:center">
+    <div id="${id}" style="font-size:${big?'44px':'28px'};font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums">–</div>
+    <div id="${id}-l" style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-top:3px">${label}</div></div>`;
+  return`<div class="screen">
+<div class="day-hdr">
+  <button class="back-btn" onclick="go('day',{viewDate:new Date(),_dir:'back'})">← Back</button>
+  <div class="day-hdr-r">🚲 ${_esc(Ride.name)}</div>
+</div>
+${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:12px 13px;margin-bottom:12px;font-size:12px;line-height:1.6">
+  <b>This browser can't use Bluetooth.</b> On an iPhone, Safari and the home-screen app can't. Install the free <b>Bluefy</b> browser from the App Store, open <b>${location.host}${location.pathname}</b> in it, sign in once, and come back to this screen.</div>`}
+<div id="rd-conn"></div>
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">${tile('rd-pw','Watts',true)}${tile('rd-hr','Heart rate',true)}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">${tile('rd-cad','Cadence')}${tile('rd-spd','km/h')}${tile('rd-time','Time')}</div>
+<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">${tile('rd-dist','km')}${tile('rd-avg','Avg watts')}${tile('rd-kcal','kcal')}</div>
+<div id="rd-res"></div>
+<div id="rd-ctl"></div>
+<div id="rd-note" style="font-size:12px;color:var(--t2);line-height:1.5;text-align:center;margin:10px 0"></div>
+${sess?`<div style="font-size:12px;color:var(--t2);line-height:1.6;background:rgba(59,130,246,.06);border-left:2px solid var(--blu);border-radius:8px;padding:9px 12px;margin-bottom:12px">${sess.blocks.map(b=>`<b>${b.t}</b> ${b.d}`).join('<br>')}</div>`:''}
+<details style="font-size:11px;color:var(--t2)"><summary style="cursor:pointer;padding:6px 0">Connection details (for troubleshooting)</summary>
+  <button class="btn btn-s" style="margin:6px 0;font-size:12px;padding:8px" onclick="rideDiag()">Show &amp; copy details</button>
+  <button class="btn btn-s" style="margin:0 0 6px;font-size:12px;padding:8px" onclick="bikeConnect(true)">Bike not listed? Show every Bluetooth device</button>
+  <pre id="rd-diag" style="white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:220px;overflow:auto"></pre>
+</details>
+</div>`;
+}
+// Fills the Ride screen in place every second (a full redraw would fight your taps).
+function _rideDraw(){
+  if(S.screen!=='ride')return;
+  const $=id=>document.getElementById(id);
+  if(!$('rd-pw')){render();return;}
+  const now=Date.now(),d=Bike.live&&now-Bike.liveAt<4000?Bike.live:null,hr=_rideHr(d),st=_rideStats();
+  const set=(id,v)=>{const e=$(id);if(e&&e.textContent!==String(v))e.textContent=v;};
+  const pw=d?Math.round(d.pw):null;
+  set('rd-pw',pw==null?'–':pw);
+  const pe=$('rd-pw');
+  if(pe)pe.style.color=pw!=null&&Ride.range?(pw<Ride.range[0]?'var(--amb)':pw>Ride.range[1]?'var(--red)':'var(--grn)'):'';
+  set('rd-pw-l',Ride.range?`Watts · aim ${Ride.range[0]}–${Ride.range[1]}`:'Watts');
+  set('rd-hr',hr||'–');
+  set('rd-cad',d?d.cad:'–');
+  set('rd-spd',d?(d.spd*3.6).toFixed(1):'–');
+  const t=Ride.elapsed;set('rd-time',`${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`);
+  set('rd-dist',(Ride.dist/1000).toFixed(2));
+  set('rd-avg',Ride.samples.length?st.avgW:'–');
+  set('rd-kcal',Math.round(Ride.kj));
+  const chip=(on,txt,act,btn)=>`<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid ${on==='on'?'var(--grn)':on==='lost'?'var(--amb)':'var(--bord)'};border-radius:12px;padding:8px 10px">
+    <span style="flex:1;min-width:0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${txt}</span>
+    ${on==='on'?'':`<button onclick="${act}" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;flex-shrink:0">${btn}</button>`}</div>`;
+  const conn=`<div style="display:flex;gap:8px;margin-bottom:10px">
+    ${chip(Bike.status,Bike.status==='on'?`🚲 ${_esc(Bike.name)}${d?'':' · waiting for data'}`:Bike.status==='connecting'?'🚲 Connecting…':Bike.status==='lost'?'🚲 Reconnecting…':'🚲 Bike','bikeConnect()',Bike.status==='lost'?'Retry':'Connect')}
+    ${chip(Bike.hrStatus,Bike.hrStatus==='on'?`❤️ ${_esc(Bike.hrName)}`:Bike.hrStatus==='connecting'?'❤️ Connecting…':Bike.hrStatus==='lost'?'❤️ Reconnecting…':'❤️ Heart rate','bikeConnectHR()','Connect')}
+  </div>${Bike.err?`<div style="font-size:11px;color:var(--red);margin:-4px 0 10px;word-break:break-word">${_esc(Bike.err)}</div>`:''}`;
+  const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:18px;font-weight:800;width:46px;height:42px;cursor:pointer;flex-shrink:0';
+  const res=`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:10px 12px;margin-bottom:12px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <button style="${sb}" onclick="${Ride.erg?'rideTarget(-5)':'rideResist(-0.5)'}">−</button>
+      <div style="flex:1;text-align:center;min-width:0"><div style="font-size:18px;font-weight:800">${Ride.erg?`${Ride.targetW} W`:`${d?d.torque.toFixed(1):'–'}`}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${Ride.erg?'Holding this power':'Resistance (1–40)'}</div></div>
+      <button style="${sb}" onclick="${Ride.erg?'rideTarget(5)':'rideResist(0.5)'}">+</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:9px">
+      <button onclick="rideErgToggle()" style="flex:1;background:${Ride.erg?'var(--acc)':'var(--s2)'};border:1px solid ${Ride.erg?'var(--acc)':'var(--bord)'};border-radius:9px;color:${Ride.erg?'#fff':'var(--al)'};font-size:12px;font-weight:700;padding:8px;cursor:pointer">${Ride.erg?'✓ Auto resistance on':'Hold a target power'}</button>
+      ${Ride.deposit?`<button onclick="rideKnob()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:12px;font-weight:700;padding:8px;cursor:pointer">Back to the bike's knob</button>`:''}
+    </div></div>`;
+  const b=(txt,act,cls)=>`<button class="btn ${cls}" style="flex:1;margin:0" onclick="${act}">${txt}</button>`;
+  const ctl=`<div style="display:flex;gap:8px">${
+    Ride.state==='riding'?b('⏸ Pause','ridePause()','btn-s')+b('🏁 Finish','rideFinish()','btn-p')
+    :Ride.state==='paused'?b('▶ Resume','rideStart()','btn-p')+b('🏁 Finish','rideFinish()','btn-s')
+    :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
+    ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
+  const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
+  put('rd-conn',conn);put('rd-res',res);put('rd-ctl',ctl);
+  set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Bike connected. Press Start when you\'re ready.':''));
 }
 
 /* ── WEEK SCREEN ── */
@@ -7348,6 +7765,7 @@ ${(()=>{
 })()}
 ${rVitruvianCard(ds)}
 ${isGym||dp.extraGym?_watchNote(ds):''}
+${ds===fd(new Date())&&!/OUTDOOR|INDOOR/.test(dp.type)?_rideEntry():''}
 ${rRunsCard(ds)}
 ${rAskCoach(ds)}
 ${isGym&&dp.exercises?rExList(dp,log,{regen:true}):''}
@@ -7610,6 +8028,7 @@ function rRideCard(dp){
     })()}
   </div>
 </div>
+${dp.date===fd(new Date())?_rideEntry():''}
 ${actualHtml}
 ${manualHtml}
 ${hasLogged?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">📋 Today's plan</div>`:''}
@@ -13303,6 +13722,7 @@ function init(){
   }
   // intervals.icu auto-sync — same hourly rule, independent of Strava. This is
   // the automatic path now that Strava's API needs a paid subscription. v3.04.
+  _ridePendingSend(false); // v3.50: a bike ride that couldn't upload earlier
   if(DB.get('icu_key',null)&&!S.guest){
     const _icuLast=DB.get('icu_last_sync',null);
     if(!_icuLast||new Date(_icuLast).getTime()<Date.now()-60*60*1000)icuFetchActivities();
