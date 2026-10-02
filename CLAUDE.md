@@ -63,8 +63,11 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
 - Apple Watch: first install on the real watch; decide on the $99 Developer Program (TestFlight).
 - Garmin free-Strength sessions: does intervals.icu keep sets? Waiting for Settings →
   Diagnostics → Inspect output; otherwise parse the original .FIT.
-- Renpho indoor bike: try pairing it to the Apple Watch Ultra (else Garmin HR broadcast).
-  The user's current split idea: Apple Watch on the bike, Garmin in the gym.
+- Renpho bike: the AI Gym app syncs nowhere useful (only energy + distance to Apple Health), so
+  Renpho-only rides never reach the app. Its Bluetooth protocol is now documented in
+  `applewatch/BIKE_PROTOCOL.md` (private Mage Fitness service, NOT standard FTMS). Next: a ride
+  mode in the Apple Watch app that connects to the bike, records the ride and uploads it to
+  intervals.icu. Unverified against the real bike.
 
 ## Auto-publish rule (MANDATORY)
 
