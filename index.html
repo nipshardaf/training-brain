@@ -52,6 +52,24 @@
 html{height:-webkit-fill-available}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:100vh;min-height:-webkit-fill-available;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) calc(16px + var(--sr)) calc(var(--sb) + 88px) calc(16px + var(--sl));background:var(--bg)}
+/* v3.51 Ride screen: big tiles in portrait; on a phone on its side the numbers go across the top and the controls into a column on the right */
+.rd-a{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
+.rd-b{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.rd-t{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
+.rd-v{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
+.rd-b .rd-v{font-size:21px}
+.rd-l{font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+@media (orientation:landscape) and (max-height:600px){
+  .ride-screen{max-width:none;padding-bottom:calc(var(--sb) + 10px)}
+  .ride-screen .day-hdr{margin-bottom:6px;padding-bottom:4px}
+  .rd-grid{display:grid;grid-template-columns:minmax(0,1fr) 250px;gap:12px;align-items:start}
+  .rd-a{grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
+  .rd-b{gap:6px;margin-bottom:6px}
+  .rd-t{padding:6px 4px}
+  .rd-v{font-size:46px}
+  .rd-b .rd-v{font-size:20px}
+  .rd-extra{display:none}
+}
 
 /* reusable card surface — extracted from a style string repeated 21× */
 .card{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px}
@@ -1014,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.50';
+const APP_VERSION='3.51';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.51',d:'Ride screen: landscape layout and realistic speed',det:'Turn the phone on its side and the Ride screen puts watts, heart rate, cadence and time across the top in big numbers, with resistance and Pause / Finish in a column on the right. Speed and distance are now worked out from your power for a flat road and your weight, the way the Renpho app does it. The bike\'s own speed number is the flywheel\'s and read over 70 km/h.'},
   {v:'3.50',d:'Ride mode: connect straight to the Renpho bike',det:'A new Ride screen (the "Ride with my bike" button on today) connects to the Renpho bike over Bluetooth and shows live watts, cadence and speed, coloured against the day\'s watt target. A second connection takes heart rate from a chest strap. Finishing the ride uploads it to intervals.icu with full power data, so it appears in the app like any other ride (the Renpho app sends rides nowhere, which is why they were missing). You can set resistance from the screen, or have it hold a target power for you. On an iPhone this needs the free Bluefy browser, because Safari and the home-screen app cannot use Bluetooth. First version: not yet tried on the real bike, and the screen has a "Connection details" section to copy if something does not work.'},
   {v:'3.49',d:'Strava is an option again, only when it is connected',det:'Strava stays available as a ride source. When it is properly connected it syncs alongside intervals.icu (the ride card checks both). When it is not connected, or its login has expired, the app no longer tries it on every launch and no longer talks about Strava. Screens that said your rides and fitness numbers come from Strava now say they come from your rides, whichever way they arrive. Reconnect it any time in Settings.'},
   {v:'3.48',d:'Ride days wait for your watch, not Strava',det:'A ride day with nothing synced used to say "Waiting for Strava" and pop up "Strava disconnected" on every launch, although your rides now come from your Apple Watch or Garmin through intervals.icu. It now says "Waiting for your ride", its Sync now checks intervals.icu, and it explains that the Renpho app on its own does not send rides anywhere, so log those with the note button. The Strava pop-up only appears if you tap a Strava sync yourself.'},
@@ -7106,7 +7125,7 @@ function _renderInner(){
 const BIKE_SUFFIXES=['21a4-11e8-8812-000c2920efff','8210-4578-82f1-0b2fc1e5c7fb'];
 const Bike={dev:null,ch:null,buf:[],live:null,liveAt:0,status:'off',name:'',err:'',q:Promise.resolve(),
   hr:null,hrAt:0,hrDev:null,hrName:'',hrStatus:'off',trace:[],seen:{},badCrc:0,retry:0};
-const Ride={state:'idle',start:0,elapsed:0,dist:0,kj:0,samples:[],timer:null,erg:false,targetW:0,range:null,
+const Ride={state:'idle',start:0,elapsed:0,dist:0,kj:0,samples:[],vs:0,timer:null,erg:false,targetW:0,range:null,
   lastTq:null,deposit:false,wake:null,note:'',name:'Ride'};
 function _crc16(bytes){
   let c=0xFFFF;
@@ -7270,6 +7289,20 @@ async function bikeConnectHR(){
   }
   _rideDraw();
 }
+// v3.51: speed the way the Renpho app shows it — worked out from your power for a
+// flat road and your weight. The bike's own speed number is the flywheel's and
+// read 70+ km/h. Returns m/s.
+function _rideSpeedFor(p){
+  if(!(p>0))return 0;
+  const pr=DB.get('user_profile',{})||{};
+  let kg=parseFloat(pr.weight)||0;
+  if(pr.weightUnit==='lbs'||pr.weightUnit==='lb')kg*=0.4536;
+  if(!(kg>35&&kg<200))kg=75;
+  const a=0.5*1.225*0.32,b=0.005*(kg+9)*9.81; // air drag, rolling resistance (rider + bike)
+  let lo=0,hi=25;
+  for(let i=0;i<40;i++){const v=(lo+hi)/2;if((a*v*v+b)*v>p)hi=v;else lo=v;}
+  return Math.min(18,lo);
+}
 function _rideHr(d){
   const now=Date.now();
   if(Bike.hr&&now-Bike.hrAt<6000)return Bike.hr;      // your strap
@@ -7278,9 +7311,12 @@ function _rideHr(d){
 function _rideTick(){
   const now=Date.now();
   const d=Bike.live&&now-Bike.liveAt<4000?Bike.live:null;
+  // Eases towards the speed your power holds; coasts down when you stop pedalling.
+  const tgt=d&&d.cad>=10?_rideSpeedFor(d.pw):0;
+  Ride.vs=tgt>0?Ride.vs+(tgt-Ride.vs)*0.25:Math.max(0,Ride.vs-0.6);
   if(Ride.state==='riding'){
     Ride.elapsed++;
-    const spd=d?d.spd:0;
+    const spd=Ride.vs;
     Ride.dist+=spd;                    // metres this second
     Ride.kj+=(d?d.pw:0)/1000;
     Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist)]);
@@ -7330,6 +7366,7 @@ async function _rideWake(){
 function rideStart(){
   if(Ride.state==='idle'||Ride.state==='done'){Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';_bikeSend(0,0x40,[0,2]);}
   else _bikeSend(0,0x40,[0,4]);
+  Ride.note='';
   Ride.state='riding';_rideWake();_rideDraw();
 }
 function ridePause(){Ride.state='paused';_bikeSend(0,0x40,[0,3]);_rideStash();_rideDraw();}
@@ -7434,24 +7471,27 @@ function rRide(){
   const sess=_rideContext();
   _rideRestore();
   if(!Ride.timer)Ride.timer=setInterval(_rideTick,1000);
-  const tile=(id,label,big)=>`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:${big?'14px 8px':'10px 8px'};text-align:center">
-    <div id="${id}" style="font-size:${big?'44px':'28px'};font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums">–</div>
-    <div id="${id}-l" style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-top:3px">${label}</div></div>`;
-  return`<div class="screen">
+  const tile=(id,label)=>`<div class="rd-t"><div id="${id}" class="rd-v">–</div><div id="${id}-l" class="rd-l">${label}</div></div>`;
+  return`<div class="screen ride-screen">
 <div class="day-hdr">
   <button class="back-btn" onclick="go('day',{viewDate:new Date(),_dir:'back'})">← Back</button>
   <div class="day-hdr-r">🚲 ${_esc(Ride.name)}</div>
 </div>
 ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:12px 13px;margin-bottom:12px;font-size:12px;line-height:1.6">
   <b>This browser can't use Bluetooth.</b> On an iPhone, Safari and the home-screen app can't. Install the free <b>Bluefy</b> browser from the App Store, open <b>${location.host}${location.pathname}</b> in it, sign in once, and come back to this screen.</div>`}
-<div id="rd-conn"></div>
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px">${tile('rd-pw','Watts',true)}${tile('rd-hr','Heart rate',true)}</div>
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">${tile('rd-cad','Cadence')}${tile('rd-spd','km/h')}${tile('rd-time','Time')}</div>
-<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">${tile('rd-dist','km')}${tile('rd-avg','Avg watts')}${tile('rd-kcal','kcal')}</div>
-<div id="rd-res"></div>
-<div id="rd-ctl"></div>
-<div id="rd-note" style="font-size:12px;color:var(--t2);line-height:1.5;text-align:center;margin:10px 0"></div>
-${sess?`<div style="font-size:12px;color:var(--t2);line-height:1.6;background:rgba(59,130,246,.06);border-left:2px solid var(--blu);border-radius:8px;padding:9px 12px;margin-bottom:12px">${sess.blocks.map(b=>`<b>${b.t}</b> ${b.d}`).join('<br>')}</div>`:''}
+<div class="rd-grid">
+  <div class="rd-main">
+    <div id="rd-conn"></div>
+    <div class="rd-a">${tile('rd-pw','Watts')}${tile('rd-hr','Heart rate')}${tile('rd-cad','Cadence')}${tile('rd-time','Time')}</div>
+    <div class="rd-b">${tile('rd-spd','km/h')}${tile('rd-dist','km')}${tile('rd-avg','Avg watts')}${tile('rd-kcal','kcal')}</div>
+  </div>
+  <div class="rd-side">
+    <div id="rd-res"></div>
+    <div id="rd-ctl"></div>
+    <div id="rd-note" style="font-size:12px;color:var(--t2);line-height:1.5;text-align:center;margin:10px 0"></div>
+  </div>
+</div>
+${sess?`<div class="rd-extra" style="font-size:12px;color:var(--t2);line-height:1.6;background:rgba(59,130,246,.06);border-left:2px solid var(--blu);border-radius:8px;padding:9px 12px;margin-bottom:12px">${sess.blocks.map(b=>`<b>${b.t}</b> ${b.d}`).join('<br>')}</div>`:''}
 <details style="font-size:11px;color:var(--t2)"><summary style="cursor:pointer;padding:6px 0">Connection details (for troubleshooting)</summary>
   <button class="btn btn-s" style="margin:6px 0;font-size:12px;padding:8px" onclick="rideDiag()">Show &amp; copy details</button>
   <button class="btn btn-s" style="margin:0 0 6px;font-size:12px;padding:8px" onclick="bikeConnect(true)">Bike not listed? Show every Bluetooth device</button>
@@ -7473,7 +7513,7 @@ function _rideDraw(){
   set('rd-pw-l',Ride.range?`Watts · aim ${Ride.range[0]}–${Ride.range[1]}`:'Watts');
   set('rd-hr',hr||'–');
   set('rd-cad',d?d.cad:'–');
-  set('rd-spd',d?(d.spd*3.6).toFixed(1):'–');
+  set('rd-spd',(Ride.vs*3.6).toFixed(1));
   const t=Ride.elapsed;set('rd-time',`${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`);
   set('rd-dist',(Ride.dist/1000).toFixed(2));
   set('rd-avg',Ride.samples.length?st.avgW:'–');

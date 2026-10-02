@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.50 (`index.html`)
+### App — v3.51 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -38,7 +38,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   Renpho bike (`Bike`, `_bikeFrame`/`_bikeFeed`/`_bikeLive`, protocol in `applewatch/BIKE_PROTOCOL.md`) plus a
   second device for heart rate (standard HR service). Records 1 s samples, uploads a TCX to intervals.icu
   (`_rideUpload`, pending copy in localStorage `ride_pending`), resistance +/- and hold-a-target-power.
-  iPhone needs the Bluefy browser (Safari has no Web Bluetooth). Tested only against a mock bike so far.
+  iPhone needs the Bluefy browser (Safari has no Web Bluetooth). Confirmed working on the real bike 2026-10-02 (data, HR strap, recording). v3.51: landscape layout (`.rd-grid` media query) and speed/distance computed from power (`_rideSpeedFor`, flat road + profile weight) because the bike's raw speed is flywheel speed (read 70+ km/h).
 - Rides: intervals.icu is the ride source (Apple Watch rides via an OAuth uploader app, Garmin via Garmin Connect). Strava is an optional source, used only while `_stravaWorking()` (token, not expired, API app active) — then alongside intervals.icu (v3.49). The Renpho app alone syncs nowhere, so such rides are logged manually (v3.48 ride card says so).
 - Set logger: carry-forward, plates helper (barbell only), "last time"/"why this weight".
   Watch sets inherit phone weights (v3.42); ⌚ marks on watch sets; "Watch session live"
