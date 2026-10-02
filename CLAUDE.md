@@ -1,6 +1,6 @@
 # Training Brain — Working Notes for Claude
 
-## Current state — READ FIRST (updated 2026-09-29)
+## Current state — READ FIRST (updated 2026-10-02)
 
 Two Claude chats work on this repo, and this section is how they stay in sync:
 - **Local PC chat** ("Training Brain — Apple Watch app", runs on the user's Windows PC,
@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.55 (`index.html`)
+### App — v3.56 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -29,8 +29,10 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   mid-week changes. Rides are placed on the other days jointly with the sessions
   (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
   least one rest day is kept.
-- **Missed gym days (v3.45)** slide only gym sessions (rides/rest/weather stay on their
-  dates); overflow → `carryOut`, first next week. If the watch logs a different session
+- **Missed gym days (v3.56)**: the gym days left this week are re-chosen to cover the muscles
+  still untrained (`_gymCoverage` + `_fillGymSlots` in `applyAutoSkipShift`): nothing done with 2
+  days left → Upper + Legs, 1 left → Full Body, Push done + 2 left → Pull + Legs. Rides, rest,
+  weather and logged days stay put; next week picks up misses via muscle recency. If the watch logs a different session
   than planned, the plan follows (`_followDoneType`).
 - New weeks auto-build on open after the cloud pull (`_autoBuildWeek`). `genPlan` never
   fails (remembered location, no-weather fallback).
@@ -44,6 +46,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   beeps on step change. Big tiles: HR, time, calories, watts. The user wants HR + time + calories, not speed.
   v3.54: HR guard in watt workouts (`Ride.hrCut`, personal HR zones from `_rideLthr` = 0.9 × max HR of the last year) and
   calories via `_rideKcalPerSec` (Keytel HR formula with a strap, else AI Gym's power × BMI factor × 1.1).
+  v3.55: "Ride with my bike" entry on the week screen; after a ride on a gym day it offers to move that session (`rideMoveGym`).
 - Rides: intervals.icu is the ride source (Apple Watch rides via an OAuth uploader app, Garmin via Garmin Connect). Strava is an optional source, used only while `_stravaWorking()` (token, not expired, API app active) — then alongside intervals.icu (v3.49). The Renpho app alone syncs nowhere, so such rides are logged manually (v3.48 ride card says so).
 - Set logger: carry-forward, plates helper (barbell only), "last time"/"why this weight".
   Watch sets inherit phone weights (v3.42); ⌚ marks on watch sets; "Watch session live"
