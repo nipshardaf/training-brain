@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.54 (`index.html`)
+### App — v3.55 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears

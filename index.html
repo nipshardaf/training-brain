@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.54';
+const APP_VERSION='3.55';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.55',d:'Smoother bike rides',det:'"Ride with my bike" is now on the main week screen, so you no longer go through a gym day to start a ride. When you finish a ride on a day planned for the gym, the app asks whether to move that session: "Move it" puts it on a free day later in the week and re-plans (the week keeps the same number of gym days), or keep it for later today. The finished ride shows on today straight away.'},
   {v:'3.54',d:'Ride: eases off when your heart rate runs high; realistic calories',det:'In a workout, auto resistance now watches your heart rate as well as your watts. If it climbs past the step\'s ceiling, the bike eases the watts down 5 to 10 W every 15 seconds (30% at once if it is far over, never more than half) until your heart rate settles, then hands them back gradually; the goal panel says how much it has eased off. Heart-rate targets now fit you: they come from your threshold heart rate, estimated like the rest of the app does from the highest heart rate in your rides, with the plan\'s general numbers as a fallback. Calories are now counted like a fitness watch does when your heart-rate strap is connected (heart rate, weight, age and sex), or like the Renpho app does without it; counting only the bike\'s mechanical work read far too low.'},
   {v:'3.53',d:'Ride: workouts, free rides with goals, and auto resistance',det:'Before you start, pick what you are riding: today\'s planned workout, any of the plan\'s bike workouts (Recovery Spin, Endurance, Tempo, Sweet Spot, Hill Repeats and more), or a free ride with an optional goal of time, calories or a heart-rate zone. During a workout a goal panel shows the current step, its heart-rate and watt targets, the time left, what is next and how far through you are, with a beep at each change. Auto resistance holds each step\'s watts for you (− and + make the whole workout easier or harder); in a heart-rate free ride it adjusts every 15 seconds to keep you in the zone. Heart rate, time, calories and watts are now the big numbers.'},
   {v:'3.52',d:'Ride screen: no speed tile',det:'Speed does not mean much on a spin bike, so the Ride screen no longer shows it. Distance (worked out from your power) is still shown and saved with the ride.'},
@@ -7466,12 +7467,49 @@ async function _ridePendingSend(fromRide=false){
   try{
     await _rideUpload(job);
     localStorage.removeItem('ride_pending');
-    if(fromRide){Ride.note='✅ Ride saved — it shows on today in a few seconds.';_rideDraw();}
+    if(fromRide){Ride.note='✅ Ride saved to today.';_rideGymPrompt();_rideDraw();}
     else showToast('🚲 Your earlier bike ride is uploaded','var(--grn)');
-    setTimeout(()=>{icuFetchActivities(false).then(()=>{if(S.screen!=='ride')render();}).catch(()=>{});},4000);
+    setTimeout(()=>{icuFetchActivities(false).then(()=>{if(S.screen!=='ride')render();}).catch(()=>{});},1500);
   }catch(e){
     if(fromRide){Ride.note=`Saved on this phone — the upload didn't go through (${e.message||e}). It retries next time you open the app.`;_rideDraw();}
   }
+}
+// v3.55: a ride on a day planned for the gym — offer to move that session instead of
+// leaving the day owing it. Moving keeps the week's number of gym days: today comes
+// out of the gym days, the nearest free day later in the week goes in, and the week
+// is re-planned (so the session lands wherever it fits best).
+function _rideGymPrompt(){
+  const ds=fd(new Date());
+  const dp=(DB.get(DB.pk(getMon(new Date())),null)||[]).find(d=>d.date===ds);
+  const lg=DB.get('log_'+ds,null);
+  const lifted=!!lg?.exercises?.some(e=>e.sets?.some(x=>x.done));
+  Ride.gymPrompt=dp&&_MUSC[dp.type]&&!lifted?{type:dp.type}:null;
+}
+function _rideLabel(t){return typeof WI[t]?.l==='function'?WI[t].l():t;}
+async function rideMoveGym(){
+  const mon=getMon(new Date()),mk=fd(mon),ds=fd(new Date()),moved=Ride.gymPrompt&&Ride.gymPrompt.type;
+  Ride.gymPrompt=null;Ride.note='Re-planning your week…';_rideDraw();
+  try{await icuFetchActivities(false);}catch(_){} // so the planner sees today's ride
+  const plan=DB.get(DB.pk(mon),null)||[];
+  let days=DB.get('gym_days_'+mk,null);
+  if(!Array.isArray(days))days=plan.filter(d=>_MUSC[d.type]).map(d=>d.date);
+  days=days.filter(x=>x!==ds);
+  const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const free=plan.filter(d=>d.date>ds&&!days.includes(d.date)&&!_dayWasDone(d))
+    .sort((a,b)=>(a.type==='REST'?0:1)-(b.type==='REST'?0:1)||a.date.localeCompare(b.date));
+  if(free[0])days.push(free[0].date);
+  DB.set('gym_days_'+mk,days.sort());
+  const keep=S.weekStart;S.weekStart=mon;
+  try{await genPlan(true);}finally{S.weekStart=keep;}
+  const np=DB.get(DB.pk(mon),null)||[];
+  const at=np.find(d=>d.date>ds&&d.type===moved);
+  Ride.note=at?`✅ ${_rideLabel(moved)} moved to ${DN[new Date(at.date+'T12:00:00').getDay()]}.`
+    :free[0]?'✅ Week re-planned around today\'s ride.':'✅ Week re-planned — no free day was left, so it has one less gym day.';
+  _rideDraw();
+}
+function rideKeepGym(){
+  const t=Ride.gymPrompt&&Ride.gymPrompt.type;Ride.gymPrompt=null;
+  Ride.note=t?`👍 ${_rideLabel(t)} is still on for today.`:'';_rideDraw();
 }
 function rideDiscard(){
   _bikeSend(0,0x40,[0,0]);
@@ -7648,6 +7686,7 @@ ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px 
     <div id="rd-res"></div>
     <div id="rd-ctl"></div>
     <div id="rd-note" style="font-size:12px;color:var(--t2);line-height:1.5;text-align:center;margin:10px 0"></div>
+    <div id="rd-after"></div>
   </div>
 </div>
 <details style="font-size:11px;color:var(--t2)"><summary style="cursor:pointer;padding:6px 0">Connection details (for troubleshooting)</summary>
@@ -7763,6 +7802,11 @@ function _rideDraw(){
     :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
+  const gp=Ride.gymPrompt;
+  put('rd-after',gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+    <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
+    <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
+    <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:'');
   put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-res',res);put('rd-ctl',ctl);
   set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Bike connected. Pick your ride and press Start.':''));
 }
@@ -7798,6 +7842,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rGymDaysBar(plan)}
+${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
 ${rAskCoach()}
 ${rRideOnGymDayBanner()}
 ${rComebackBanner()}
