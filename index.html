@@ -66,7 +66,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
   .rd-a{grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:6px}
   .rd-b{gap:6px;margin-bottom:6px}
   .rd-t{padding:6px 4px}
-  .rd-v{font-size:46px}
+  .rd-v{font-size:min(42px,4.4vw)}
   .rd-b .rd-v{font-size:20px}
   .rd-extra{display:none}
 }
@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.52';
+const APP_VERSION='3.53';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.53',d:'Ride: workouts, free rides with goals, and auto resistance',det:'Before you start, pick what you are riding: today\'s planned workout, any of the plan\'s bike workouts (Recovery Spin, Endurance, Tempo, Sweet Spot, Hill Repeats and more), or a free ride with an optional goal of time, calories or a heart-rate zone. During a workout a goal panel shows the current step, its heart-rate and watt targets, the time left, what is next and how far through you are, with a beep at each change. Auto resistance holds each step\'s watts for you (− and + make the whole workout easier or harder); in a heart-rate free ride it adjusts every 15 seconds to keep you in the zone. Heart rate, time, calories and watts are now the big numbers.'},
   {v:'3.52',d:'Ride screen: no speed tile',det:'Speed does not mean much on a spin bike, so the Ride screen no longer shows it. Distance (worked out from your power) is still shown and saved with the ride.'},
   {v:'3.51',d:'Ride screen: landscape layout and realistic speed',det:'Turn the phone on its side and the Ride screen puts watts, heart rate, cadence and time across the top in big numbers, with resistance and Pause / Finish in a column on the right. Speed and distance are now worked out from your power for a flat road and your weight, the way the Renpho app does it. The bike\'s own speed number is the flywheel\'s and read over 70 km/h.'},
   {v:'3.50',d:'Ride mode: connect straight to the Renpho bike',det:'A new Ride screen (the "Ride with my bike" button on today) connects to the Renpho bike over Bluetooth and shows live watts, cadence and speed, coloured against the day\'s watt target. A second connection takes heart rate from a chest strap. Finishing the ride uploads it to intervals.icu with full power data, so it appears in the app like any other ride (the Renpho app sends rides nowhere, which is why they were missing). You can set resistance from the screen, or have it hold a target power for you. On an iPhone this needs the free Bluefy browser, because Safari and the home-screen app cannot use Bluetooth. First version: not yet tried on the real bike, and the screen has a "Connection details" section to copy if something does not work.'},
@@ -7127,7 +7128,8 @@ const BIKE_SUFFIXES=['21a4-11e8-8812-000c2920efff','8210-4578-82f1-0b2fc1e5c7fb'
 const Bike={dev:null,ch:null,buf:[],live:null,liveAt:0,status:'off',name:'',err:'',q:Promise.resolve(),
   hr:null,hrAt:0,hrDev:null,hrName:'',hrStatus:'off',trace:[],seen:{},badCrc:0,retry:0};
 const Ride={state:'idle',start:0,elapsed:0,dist:0,kj:0,samples:[],vs:0,timer:null,erg:false,targetW:0,range:null,
-  lastTq:null,deposit:false,wake:null,note:'',name:'Ride'};
+  lastTq:null,deposit:false,wake:null,note:'',name:'Ride',
+  prog:null,goal:null,picked:false,plan:null,auto:false,bias:0,stepIdx:-1,hrAdjAt:0,audio:null};
 function _crc16(bytes){
   let c=0xFFFF;
   for(const b of bytes){c=((c<<8)|(c>>>8))&0xFFFF;c^=b&0xFF;c^=(c&0xFF)>>4;c^=(c<<12)&0xFFFF;c^=((c&0xFF)<<5)&0xFFFF;}
@@ -7321,6 +7323,7 @@ function _rideTick(){
     Ride.dist+=spd;                    // metres this second
     Ride.kj+=(d?d.pw:0)/1000;
     Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist)]);
+    _rideAutoTick(d);
     if(Ride.erg&&d)_rideErg(d);
     if(Ride.elapsed%15===0)_rideStash();
   }
@@ -7344,28 +7347,35 @@ function _rideTakeControl(){
 }
 function rideResist(delta){
   if(Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
+  if(Ride.auto){rideTarget(delta>0?5:-5);return;} // auto: − / + make the whole ride easier / harder
   _rideTakeControl();
   const base=Ride.lastTq!=null?Ride.lastTq:(Bike.live&&Bike.live.torque?Bike.live.torque:5);
   const tq=Math.min(40,Math.max(1,Math.round((base+delta)*2)/2));
   Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);_rideDraw();
 }
 function rideTarget(delta){
+  if(Ride.auto){Ride.bias=Math.max(-100,Math.min(100,Ride.bias+delta));Ride.retarget=true;_rideDraw();return;}
   Ride.targetW=Math.min(600,Math.max(30,(Ride.targetW||100)+delta));_rideDraw();
 }
 function rideErgToggle(){
   if(Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
-  Ride.erg=!Ride.erg;
+  Ride.erg=!Ride.erg;Ride.auto=false;
   if(Ride.erg){if(!Ride.targetW)Ride.targetW=100;_rideTakeControl();}
   _rideDraw();
 }
 function rideKnob(){ // hand resistance back to the bike's own knob
-  Ride.erg=false;Ride.deposit=false;Ride.lastTq=null;_bikeSend(0,0x45,[0]);_rideDraw();
+  Ride.erg=false;Ride.auto=false;Ride.deposit=false;Ride.lastTq=null;_bikeSend(0,0x45,[0]);_rideDraw();
 }
 async function _rideWake(){
   try{if(navigator.wakeLock&&(!Ride.wake||Ride.wake.released))Ride.wake=await navigator.wakeLock.request('screen');}catch(_){}
 }
 function rideStart(){
-  if(Ride.state==='idle'||Ride.state==='done'){Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';_bikeSend(0,0x40,[0,2]);}
+  try{if(!Ride.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Ride.audio=new AC();}}catch(_){}
+  if(Ride.state==='idle'||Ride.state==='done'){
+    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;
+    _bikeSend(0,0x40,[0,2]);
+    if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
+  }
   else _bikeSend(0,0x40,[0,4]);
   Ride.note='';
   Ride.state='riding';_rideWake();_rideDraw();
@@ -7450,41 +7460,137 @@ function rideDiag(){
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
   const el=document.getElementById('rd-diag');if(el)el.textContent=t;
 }
-// Today's planned ride gives the watts to aim for.
+// v3.53: structured versions of the plan's bike workouts (getRideSession) so the
+// Ride screen can run them step by step — minutes, % of FTP, heart-rate range.
+const BIKE_PROGRAM_NAMES=['Recovery Spin','Endurance Ride','Tempo Intervals','Sweet Spot','Hill Repeats','Race-Pace Sharpener','Event Prep Spin'];
+function _bikeProgram(name,mins){
+  const st=(m,lo,hi,h1,h2,label,cad)=>({sec:Math.round(m*60),lo,hi,h1,h2,label,cad:cad||0});
+  const wu=m=>st(m,0.5,0.65,100,125,'Warm-up'),cd=m=>st(m,0.45,0.55,0,125,'Cool-down'),easy=m=>st(m,0.45,0.6,0,125,'Easy spin');
+  const rep=(n,work,rest)=>{const a=[];for(let i=0;i<n;i++){a.push({...work,label:`${work.label} ${i+1}/${n}`});if(i<n-1)a.push(rest);}return a;};
+  switch(name){
+    case 'Recovery Spin':return[st(Math.max(20,mins||35),0.45,0.6,0,125,'Very easy spin · 90+ rpm',90)];
+    case 'Endurance Ride':{const d=Math.max(30,mins||60);return[wu(10),st(d-15,0.56,0.75,120,140,'Steady Zone 2'),cd(5)];}
+    case 'Tempo Intervals':return[wu(15),...rep(2,st(12,0.76,0.87,140,155,'Tempo'),easy(5)),cd(10)];
+    case 'Sweet Spot':return[wu(15),...rep(3,st(10,0.88,0.93,150,165,'Sweet spot'),easy(5)),cd(10)];
+    case 'Hill Repeats':return[wu(15),...rep(5,st(4,0.9,1.05,150,170,'Climb · 60–70 rpm',65),easy(3)),cd(10)];
+    case 'Race-Pace Sharpener':return[wu(15),...rep(4,st(8,0.95,1.0,155,170,'Race pace'),easy(3)),cd(10)];
+    case 'Event Prep Spin':return[wu(10),...rep(3,st(2,0.95,1.0,150,165,'Race-pace effort'),easy(3)),cd(10)];
+  }
+  return null;
+}
+function _rideFtp(){const v=parseFloat((DB.get('user_profile',{})||{}).ftp);return v>40?v:0;}
+// Where the ride is in its program: the step, seconds left in it, overall progress.
+function _rideStepNow(){
+  const p=Ride.prog;if(!p)return null;
+  let t=Ride.elapsed,total=p.steps.reduce((a,x)=>a+x.sec,0);
+  for(let i=0;i<p.steps.length;i++){
+    const x=p.steps[i];
+    if(t<x.sec)return{i,step:x,left:x.sec-t,next:p.steps[i+1]||null,total,done:false};
+    t-=x.sec;
+  }
+  return{i:p.steps.length,step:null,left:0,next:null,total,done:true};
+}
+function _rideStepTargets(x){
+  const ftp=_rideFtp();
+  return{wLo:ftp?Math.round(ftp*x.lo):0,wHi:ftp?Math.round(ftp*x.hi):0,hLo:x.h1,hHi:x.h2};
+}
+// What you're riding: today's workout, any library workout, or a free ride with an
+// optional goal (time, calories, or a heart-rate zone).
+function ridePick(kind,arg,auto){
+  if(Ride.state==='riding'||Ride.state==='paused')return;
+  if(kind==='free'){
+    Ride.prog=null;Ride.goal=arg||null;Ride.name='Free ride';
+    Ride.auto=!!(arg&&arg.type==='hr');
+  }else{
+    const name=kind==='plan'&&Ride.plan?Ride.plan.name:arg;
+    const mins=kind==='plan'&&Ride.plan?Ride.plan.total:null;
+    const steps=_bikeProgram(name,mins);
+    if(!steps)return;
+    Ride.prog={name,steps};Ride.goal=null;Ride.name=name;Ride.auto=true;
+  }
+  if(!auto)Ride.picked=true;
+  Ride.stepIdx=-1;Ride.bias=0;
+  const e=document.getElementById('rd-goal');if(e)e._h='';
+  _rideDraw();
+}
+function rideAutoToggle(){
+  if(!Ride.auto&&Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
+  Ride.auto=!Ride.auto;Ride.erg=Ride.auto;
+  if(Ride.auto){_rideTakeControl();Ride.retarget=true;}
+  _rideDraw();
+}
+function _rideBeep(n=2){
+  const ac=Ride.audio;if(!ac)return;
+  try{
+    if(ac.state==='suspended')ac.resume();
+    for(let i=0;i<n;i++){
+      const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+i*0.22;
+      o.frequency.value=880;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.3,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
+      o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+0.18);
+    }
+  }catch(_){}
+}
+// Each second while riding: step changes (beep + new target) and auto resistance.
+// With watts known (an FTP) it holds each step's power; with only a heart-rate
+// goal it nudges the power every 15 s to keep you in the zone.
+function _rideAutoTick(d){
+  const sn=_rideStepNow();
+  if(sn&&(sn.i!==Ride.stepIdx||Ride.retarget)){
+    const changed=sn.i!==Ride.stepIdx,first=Ride.stepIdx===-1&&Ride.elapsed<=1;
+    Ride.stepIdx=sn.i;Ride.retarget=false;
+    if(changed&&!first)_rideBeep(sn.done?3:2);
+    if(changed&&sn.done&&!first)Ride.note='Workout complete — keep spinning easy, or Finish to save.';
+    if(sn.step){
+      const tg=_rideStepTargets(sn.step);
+      if(tg.wLo)Ride.targetW=Math.max(30,Math.round((tg.wLo+tg.wHi)/2/5)*5+Ride.bias);
+    }
+  }
+  if(!Ride.auto||Bike.status!=='on')return;
+  Ride.erg=true;
+  const zone=Ride.goal&&Ride.goal.type==='hr'?{lo:Ride.goal.lo,hi:Ride.goal.hi}
+    :(sn&&sn.step&&!_rideFtp()?{lo:sn.step.h1,hi:sn.step.h2}:null);
+  if(!zone)return;
+  const hr=_rideHr(d),now=Date.now();
+  if(!hr||now-Ride.hrAdjAt<15000)return;
+  if(!Ride.targetW)Ride.targetW=d&&d.pw?Math.round(d.pw/5)*5:100;
+  Ride.hrAdjAt=now;
+  if(hr>zone.hi+2)Ride.targetW-=hr>zone.hi+10?10:5;
+  else if(zone.lo&&hr<zone.lo-2)Ride.targetW+=hr<zone.lo-10?10:5;
+  Ride.targetW=Math.max(40,Math.min(400,Ride.targetW));
+}
 function _rideContext(){
   const ds=fd(new Date());
   const dp=(DB.get(DB.pk(getMon(new Date())),null)||[]).find(d=>d.date===ds);
   const sess=dp&&/OUTDOOR|INDOOR/.test(dp.type)?getRideSession(dp.type):null;
-  const info=sess?SESSION_INFO[sess.name]:null,ftp=DB.get('user_profile',{})?.ftp;
-  Ride.name=sess?sess.name:'Bike ride';
-  Ride.range=info&&ftp?[Math.round(ftp*info.lo),Math.round(ftp*info.hi)]:null;
-  if(!Ride.targetW&&Ride.range)Ride.targetW=Math.round((Ride.range[0]+Ride.range[1])/2/5)*5;
+  Ride.plan=sess?{name:sess.name,total:sess.total}:null;
+  if(!Ride.picked&&Ride.state==='idle'){if(sess&&_bikeProgram(sess.name,sess.total))ridePick('plan',null,true);else ridePick('free',null,true);}
   return sess;
 }
 function _rideEntry(){
   return`<button onclick="go('ride',{_dir:'fwd'})" style="width:100%;display:flex;align-items:center;gap:10px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:11px 13px;margin-bottom:12px;cursor:pointer;color:var(--txt);text-align:left;-webkit-appearance:none">
   <span style="font-size:20px">🚲</span>
-  <span style="flex:1;min-width:0"><b style="font-size:13px">Ride with my bike</b><br><span style="font-size:11px;color:var(--t2)">Live watts from the Renpho bike · saved automatically</span></span>
+  <span style="flex:1;min-width:0"><b style="font-size:13px">Ride with my bike</b><br><span style="font-size:11px;color:var(--t2)">Workouts or a free ride · live watts and heart rate · saved automatically</span></span>
   <span style="color:#60a5fa;font-weight:700;font-size:12px">Open</span>
 </button>`;
 }
 function rRide(){
-  const sess=_rideContext();
+  _rideContext();
   _rideRestore();
   if(!Ride.timer)Ride.timer=setInterval(_rideTick,1000);
   const tile=(id,label)=>`<div class="rd-t"><div id="${id}" class="rd-v">–</div><div id="${id}-l" class="rd-l">${label}</div></div>`;
   return`<div class="screen ride-screen">
 <div class="day-hdr">
   <button class="back-btn" onclick="go('day',{viewDate:new Date(),_dir:'back'})">← Back</button>
-  <div class="day-hdr-r">🚲 ${_esc(Ride.name)}</div>
+  <div class="day-hdr-r" id="rd-title">🚲 ${_esc(Ride.name)}</div>
 </div>
 ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.4);border-radius:12px;padding:12px 13px;margin-bottom:12px;font-size:12px;line-height:1.6">
   <b>This browser can't use Bluetooth.</b> On an iPhone, Safari and the home-screen app can't. Install the free <b>Bluefy</b> browser from the App Store, open <b>${location.host}${location.pathname}</b> in it, sign in once, and come back to this screen.</div>`}
 <div class="rd-grid">
   <div class="rd-main">
     <div id="rd-conn"></div>
-    <div class="rd-a">${tile('rd-pw','Watts')}${tile('rd-hr','Heart rate')}${tile('rd-cad','Cadence')}${tile('rd-time','Time')}</div>
-    <div class="rd-b">${tile('rd-dist','km')}${tile('rd-avg','Avg watts')}${tile('rd-kcal','kcal')}</div>
+    <div id="rd-goal"></div>
+    <div class="rd-a">${tile('rd-hr','Heart rate')}${tile('rd-time','Time')}${tile('rd-kcal','Calories')}${tile('rd-pw','Watts')}</div>
+    <div class="rd-b">${tile('rd-cad','Cadence')}${tile('rd-avg','Avg watts')}${tile('rd-dist','km')}</div>
   </div>
   <div class="rd-side">
     <div id="rd-res"></div>
@@ -7492,13 +7598,63 @@ ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px 
     <div id="rd-note" style="font-size:12px;color:var(--t2);line-height:1.5;text-align:center;margin:10px 0"></div>
   </div>
 </div>
-${sess?`<div class="rd-extra" style="font-size:12px;color:var(--t2);line-height:1.6;background:rgba(59,130,246,.06);border-left:2px solid var(--blu);border-radius:8px;padding:9px 12px;margin-bottom:12px">${sess.blocks.map(b=>`<b>${b.t}</b> ${b.d}`).join('<br>')}</div>`:''}
 <details style="font-size:11px;color:var(--t2)"><summary style="cursor:pointer;padding:6px 0">Connection details (for troubleshooting)</summary>
   <button class="btn btn-s" style="margin:6px 0;font-size:12px;padding:8px" onclick="rideDiag()">Show &amp; copy details</button>
   <button class="btn btn-s" style="margin:0 0 6px;font-size:12px;padding:8px" onclick="bikeConnect(true)">Bike not listed? Show every Bluetooth device</button>
   <pre id="rd-diag" style="white-space:pre-wrap;word-break:break-all;font-size:10px;max-height:220px;overflow:auto"></pre>
 </details>
 </div>`;
+}
+const _mmss=t=>`${Math.floor(Math.max(0,t)/60)}:${String(Math.max(0,Math.round(t))%60).padStart(2,'0')}`;
+// Before the ride: what to ride. During it: how you're doing against the goal.
+function _rideGoalHtml(d,hr){
+  const box=(inner,border)=>`<div style="background:var(--s1);border:1px solid ${border||'var(--bord)'};border-radius:14px;padding:10px 12px;margin-bottom:8px">${inner}</div>`;
+  const bar=(frac,color)=>`<div style="height:6px;background:var(--s2);border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${Math.round(Math.min(1,Math.max(0,frac))*100)}%;background:${color||'var(--acc)'}"></div></div>`;
+  if(Ride.state==='idle'||Ride.state==='done'){
+    const chip=(on,label,act)=>`<button onclick="${act}" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:999px;color:${on?'#fff':'var(--txt)'};font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer;margin:0 6px 6px 0">${label}</button>`;
+    const g=Ride.goal,free=!Ride.prog;
+    const progs=BIKE_PROGRAM_NAMES.filter(n=>!Ride.plan||n!==Ride.plan.name);
+    const mins=Ride.prog?Math.round(Ride.prog.steps.reduce((a,x)=>a+x.sec,0)/60):0;
+    return box(`<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px">What are you riding?</div>
+      ${Ride.plan?chip(Ride.prog&&Ride.prog.name===Ride.plan.name,`📋 Today: ${Ride.plan.name}`,"ridePick('plan')"):''}
+      ${chip(free,'🚲 Free ride',"ridePick('free',Ride.goal)")}
+      ${free?`<div style="font-size:11px;color:var(--t2);margin:2px 0 6px">Goal (optional)</div>
+        ${chip(!g,'None',"ridePick('free',null)")}${[20,30,45,60].map(m=>chip(g&&g.type==='time'&&g.val===m*60,`${m} min`,`ridePick('free',{type:'time',val:${m*60}})`)).join('')}
+        ${[200,300,500].map(k=>chip(g&&g.type==='kcal'&&g.val===k,`${k} kcal`,`ridePick('free',{type:'kcal',val:${k}})`)).join('')}
+        ${[[110,130,'Easy'],[120,140,'Zone 2'],[140,155,'Tempo']].map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
+      <details style="margin-top:2px"><summary style="cursor:pointer;font-size:12px;color:var(--al);font-weight:700;padding:3px 0">Other workouts</summary>
+        <div style="margin-top:6px">${progs.map(n=>chip(Ride.prog&&Ride.prog.name===n,n,`ridePick('prog','${n}')`)).join('')}</div></details>
+      ${Ride.prog?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:4px">${Ride.prog.steps.length} steps · ${mins} min${_rideFtp()?' · auto resistance holds each step\'s watts':' · set your FTP for watt targets; auto resistance follows heart rate'}</div>`:''}
+      ${free&&g&&g.type==='hr'?`<div style="font-size:11px;color:var(--t2);margin-top:4px">Auto resistance keeps your heart rate in the zone.</div>`:''}`);
+  }
+  if(Ride.prog){
+    const sn=_rideStepNow();
+    if(!sn||sn.done)return box(`<div style="font-size:15px;font-weight:800">✅ ${_esc(Ride.prog.name)} complete</div><div style="font-size:12px;color:var(--t2);margin-top:2px">Keep spinning easy, or Finish to save the ride.</div>${bar(1,'var(--grn)')}`,'var(--grn)');
+    const x=sn.step,tg=_rideStepTargets(x),pw=d?d.pw:0;
+    const inW=tg.wLo?(pw>=tg.wLo-5&&pw<=tg.wHi+5):true,inH=!hr||((!tg.hLo||hr>=tg.hLo)&&hr<=tg.hHi);
+    const ok=inW&&inH,border=d||hr?(ok?'var(--grn)':'var(--amb)'):'var(--bord)';
+    const elapsedAll=sn.total-(sn.total-Ride.elapsed);
+    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div style="min-width:0"><div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">Step ${sn.i+1} of ${Ride.prog.steps.length}</div>
+          <div style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(x.label)}</div></div>
+        <div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div></div>
+      <div style="font-size:12px;margin-top:3px">🎯 ${tg.wLo?`<b>${tg.wLo+Ride.bias}–${tg.wHi+Ride.bias} W</b> · `:''}❤️ <b>${tg.hLo?`${tg.hLo}–${tg.hHi}`:`under ${tg.hHi}`}</b>${x.cad?` · ${x.cad} rpm`:''}
+        ${d||hr?` <span style="color:${ok?'var(--grn)':'var(--amb)'};font-weight:700">${ok?'✓ on target':!inH?(hr>tg.hHi?'↓ ease off':'↑ push a bit'):(pw<tg.wLo?'↑ push a bit':'↓ ease off')}</span>`:''}</div>
+      ${bar(1-sn.left/x.sec,'var(--acc)')}
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-top:5px"><span>${sn.next?`Next: ${_esc(sn.next.label)} (${Math.round(sn.next.sec/60)} min)`:'Last step'}</span><span>${_mmss(sn.total-Ride.elapsed)} left in workout</span></div>
+      ${bar(elapsedAll/sn.total,'var(--grn)')}`,border);
+  }
+  const g=Ride.goal;
+  if(!g)return'';
+  if(g.type==='time')return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${Math.round(g.val/60)} min ride</b><span style="font-size:13px;font-weight:700">${Ride.elapsed>=g.val?'✅ done!':`${_mmss(g.val-Ride.elapsed)} to go`}</span></div>${bar(Ride.elapsed/g.val,Ride.elapsed>=g.val?'var(--grn)':'var(--acc)')}`);
+  if(g.type==='kcal'){const k=Math.round(Ride.kj);return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🔥 ${g.val} kcal</b><span style="font-size:13px;font-weight:700">${k>=g.val?'✅ done!':`${g.val-k} to go`}</span></div>${bar(k/g.val,k>=g.val?'var(--grn)':'#f97316')}`);}
+  if(g.type==='hr'){
+    const st=!hr?'waiting for heart rate':hr>g.hi?'↓ ease off':hr<g.lo?'↑ push a bit':'✓ in the zone';
+    const ok=hr&&hr>=g.lo&&hr<=g.hi;
+    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">❤️ Keep ${g.lo}–${g.hi} bpm</b><span style="font-size:13px;font-weight:700;color:${ok?'var(--grn)':'var(--amb)'}">${st}</span></div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`:'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
+  }
+  return'';
 }
 // Fills the Ride screen in place every second (a full redraw would fight your taps).
 function _rideDraw(){
@@ -7507,36 +7663,44 @@ function _rideDraw(){
   if(!$('rd-pw')){render();return;}
   const now=Date.now(),d=Bike.live&&now-Bike.liveAt<4000?Bike.live:null,hr=_rideHr(d),st=_rideStats();
   const set=(id,v)=>{const e=$(id);if(e&&e.textContent!==String(v))e.textContent=v;};
+  set('rd-title','🚲 '+Ride.name);
+  const sn=_rideStepNow(),tg=sn&&sn.step?_rideStepTargets(sn.step):null;
+  const range=tg&&tg.wLo?[tg.wLo+Ride.bias,tg.wHi+Ride.bias]:(!Ride.prog?Ride.range:null);
   const pw=d?Math.round(d.pw):null;
   set('rd-pw',pw==null?'–':pw);
   const pe=$('rd-pw');
-  if(pe)pe.style.color=pw!=null&&Ride.range?(pw<Ride.range[0]?'var(--amb)':pw>Ride.range[1]?'var(--red)':'var(--grn)'):'';
-  set('rd-pw-l',Ride.range?`Watts · aim ${Ride.range[0]}–${Ride.range[1]}`:'Watts');
+  if(pe)pe.style.color=pw!=null&&range?(pw<range[0]-5?'var(--amb)':pw>range[1]+5?'var(--red)':'var(--grn)'):'';
+  set('rd-pw-l',range?`Watts · ${range[0]}–${range[1]}`:'Watts');
   set('rd-hr',hr||'–');
+  const he=$('rd-hr'),hz=tg?{lo:tg.hLo,hi:tg.hHi}:(Ride.goal&&Ride.goal.type==='hr'?Ride.goal:null);
+  if(he)he.style.color=hr&&hz?(hr>hz.hi?'var(--red)':hz.lo&&hr<hz.lo?'var(--amb)':'var(--grn)'):'';
   set('rd-cad',d?d.cad:'–');
-  set('rd-spd',(Ride.vs*3.6).toFixed(1));
-  const t=Ride.elapsed;set('rd-time',`${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}`);
+  set('rd-time',_mmss(Ride.elapsed));
   set('rd-dist',(Ride.dist/1000).toFixed(2));
   set('rd-avg',Ride.samples.length?st.avgW:'–');
   set('rd-kcal',Math.round(Ride.kj));
   const chip=(on,txt,act,btn)=>`<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid ${on==='on'?'var(--grn)':on==='lost'?'var(--amb)':'var(--bord)'};border-radius:12px;padding:8px 10px">
     <span style="flex:1;min-width:0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${txt}</span>
     ${on==='on'?'':`<button onclick="${act}" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;flex-shrink:0">${btn}</button>`}</div>`;
-  const conn=`<div style="display:flex;gap:8px;margin-bottom:10px">
+  const conn=`<div style="display:flex;gap:8px;margin-bottom:8px">
     ${chip(Bike.status,Bike.status==='on'?`🚲 ${_esc(Bike.name)}${d?'':' · waiting for data'}`:Bike.status==='connecting'?'🚲 Connecting…':Bike.status==='lost'?'🚲 Reconnecting…':'🚲 Bike','bikeConnect()',Bike.status==='lost'?'Retry':'Connect')}
     ${chip(Bike.hrStatus,Bike.hrStatus==='on'?`❤️ ${_esc(Bike.hrName)}`:Bike.hrStatus==='connecting'?'❤️ Connecting…':Bike.hrStatus==='lost'?'❤️ Reconnecting…':'❤️ Heart rate','bikeConnectHR()','Connect')}
-  </div>${Bike.err?`<div style="font-size:11px;color:var(--red);margin:-4px 0 10px;word-break:break-word">${_esc(Bike.err)}</div>`:''}`;
+  </div>${Bike.err?`<div style="font-size:11px;color:var(--red);margin:-4px 0 8px;word-break:break-word">${_esc(Bike.err)}</div>`:''}`;
   const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:18px;font-weight:800;width:46px;height:42px;cursor:pointer;flex-shrink:0';
+  const autoAvail=!!(Ride.prog||(Ride.goal&&Ride.goal.type==='hr'));
+  const midTxt=Ride.auto?`${Ride.targetW||'–'} W`:Ride.erg?`${Ride.targetW} W`:`${d?d.torque.toFixed(1):'–'}`;
+  const midLbl=Ride.auto?(Ride.bias?`Auto · ${Ride.bias>0?'+':''}${Ride.bias} W harder`:'Auto resistance'):Ride.erg?'Holding this power':'Resistance (1–40)';
   const res=`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;align-items:center;gap:10px">
-      <button style="${sb}" onclick="${Ride.erg?'rideTarget(-5)':'rideResist(-0.5)'}">−</button>
-      <div style="flex:1;text-align:center;min-width:0"><div style="font-size:18px;font-weight:800">${Ride.erg?`${Ride.targetW} W`:`${d?d.torque.toFixed(1):'–'}`}</div>
-        <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${Ride.erg?'Holding this power':'Resistance (1–40)'}</div></div>
-      <button style="${sb}" onclick="${Ride.erg?'rideTarget(5)':'rideResist(0.5)'}">+</button>
+      <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(-5)':'rideResist(-0.5)'}">−</button>
+      <div style="flex:1;text-align:center;min-width:0"><div style="font-size:18px;font-weight:800">${midTxt}</div>
+        <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${midLbl}</div></div>
+      <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(5)':'rideResist(0.5)'}">+</button>
     </div>
-    <div style="display:flex;gap:8px;margin-top:9px">
-      <button onclick="rideErgToggle()" style="flex:1;background:${Ride.erg?'var(--acc)':'var(--s2)'};border:1px solid ${Ride.erg?'var(--acc)':'var(--bord)'};border-radius:9px;color:${Ride.erg?'#fff':'var(--al)'};font-size:12px;font-weight:700;padding:8px;cursor:pointer">${Ride.erg?'✓ Auto resistance on':'Hold a target power'}</button>
-      ${Ride.deposit?`<button onclick="rideKnob()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:12px;font-weight:700;padding:8px;cursor:pointer">Back to the bike's knob</button>`:''}
+    <div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap">
+      ${autoAvail?`<button onclick="rideAutoToggle()" style="flex:1;background:${Ride.auto?'var(--acc)':'var(--s2)'};border:1px solid ${Ride.auto?'var(--acc)':'var(--bord)'};border-radius:9px;color:${Ride.auto?'#fff':'var(--al)'};font-size:12px;font-weight:700;padding:8px;cursor:pointer">${Ride.auto?'✓ Auto resistance':'Auto resistance off'}</button>`
+        :`<button onclick="rideErgToggle()" style="flex:1;background:${Ride.erg?'var(--acc)':'var(--s2)'};border:1px solid ${Ride.erg?'var(--acc)':'var(--bord)'};border-radius:9px;color:${Ride.erg?'#fff':'var(--al)'};font-size:12px;font-weight:700;padding:8px;cursor:pointer">${Ride.erg?'✓ Holding target power':'Hold a target power'}</button>`}
+      ${Ride.deposit?`<button onclick="rideKnob()" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--t2);font-size:12px;font-weight:700;padding:8px;cursor:pointer">Use the bike's knob</button>`:''}
     </div></div>`;
   const b=(txt,act,cls)=>`<button class="btn ${cls}" style="flex:1;margin:0" onclick="${act}">${txt}</button>`;
   const ctl=`<div style="display:flex;gap:8px">${
@@ -7545,8 +7709,8 @@ function _rideDraw(){
     :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
-  put('rd-conn',conn);put('rd-res',res);put('rd-ctl',ctl);
-  set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Bike connected. Press Start when you\'re ready.':''));
+  put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-res',res);put('rd-ctl',ctl);
+  set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Bike connected. Pick your ride and press Start.':''));
 }
 
 /* ── WEEK SCREEN ── */
