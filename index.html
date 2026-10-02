@@ -1008,7 +1008,7 @@ const WI = {
   LONG_INDOOR:  {l:()=>{const s=getRideSession('LONG_INDOOR');  return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('LONG_INDOOR');  return `${s.total} min · Zone 2 · Indoor`;}},
   SHORT_INDOOR: {l:()=>{const s=getRideSession('SHORT_INDOOR'); return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('SHORT_INDOOR'); return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
-  SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Gym session missed — it moved to your next gym day.'},
+  SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Gym session missed — the gym days left this week now cover it.'},
   FULL_BODY:    {l:()=>'Full Body',         i:_icon('gym-weights.png','💪'),     c:'#7c3aed',d:()=>'One-session full-body — squat · hinge · press · pull · shoulder · core'},
 };
 
@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.55';
+const APP_VERSION='3.56';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.56',d:'Missed days: the rest of the week is re-planned to cover what you missed',det:'When gym days go by without a workout, the gym days left this week are now re-chosen to cover what you have not trained yet, instead of the missed sessions just sliding along. Two days left with nothing done becomes Upper + Legs, one day left becomes Full Body, and with Push already done two days become Pull + Legs. Rides, rest days and anything you have logged stay as they are, and whatever still cannot fit leads next week.'},
   {v:'3.55',d:'Smoother bike rides',det:'"Ride with my bike" is now on the main week screen, so you no longer go through a gym day to start a ride. When you finish a ride on a day planned for the gym, the app asks whether to move that session: "Move it" puts it on a free day later in the week and re-plans (the week keeps the same number of gym days), or keep it for later today. The finished ride shows on today straight away.'},
   {v:'3.54',d:'Ride: eases off when your heart rate runs high; realistic calories',det:'In a workout, auto resistance now watches your heart rate as well as your watts. If it climbs past the step\'s ceiling, the bike eases the watts down 5 to 10 W every 15 seconds (30% at once if it is far over, never more than half) until your heart rate settles, then hands them back gradually; the goal panel says how much it has eased off. Heart-rate targets now fit you: they come from your threshold heart rate, estimated like the rest of the app does from the highest heart rate in your rides, with the plan\'s general numbers as a fallback. Calories are now counted like a fitness watch does when your heart-rate strap is connected (heart rate, weight, age and sex), or like the Renpho app does without it; counting only the bike\'s mechanical work read far too low.'},
   {v:'3.53',d:'Ride: workouts, free rides with goals, and auto resistance',det:'Before you start, pick what you are riding: today\'s planned workout, any of the plan\'s bike workouts (Recovery Spin, Endurance, Tempo, Sweet Spot, Hill Repeats and more), or a free ride with an optional goal of time, calories or a heart-rate zone. During a workout a goal panel shows the current step, its heart-rate and watt targets, the time left, what is next and how far through you are, with a beep at each change. Auto resistance holds each step\'s watts for you (− and + make the whole workout easier or harder); in a heart-rate free ride it adjusts every 15 seconds to keep you in the zone. Heart rate, time, calories and watts are now the big numbers.'},
@@ -4931,17 +4932,45 @@ function _muscleLast(beforeStr){
     for(const m of _MUSC[x.type])if(x.date>last[m])last[m]=x.date;
   return last;
 }
+// v3.56: the n sessions that best cover what's still untrained this week, given the
+// sessions already done — every untrained muscle group first, then as little doubling
+// up as possible, then the usual set for the week (_WEEK_SET) where it fits. So two
+// days left with nothing done → Upper + Legs, one day → Full Body, Push done with two
+// days left → Pull + Legs. Ordered most-needed first.
+function _gymCoverage(n,doneTypes,total){
+  if(!(n>0))return[];
+  const G=['chest','back','delts','biceps','triceps','legs'];
+  const trained=new Set((doneTypes||[]).flatMap(t=>_MUSC[t]||[]));
+  const need=G.filter(g=>!trained.has(g));
+  const std=[...(_WEEK_SET[Math.max(1,Math.min(6,total||n))])];
+  for(const t of doneTypes||[]){const k=std.indexOf(t);if(k>=0)std.splice(k,1);}
+  const T=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
+  let best=null,bestC=Infinity;const pick=[];
+  const rec=start=>{
+    if(pick.length===n){
+      const cnt={};pick.forEach(t=>_MUSC[t].forEach(g=>{cnt[g]=(cnt[g]||0)+1;}));
+      let c=need.filter(g=>!cnt[g]).length*100;
+      for(const g of G){const k=cnt[g]||0;if(k>1)c+=(k-1)*2;if(k&&trained.has(g))c+=1;}
+      c+=pick.filter(t=>t==='FULL_BODY').length*4;
+      const sl=[...std];pick.forEach(t=>{const j=sl.indexOf(t);if(j>=0){sl.splice(j,1);c-=5;}});
+      if(c<bestC){bestC=c;best=[...pick];}
+      return;
+    }
+    for(let i=start;i<T.length;i++){pick.push(T[i]);rec(i);pick.pop();}
+  };
+  rec(0);
+  const today=fd(new Date()),ws=fd(S.weekStart),last=_muscleLast(ws>today?ws:today);
+  const needOf=t=>_MUSC[t].map(m=>last[m]).sort()[0];
+  return best.map((t,i)=>({t,i})).sort((a,b)=>needOf(a.t).localeCompare(needOf(b.t))||a.i-b.i).map(x=>x.t);
+}
 // The sessions still to place this week, most needed first: the set for the week's
 // number of gym days, minus what's already done or fixed this week, ordered by the
 // muscles trained longest ago — so whatever you missed last week comes first.
 function _gymOrder(total,fixedTypes){
-  const set=[...(_WEEK_SET[Math.max(1,Math.min(6,total||3))])];
-  for(const t of fixedTypes||[]){
-    const k=set.indexOf(t);
-    if(k>=0){set.splice(k,1);continue;}
-    // Not in the set (Upper in a 3-day week, say): it stands in for every session it fully covers.
-    for(let j=set.length-1;j>=0;j--)if(_MUSC[set[j]].every(m=>(_MUSC[t]||[]).includes(m)))set.splice(j,1);
-  }
+  // Sessions already done or fixed this week: cover what they left untrained (v3.56).
+  const set=fixedTypes&&fixedTypes.length
+    ?_gymCoverage(Math.max(0,(total||3)-fixedTypes.length),fixedTypes,total)
+    :[...(_WEEK_SET[Math.max(1,Math.min(6,total||3))])];
   const today=fd(new Date()),ws=fd(S.weekStart);
   const last=_muscleLast(ws>today?ws:today);
   const need=t=>_MUSC[t].map(m=>last[m]).sort()[0]; // its longest-untrained group
@@ -5008,7 +5037,7 @@ function getMissedLastWeek(){
   for(const day of lastPlan){
     if(day.date>=today)continue; // only count days that have passed
     const log=DB.get('log_'+day.date,null);
-    for(const g of [...(_MUSC[day.type]||[]),...(_MUSC[day.carryOut]||[])])plannedM.add(g);
+    for(const g of [...(_MUSC[day.type]||[]),...(_MUSC[day.carryOut]||[]),...(_MUSC[day.skipped]||[])])plannedM.add(g);
     if(rideTypes.has(day.type)){
       // Ride is "done" if Strava synced an activity OR user logged a ride manually
       const hasStrava=(typeof stravaRideOnDate==='function')&&!!stravaRideOnDate(day.date);
@@ -5048,10 +5077,8 @@ function _dayWasDone(d){
   if(typeof stravaRideOnDate==='function'&&stravaRideOnDate(d.date))return true;
   return false;
 }
-// v3.45: a missed GYM day slides only the gym sessions. The missed session takes
-// the next gym day still ahead, each later gym session moves to the gym day after
-// it, and the one that no longer fits goes first next week (carryOut on the
-// skipped day). Rides, rest days and each day's forecast stay on their dates, and
+// v3.45: a missed GYM day moves only the gym sessions (v3.56: the gym days left are
+// re-chosen to cover what's still untrained — see _gymCoverage). Rides, rest days and each day's forecast stay on their dates, and
 // a missed ride moves nothing. v2.83–3.44 slid the WHOLE week a day per miss:
 // rides landed on rainy days showing the sunny day's forecast, rest days moved, a
 // session fell off each time, and last week's misses (rides too) were dragged in
@@ -5071,14 +5098,47 @@ function applyAutoSkipShift(){
   const missedDays=sorted.filter(d=>d.date<todayStr&&_isGymDay(d.type)&&!d.locked&&!_dayWasDone(d));
   if(!missedDays.length)return false;
   const slots=sorted.filter(g=>g.date>=todayStr&&_isGymDay(g.type)&&!g.locked&&!_dayWasDone(g));
-  // Oldest missed session first, then the ones already ahead, in their order — so
-  // missing two days before opening the app gives the same order as one at a time.
-  const queue=[...missedDays.map(_gymPart),...slots.map(_gymPart)];
-  slots.forEach(g=>_setGymPart(g,queue.shift()));
-  // What's left over didn't fit this week: first next week, in order.
-  missedDays.forEach((d,i)=>_setGymPart(d,{type:'SKIPPED',skipped:d.type,carryOut:queue[i]?.type}));
+  // v3.56: the gym days left are re-chosen to cover what you haven't trained this week
+  // (two days left with nothing done → Upper + Legs; one → Full Body) instead of the
+  // missed sessions sliding along, which could leave a whole muscle group out. What
+  // still can't fit leads next week anyway — that order goes by muscle recency.
+  const doneTypes=_loggedGym(fd(mon),todayStr).map(x=>x.type);
+  _fillGymSlots(slots,_gymCoverage(slots.length,doneTypes,doneTypes.length+missedDays.length+slots.length),sorted);
+  missedDays.forEach(d=>_setGymPart(d,{type:'SKIPPED',skipped:d.type}));
   DB.set(pk,sorted);
   return true;
+}
+// Puts the chosen sessions on the open gym days: most needed first, never the same
+// muscles two days running (logged sessions and kept gym days next to them count).
+// A day keeps its exercises if its session doesn't change.
+function _fillGymSlots(slots,picks,sorted){
+  if(!slots.length||!picks.length)return;
+  const fixedType=ds=>{
+    const lg=DB.get('log_'+ds,null);
+    if(lg&&_MUSC[lg.type]&&lg.exercises?.some(e=>e.sets?.some(x=>x.done)))return lg.type;
+    const p=sorted.find(x=>x.date===ds);
+    return p&&_MUSC[p.type]&&!slots.includes(p)?p.type:null;
+  };
+  const shift=(ds,n)=>fd(addDays(new Date(ds+'T12:00:00'),n));
+  const overlap=(a,b)=>!!(a&&b)&&_MUSC[a].some(m=>(_MUSC[b]||[]).includes(m));
+  let best=null,bestC=Infinity;const used=[],cur=[];
+  const rec=k=>{
+    if(k===slots.length){
+      let c=0;
+      slots.forEach((g,i)=>{
+        const pi=slots.findIndex(x=>x.date===shift(g.date,-1)),ni=slots.findIndex(x=>x.date===shift(g.date,1));
+        if(overlap(cur[i],pi>=0?cur[pi]:fixedType(shift(g.date,-1))))c+=100;
+        if(ni<0&&overlap(cur[i],fixedType(shift(g.date,1))))c+=100;
+        c+=Math.abs(picks.indexOf(cur[i])-i);
+      });
+      if(c<bestC){bestC=c;best=[...cur];}
+      return;
+    }
+    const tried=new Set();
+    picks.forEach((t,j)=>{if(used[j]||tried.has(t))return;tried.add(t);used[j]=true;cur.push(t);rec(k+1);cur.pop();used[j]=false;});
+  };
+  rec(0);
+  slots.forEach((g,i)=>{const t=best&&best[i];if(t&&g.type!==t)_setGymPart(g,{type:t,exercises:genSession(t)});});
 }
 // v3.45: you did a different gym session than the plan has for that day (the
 // watch had an older copy, say). The day becomes what you did, and the session it
