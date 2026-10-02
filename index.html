@@ -54,7 +54,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) calc(16px + var(--sr)) calc(var(--sb) + 88px) calc(16px + var(--sl));background:var(--bg)}
 /* v3.51 Ride screen: big tiles in portrait; on a phone on its side the numbers go across the top and the controls into a column on the right */
 .rd-a{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
-.rd-b{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:12px}
+.rd-b{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .rd-t{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
 .rd-v{font-size:40px;font-weight:800;line-height:1.05;font-variant-numeric:tabular-nums;white-space:nowrap}
 .rd-b .rd-v{font-size:21px}
@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.51';
+const APP_VERSION='3.52';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.52',d:'Ride screen: no speed tile',det:'Speed does not mean much on a spin bike, so the Ride screen no longer shows it. Distance (worked out from your power) is still shown and saved with the ride.'},
   {v:'3.51',d:'Ride screen: landscape layout and realistic speed',det:'Turn the phone on its side and the Ride screen puts watts, heart rate, cadence and time across the top in big numbers, with resistance and Pause / Finish in a column on the right. Speed and distance are now worked out from your power for a flat road and your weight, the way the Renpho app does it. The bike\'s own speed number is the flywheel\'s and read over 70 km/h.'},
   {v:'3.50',d:'Ride mode: connect straight to the Renpho bike',det:'A new Ride screen (the "Ride with my bike" button on today) connects to the Renpho bike over Bluetooth and shows live watts, cadence and speed, coloured against the day\'s watt target. A second connection takes heart rate from a chest strap. Finishing the ride uploads it to intervals.icu with full power data, so it appears in the app like any other ride (the Renpho app sends rides nowhere, which is why they were missing). You can set resistance from the screen, or have it hold a target power for you. On an iPhone this needs the free Bluefy browser, because Safari and the home-screen app cannot use Bluetooth. First version: not yet tried on the real bike, and the screen has a "Connection details" section to copy if something does not work.'},
   {v:'3.49',d:'Strava is an option again, only when it is connected',det:'Strava stays available as a ride source. When it is properly connected it syncs alongside intervals.icu (the ride card checks both). When it is not connected, or its login has expired, the app no longer tries it on every launch and no longer talks about Strava. Screens that said your rides and fitness numbers come from Strava now say they come from your rides, whichever way they arrive. Reconnect it any time in Settings.'},
@@ -7483,7 +7484,7 @@ ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px 
   <div class="rd-main">
     <div id="rd-conn"></div>
     <div class="rd-a">${tile('rd-pw','Watts')}${tile('rd-hr','Heart rate')}${tile('rd-cad','Cadence')}${tile('rd-time','Time')}</div>
-    <div class="rd-b">${tile('rd-spd','km/h')}${tile('rd-dist','km')}${tile('rd-avg','Avg watts')}${tile('rd-kcal','kcal')}</div>
+    <div class="rd-b">${tile('rd-dist','km')}${tile('rd-avg','Avg watts')}${tile('rd-kcal','kcal')}</div>
   </div>
   <div class="rd-side">
     <div id="rd-res"></div>
