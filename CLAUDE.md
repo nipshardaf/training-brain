@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.58 (`index.html`)
+### App — v3.59 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -29,6 +29,13 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   mid-week changes. Rides are placed on the other days jointly with the sessions
   (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
   least one rest day is kept.
+- **Rides live in the cloud, one entry each (v3.59).** `users/<uid>/rides/<start minute>` (`_rideKey`). `_ridesListen`
+  (from `startSyncListener`) loads them once, then child events merge into local `strava_activities` (`_ridesMerge`:
+  twins = starts within 10 min + durations within 2 min, the intervals.icu copy wins). Any change to the local list
+  pushes new/better rides (`_ridesPush`). Ride mode writes its ride on save (`job.act` → `_ridesAddLocal`).
+  Pulled `strava_activities` blobs are merged, never replace. Worker v13 (`worker.js`, NOT yet pasted into
+  Cloudflare) adds `/rides/register` + a Cron Trigger (`pollRides`) that PATCHes the same entries; the app
+  registers only when the Worker replies `X-TB-Worker: 13`.
 - **The week is worked out, not stored (v3.58).** `plan_<monday>` holds only what was chosen (generated
   week + your edits). `DB.get` of a plan key returns `_resolveWeek(base)`: logged days show what you did,
   missed gym days are SKIPPED, and if anything was missed/done differently the open gym days are re-chosen by

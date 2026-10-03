@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.58';
+const APP_VERSION='3.59';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.59',d:'Rides reach all your devices straight away',det:'Each ride is now kept once in your account in the cloud, and every signed-in device receives new rides live. A ride you finish in Ride mode shows up on your other phone within seconds, and a ride one device fetches from intervals.icu is shared with the others instead of each phone keeping its own list.'},
   {v:'3.58',d:'Your phones always agree on the week',det:'The week is now worked out from what actually happened (your logged sessions, rides and the days that have passed) each time it is shown, instead of each phone re-planning it and saving its own version. Two phones that had heard about different things used to save different weeks and overwrite each other; now the same logs and rides give the same week on every device. Missed days and sessions done differently still re-plan the days left, exactly as before, and a re-planned day keeps its exercises.'},
   {v:'3.57',d:'Rides from your other phone show up, and a ride on a gym day moves that session',det:'Rides from intervals.icu are now fetched whenever you come back to the app (and every 15 minutes while it is open), not only on a fresh launch once an hour, so a ride saved on another phone shows up and the "You rode today" banner appears. "Make it a ride day" now moves the gym session to a free day later in the week and re-plans the rest, the same as after a ride in Ride mode, instead of sliding every session along. A ride no longer counts as doing a planned gym session, so that session is never silently dropped: the days left are re-planned to cover it.'},
   {v:'3.56',d:'Missed days: the rest of the week is re-planned to cover what you missed',det:'When gym days go by without a workout, the gym days left this week are now re-chosen to cover what you have not trained yet, instead of the missed sessions just sliding along. Two days left with nothing done becomes Upper + Legs, one day left becomes Full Body, and with Push already done two days become Pull + Legs. Rides, rest days and anything you have logged stay as they are, and whatever still cannot fit leads next week.'},
@@ -2432,6 +2433,107 @@ function rideSourceIcon(a){
 function _stravaWorking(){
   return!!DB.get('strava_token',null)&&!DB.get('strava_auth_expired',false)&&!DB.get('strava_app_inactive',false);
 }
+// ── v3.59 RIDES: ONE ENTRY PER RIDE IN THE CLOUD ─────────────────────────────
+// users/<uid>/rides/<start minute> holds each ride once. Every signed-in device
+// listens and merges them into its local list (strava_activities, which the rest of
+// the app reads), and a device that learns of a ride (an intervals.icu fetch, a ride
+// finished in Ride mode, an import) writes just that ride. Before, each phone
+// fetched on its own and synced its whole ride list as one item, so phones could
+// disagree about whether today's ride had happened. The Worker (v13) can fill the
+// same place on a timer, with no phone open.
+function _rideKey(a){return String(a&&a.start_date_local||'').slice(0,16).replace(/[.$#\[\]\/]/g,'_');}
+function _rideSig(a){return[a.moving_time,a.distance,a.kilojoules,a.average_watts,a.average_heartrate,a.name,a.type,a._tss].join('|');}
+// The same ride from two sources (starts within 10 min, durations within 2 min; two
+// separate rides on one day start further apart): the intervals.icu copy wins,
+// otherwise the newer copy does.
+function _rideSame(a,b){
+  const ta=Date.parse(a.start_date_local),tb=Date.parse(b.start_date_local);
+  return Math.abs(ta-tb)<600000&&Math.abs((a.moving_time||0)-(b.moving_time||0))<120;
+}
+function _rideBetter(a,b){return!b||!!a._icu||!b._icu;}
+function _rideTwin(a,list){const k=_rideKey(a);return list.find(b=>_rideKey(b)===k)||list.find(b=>_rideSame(a,b))||null;}
+let _ridesRef=null,_ridesCloud=null,_ridesApplying=false,_ridesQ={},_ridesQT=null,_ridesUpT=null;
+function _ridesListen(uid){
+  if(_ridesRef||!_fbDb||!uid||S.guest)return;
+  const ref=_fbDb.ref('users/'+uid+'/rides');_ridesRef=ref;
+  ref.once('value').then(s=>{
+    const v=s.val()||{};_ridesCloud={};
+    for(const k in v)if(v[k]&&v[k].start_date_local)_ridesCloud[k]=v[k];
+    _ridesMerge(Object.values(_ridesCloud));
+    _ridesPushSoon(500); // what this device knew before rides moved to the cloud
+    _ridesRegisterWorker();
+    const on=c=>{
+      const r=c.val();if(!r||!r.start_date_local)return;
+      _ridesCloud[c.key]=r;_ridesQ[c.key]=r;
+      clearTimeout(_ridesQT);_ridesQT=setTimeout(()=>{const l=Object.values(_ridesQ);_ridesQ={};_ridesMerge(l);},300);
+    };
+    ref.on('child_added',on);ref.on('child_changed',on);
+  }).catch(e=>{console.warn('[rides] listen failed',e);_ridesRef=null;});
+}
+// Rides from the cloud (or another device's old-style list) into this device's list.
+function _ridesMerge(list){
+  const cur=[...(DB.get('strava_activities',[])||[])];let changed=false;
+  for(const r of list||[]){
+    if(!r||!r.start_date_local||_isRunAct(r))continue;
+    const have=_rideTwin(r,cur);
+    if(have&&(_rideSig(have)===_rideSig(r)||!_rideBetter(r,have)))continue;
+    if(have)cur.splice(cur.indexOf(have),1);
+    cur.push(r);changed=true;
+  }
+  // One copy per ride in this device's list too.
+  const one=[];
+  for(const a of cur.sort((a,b)=>(b._icu?1:0)-(a._icu?1:0))){if(_isRunAct(a)||!one.some(b=>_rideSame(a,b)))one.push(a);else changed=true;}
+  if(!changed)return false;
+  cur.length=0;cur.push(...one);
+  cur.sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
+  _ridesApplying=true;try{DB.set('strava_activities',cur);}finally{_ridesApplying=false;}
+  if(S.screen!=='ride')render();
+  return true;
+}
+function _ridesPushSoon(ms=2000){
+  if(!_ridesRef||!_ridesCloud)return;
+  clearTimeout(_ridesUpT);_ridesUpT=setTimeout(_ridesPush,ms);
+}
+function _ridesPush(){
+  if(!_ridesRef||!_ridesCloud||S.guest)return;
+  const cloud=Object.values(_ridesCloud),upd={},seen=[];
+  // intervals.icu copies first, so a twin from another source never goes up instead
+  const local=(DB.get('strava_activities',[])||[]).filter(a=>!_isRunAct(a)).sort((a,b)=>(b._icu?1:0)-(a._icu?1:0));
+  for(const a of local){
+    const k=_rideKey(a);if(!k)continue;
+    if(seen.some(b=>_rideKey(b)===k||_rideSame(a,b)))continue;
+    seen.push(a);
+    const c=_ridesCloud[k]||cloud.find(b=>_rideSame(a,b));
+    if(c&&(_rideSig(c)===_rideSig(a)||!_rideBetter(a,c)))continue;
+    if(c&&_rideKey(c)!==k)upd[_rideKey(c)]=null; // the better copy replaces it
+    upd[k]=JSON.parse(JSON.stringify(a));
+  }
+  if(!Object.keys(upd).length)return;
+  const prev={};for(const k in upd){prev[k]=_ridesCloud[k];if(upd[k])_ridesCloud[k]=upd[k];else delete _ridesCloud[k];}
+  _ridesRef.update(upd).catch(e=>{
+    console.warn('[rides] upload failed',e);
+    for(const k in prev){if(prev[k])_ridesCloud[k]=prev[k];else delete _ridesCloud[k];}
+  });
+}
+// The Worker (v13+) can fetch rides into the cloud every 10 minutes, so they arrive
+// with no phone open. This hands it this account's intervals.icu key — only once
+// the Worker says it supports that (an older one would pass the request to the AI).
+async function _ridesRegisterWorker(){
+  if(S.guest||!_fbAuth||!_fbAuth.currentUser)return;
+  const key=DB.get('icu_key',null),tag=key?String(_hash(key)):'off';
+  if(DB.get('rides_worker_tag',null)===tag&&(tag==='off'||DB.get('rides_worker_cron',false)))return;
+  try{
+    const probe=await fetch(GEMINI_PROXY+'/yt-search');
+    if(+(probe.headers.get('X-TB-Worker')||0)<13)return;
+    const r=await fetch(GEMINI_PROXY+'/rides/register',{method:'POST',
+      headers:{'Content-Type':'application/json',Authorization:'Bearer '+await _fbAuth.currentUser.getIdToken()},
+      body:JSON.stringify(key?{icuKey:key}:{off:true})});
+    const j=await r.json().catch(()=>({}));
+    if(r.ok){DB.set('rides_worker_tag',tag);DB.set('rides_worker_cron',!!j.cron);}
+  }catch(_){}
+}
+// A ride this device just made (Ride mode): into the list and the cloud straight away.
+function _ridesAddLocal(a){if(a&&a.start_date_local){_ridesMerge([a]);_ridesPushSoon(0);}}
 function stravaRideOnDate(dateStr){
   const acts=DB.get('strava_activities',[])||[];
   return acts.find(a=>(a.start_date_local||'').slice(0,10)===dateStr)||null;
@@ -2582,10 +2684,12 @@ function saveIcuKey(){
   DB.set('icu_key',v);DB.set('icu_last_error',null);
   showToast('🔑 Key saved — syncing…','var(--acc)');
   icuFetchActivities(true);
+  _ridesRegisterWorker();
 }
 function icuDisconnect(){
   if(!confirm('Disconnect intervals.icu? Your already-synced rides stay.'))return;
   DB.set('icu_key',null);DB.set('icu_last_sync',null);DB.set('icu_last_error',null);
+  _ridesRegisterWorker();
   render();showToast('intervals.icu disconnected','var(--t2)');
 }
 
@@ -2712,7 +2816,8 @@ function rIcuCard(){
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <div style="font-size:26px;line-height:1">🔗</div>
     <div><div style="font-size:14px;font-weight:700">intervals.icu connected</div>
-    <div style="font-size:11px;color:var(--t2)">${n} ride${n!==1?'s':''} synced${last?` · last ${last.slice(0,16).replace('T',' ')}`:''}</div></div>
+    <div style="font-size:11px;color:var(--t2)">${n} ride${n!==1?'s':''} synced${last?` · last ${last.slice(0,16).replace('T',' ')}`:''}</div>
+    ${_ridesCloud?`<div style="font-size:11px;color:var(--grn)">☁️ ${Object.keys(_ridesCloud).length} rides shared across your devices${DB.get('rides_worker_cron',false)?' · checked every 10 min':''}</div>`:''}</div>
   </div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:10px">Your Garmin rides reach the app automatically — Garmin syncs to intervals.icu, and the app pulls from there on every open. No Strava, no subscription.</div>
   ${err?`<div style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;padding:8px 10px;margin-bottom:10px;font-size:11px;color:var(--red);font-family:monospace;word-break:break-word">HTTP ${err.status} — ${_esc(err.detail||'')}</div>`:''}
@@ -4723,6 +4828,7 @@ const DB = {
     catch(e){_storageWriteFailed(k,e);}
     // Track changed sync keys so saveToCloud can write only the diff.
     if(!_suppressDirty&&_isSyncKey(k)&&!_dirtyKeys.has(k)){_dirtyKeys.add(k);_persistDirty();}
+    if(k==='strava_activities'&&!_ridesApplying)_ridesPushSoon(); // v3.59: new rides to the cloud
     if(k.startsWith('plan_')||k==='strava_activities')_watchPushSoon(); // v3.37: keep the watch's gym days in step with the plan (v3.58: rides can change it too)
     // v3.41 live mode: today's weights/reps edited on the phone reach the watch too
     // (but not the app's own writes of sets that came from the watch).
@@ -6879,6 +6985,9 @@ async function loadFromCloud(manual=false){
           merged.sort((a,b)=>a.ts-b.ts);
           const cutoff=fd(addDays(new Date(),-30));
           DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
+        } else if(k==='strava_activities'){
+          // v3.59: merged, never replaced — another device's list may be missing rides this one has.
+          _ridesMerge(Array.isArray(v)?v:[]);
         } else if(_dirtyKeys.has(k)||_inflightKeys.has(k)){
           // Changed on this device and not uploaded yet, so newer than the cloud
           // copy — keep it; the next save uploads it. v3.33.
@@ -6912,6 +7021,7 @@ async function loadFromCloud(manual=false){
 // Real-time cross-device listener — watches the 'updated' timestamp on Firebase.
 // When another device saves, it's a different timestamp than _myLastSaveTs, so we pull.
 function startSyncListener(uid){
+  _ridesListen(uid); // v3.59
   if(_syncListenerActive||!_fbDb||!uid)return;
   _syncListenerActive=true;
   let _firstFire=true; // skip the initial fire (that's our own loadFromCloud data)
@@ -7589,6 +7699,15 @@ async function rideFinish(){
   if(Ride.deposit)rideKnob();
   try{if(Ride.wake)Ride.wake.release();}catch(_){}
   const job={tcx:_rideTcx(),name:Ride.name||'Ride',id:'tb-ride-'+Math.round(Ride.start/1000)};
+  // v3.59: the ride itself, so your other devices see it the moment it's saved.
+  {const st=_rideStats(),t=new Date(Ride.start),p=n=>String(n).padStart(2,'0');
+   const mh=Math.max(0,...Ride.samples.map(v=>v[4]||0));
+   job.act={start_date_local:`${fd(t)}T${p(t.getHours())}:${p(t.getMinutes())}:${p(t.getSeconds())}`,
+     moving_time:st.secs,elapsed_time:st.secs,distance:Math.round(Ride.dist),
+     average_heartrate:st.avgHr||null,max_heartrate:mh||null,average_watts:st.avgW,weighted_average_watts:st.avgW,
+     max_watts:st.maxW,device_watts:true,total_elevation_gain:0,average_cadence:st.avgCad||null,
+     average_speed:st.secs?+(Ride.dist/st.secs).toFixed(2):null,kilojoules:st.kcal,
+     name:job.name,type:'VirtualRide',sport_type:'VirtualRide',_tb:true};}
   // Kept on this phone until intervals.icu has it, so no signal doesn't lose the ride.
   try{localStorage.setItem('ride_pending',JSON.stringify(job));localStorage.removeItem('ride_progress');}catch(_){}
   Ride.note='Saving your ride…';_rideDraw();
@@ -7601,6 +7720,7 @@ async function _ridePendingSend(fromRide=false){
   try{
     await _rideUpload(job);
     localStorage.removeItem('ride_pending');
+    _ridesAddLocal(job.act); // v3.59
     if(fromRide){Ride.note='✅ Ride saved to today.';_rideGymPrompt();_rideDraw();}
     else showToast('🚲 Your earlier bike ride is uploaded','var(--grn)');
     setTimeout(()=>{icuFetchActivities(false).then(()=>{if(S.screen!=='ride')render();}).catch(()=>{});},1500);

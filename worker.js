@@ -1,3 +1,10 @@
+// v13 — Rides on a timer. Every 10 minutes (Cron Trigger) the worker fetches the last
+//       few days of rides from intervals.icu for each user who registered, and writes
+//       each one to users/<uid>/rides/<start minute> in Firebase, where every device
+//       receives it live (app v3.59+). POST /rides/register (Firebase ID token) stores
+//       that user's intervals.icu key in KV (TB_INBOX, prefix r:). Needs the secret
+//       FIREBASE_SA (service-account JSON) or FIREBASE_DB_SECRET; replies carry
+//       X-TB-Worker: 13 so the app knows it can register.
 // v12 — AI proxy only answers signed-in users of the app: it checks the Firebase
 //       ID token (Authorization: Bearer …) against Google's public keys. Every
 //       reply carries X-TB-Auth: 1 so the app knows it can start sending the
@@ -170,6 +177,27 @@ export default {
       return jsonRes({ error: 'not found' }, 404);
     }
 
+    // ── Rides on a timer: a signed-in user registers their intervals.icu key ──
+    if (url.pathname === '/rides/register') {
+      const res = (obj, status = 200) => new Response(JSON.stringify(obj), {
+        status, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+      if (request.method !== 'POST') return res({ error: 'POST only' }, 405);
+      if (!env.TB_INBOX) return res({ error: 'KV namespace TB_INBOX not bound' }, 503);
+      const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      const user = token ? await verifyFirebaseToken(token, env.FIREBASE_PROJECT_ID || 'training-631c1') : null;
+      if (!user) return res({ error: 'sign in first' }, 401);
+      let body;
+      try { body = await request.json(); } catch { return res({ error: 'bad json' }, 400); }
+      const uid = String(user.sub);
+      if (body.off || !body.icuKey) {
+        await env.TB_INBOX.delete('r:' + uid);
+        return res({ ok: true, on: false });
+      }
+      await env.TB_INBOX.put('r:' + uid, JSON.stringify({ k: String(body.icuKey).slice(0, 200), at: new Date().toISOString() }));
+      return res({ ok: true, on: true, cron: !!(env.FIREBASE_SA || env.FIREBASE_DB_SECRET) });
+    }
+
     // ── AI proxy with fallback chain: Gemini → Perplexity → OpenAI ───────────
     const cors = corsHeaders(origin);
     // Anyone could call the AI proxy before (iOS home-screen apps send no Origin,
@@ -275,7 +303,98 @@ export default {
       headers: { 'Content-Type': 'application/json', ...cors },
     });
   },
+
+  // Cron Trigger (every 10 minutes): new rides into each registered user's Firebase.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(pollRides(env));
+  },
 };
+
+// ── Rides on a timer (v13) ────────────────────────────────────────────────────
+// The same conversion and key as the app (index.html: _icuToActivity, _rideKey), so a
+// ride written here and one written by a phone land on the same entry.
+const RIDE_TYPES = new Set(['Ride', 'VirtualRide', 'EBikeRide', 'EBikeSport', 'EMountainBikeRide', 'GravelRide',
+  'MountainBikeRide', 'Handcycle', 'Velomobile', 'IndoorCycling', 'Indoor Cycling', 'Spinning', 'StationaryBike',
+  'Cycling', 'indoor_cycling', 'virtual_ride']);
+function icuToRide(a) {
+  if (!a || !a.start_date_local || !RIDE_TYPES.has(a.type)) return null;
+  const dur = a.moving_time || a.elapsed_time;
+  if (!dur) return null;
+  const r = n => (n == null ? null : Math.round(n));
+  const avgW = r(a.average_watts);
+  const ifv = a.icu_intensity != null ? (a.icu_intensity > 3 ? a.icu_intensity / 100 : a.icu_intensity) : null;
+  const out = {
+    start_date_local: a.start_date_local, moving_time: dur, elapsed_time: a.elapsed_time || dur,
+    distance: Math.round(a.distance || 0), average_heartrate: r(a.average_heartrate), max_heartrate: r(a.max_heartrate),
+    average_watts: avgW, weighted_average_watts: a.icu_weighted_avg_watts != null ? r(a.icu_weighted_avg_watts) : avgW,
+    max_watts: r(a.max_watts), device_watts: avgW != null, total_elevation_gain: Math.round(a.total_elevation_gain || 0),
+    average_cadence: r(a.average_cadence), average_speed: a.distance && dur ? +(a.distance / dur).toFixed(2) : null,
+    kilojoules: a.calories != null ? r(a.calories) : (avgW ? Math.round(avgW * dur / 1000) : null),
+    suffer_score: null, perceived_exertion: null, pr_count: null, workout_type: null,
+    name: a.name || 'Ride', type: a.type || 'Ride', sport_type: a.type || 'Ride', _icu: true,
+  };
+  if (a.icu_training_load != null) Object.assign(out, { _tss: Math.round(a.icu_training_load), _tssFromIcu: true, _tssEst: false });
+  if (ifv != null) out._if = +ifv.toFixed(2);
+  for (const k in out) if (out[k] === null || out[k] === undefined) delete out[k];
+  return out;
+}
+const rideKey = a => String(a.start_date_local || '').slice(0, 16).replace(/[.$#\[\]\/]/g, '_');
+
+async function pollRides(env) {
+  if (!env.TB_INBOX || !(env.FIREBASE_SA || env.FIREBASE_DB_SECRET)) return;
+  const dbUrl = (env.FIREBASE_DB_URL || 'https://training-631c1-default-rtdb.firebaseio.com').replace(/\/$/, '');
+  const auth = await firebaseAuthParam(env);
+  if (!auth) return;
+  const day = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
+  const list = await env.TB_INBOX.list({ prefix: 'r:', limit: 100 });
+  for (const k of list.keys) {
+    try {
+      const reg = JSON.parse((await env.TB_INBOX.get(k.name)) || 'null');
+      if (!reg || !reg.k) continue;
+      const uid = k.name.slice(2);
+      if (!/^[A-Za-z0-9_-]{6,128}$/.test(uid)) continue;
+      const r = await fetch(`https://intervals.icu/api/v1/athlete/0/activities?oldest=${day(-3)}&newest=${day(1)}`,
+        { headers: { Authorization: 'Basic ' + btoa('API_KEY:' + reg.k) } });
+      if (r.status === 401 || r.status === 403) { await env.TB_INBOX.delete(k.name); continue; } // key revoked
+      if (!r.ok) continue;
+      const upd = {};
+      for (const a of await r.json()) { const ride = icuToRide(a); if (ride) upd[rideKey(ride)] = ride; }
+      if (!Object.keys(upd).length) continue;
+      // PATCH: only these rides change; an unchanged ride raises no event on the devices.
+      await fetch(`${dbUrl}/users/${uid}/rides.json?${auth}`, { method: 'PATCH', body: JSON.stringify(upd) });
+    } catch (e) { /* one user's failure never stops the others */ }
+  }
+}
+
+// REST auth for Firebase: a service account (preferred) or a legacy database secret.
+let _fbTok = null, _fbTokExp = 0;
+async function firebaseAuthParam(env) {
+  if (env.FIREBASE_SA) {
+    if (_fbTok && Date.now() < _fbTokExp) return 'access_token=' + _fbTok;
+    try {
+      const sa = JSON.parse(env.FIREBASE_SA);
+      const now = Math.floor(Date.now() / 1000);
+      const enc = o => btoa(JSON.stringify(o)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const head = enc({ alg: 'RS256', typ: 'JWT' });
+      const claim = enc({ iss: sa.client_email, aud: 'https://oauth2.googleapis.com/token', iat: now, exp: now + 3600,
+        scope: 'https://www.googleapis.com/auth/firebase.database https://www.googleapis.com/auth/userinfo.email' });
+      const pem = sa.private_key.replace(/-----[^-]+-----/g, '').replace(/\s+/g, '');
+      const der = Uint8Array.from(atob(pem), c => c.charCodeAt(0));
+      const key = await crypto.subtle.importKey('pkcs8', der, { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' }, false, ['sign']);
+      const sig = new Uint8Array(await crypto.subtle.sign('RSASSA-PKCS1-v1_5', key, new TextEncoder().encode(head + '.' + claim)));
+      const jwt = head + '.' + claim + '.' + btoa(String.fromCharCode(...sig)).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_');
+      const r = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=' + jwt,
+      });
+      const j = await r.json();
+      if (!j.access_token) return null;
+      _fbTok = j.access_token; _fbTokExp = Date.now() + ((j.expires_in || 3600) - 300) * 1000;
+      return 'access_token=' + _fbTok;
+    } catch (e) { return null; }
+  }
+  return env.FIREBASE_DB_SECRET ? 'auth=' + encodeURIComponent(env.FIREBASE_DB_SECRET) : null;
+}
 
 // ── Firebase ID token check (RS256 JWT signed by Google's securetoken keys) ──
 const JWKS_URL = 'https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com';
@@ -326,7 +445,8 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Expose-Headers': 'X-TB-Auth',
+    'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker',
     'X-TB-Auth': '1',
+    'X-TB-Worker': '13',
   };
 }
