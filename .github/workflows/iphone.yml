@@ -32,6 +32,44 @@ jobs:
           grep -E "warning:" build.log | grep "/iphone/" | sed -E 's#^.*/iphone/([^:]+):([0-9]+):([0-9]+): warning: (.*)$#::warning file=iphone/\1,line=\2,col=\3::\4#' | sort -u | head -20
           tail -5 build.log
           exit $status
+      # An unsigned .ipa for installing without Xcode: TrollStore installs it as is
+      # (permanently); SideStore/AltStore sign it with your own free Apple ID. Published
+      # as the "iphone-latest" release, with a SideStore/AltStore source (apps.json) so
+      # those apps can offer updates.
+      - name: Build the installable app (.ipa)
+        working-directory: iphone
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          VER="1.0.${{ github.run_number }}"
+          xcodebuild -project TrainingBrainPhone.xcodeproj -target TrainingBrainPhone -sdk iphoneos \
+            -configuration Release SYMROOT="$PWD/build" CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            MARKETING_VERSION="$VER" CURRENT_PROJECT_VERSION="${{ github.run_number }}" build > ipa.log 2>&1 \
+            || { grep -E "error:" ipa.log | head -20 | sed 's/^/::error::/'; exit 1; }
+          rm -rf Payload && mkdir Payload
+          cp -R build/Release-iphoneos/TrainingBrainPhone.app Payload/
+          zip -qry TrainingBrain.ipa Payload
+          SIZE=$(stat -f%z TrainingBrain.ipa)
+          BASE="https://github.com/${{ github.repository }}/releases/download/iphone-latest"
+          cat > apps.json <<EOF
+          {"name":"Training Brain","identifier":"com.nipshardaf.trainingbrain.source",
+           "apps":[{"name":"Training Brain","bundleIdentifier":"com.nipshardaf.trainingbrain.phone",
+            "developerName":"Training Brain","subtitle":"Gym & bike training, with Bluetooth for your bike",
+            "localizedDescription":"The Training Brain app with Bluetooth for the Renpho bike and a heart-rate strap.",
+            "iconURL":"https://raw.githubusercontent.com/${{ github.repository }}/main/iphone/Sources/Assets.xcassets/AppIcon.appiconset/icon.png",
+            "tintColor":"7c3aed",
+            "versions":[{"version":"$VER","buildVersion":"${{ github.run_number }}","date":"$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+              "downloadURL":"$BASE/TrainingBrain.ipa","size":$SIZE,"minOSVersion":"15.0"}],
+            "appPermissions":{"entitlements":[],"privacy":{"NSBluetoothAlwaysUsageDescription":"Connects to your bike and heart-rate strap."}}}],
+           "news":[]}
+          EOF
+          python3 -m json.tool apps.json > /dev/null
+          gh release delete iphone-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create iphone-latest TrainingBrain.ipa apps.json --prerelease \
+            --title "Training Brain for iPhone $VER" \
+            --notes "Install without Xcode: open TrainingBrain.ipa in TrollStore, or add this source to SideStore: $BASE/apps.json (see iphone/README.md)."
+          echo "::notice::published TrainingBrain.ipa $VER ($SIZE bytes)"
       - name: Screenshot
         continue-on-error: true
         working-directory: iphone
