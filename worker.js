@@ -2,9 +2,11 @@
 //       few days of rides from intervals.icu for each user who registered, and writes
 //       each one to users/<uid>/rides/<start minute> in Firebase, where every device
 //       receives it live (app v3.59+). POST /rides/register (Firebase ID token) stores
-//       that user's intervals.icu key in KV (TB_INBOX, prefix r:). Needs the secret
-//       FIREBASE_SA (service-account JSON) or FIREBASE_DB_SECRET; replies carry
-//       X-TB-Worker: 13 so the app knows it can register.
+//       that user's intervals.icu key and Firebase sign-in refresh token in KV
+//       (TB_INBOX, prefix r:). The worker writes AS THAT USER (an ID token from the
+//       refresh token), so the database rules apply and no admin key is needed.
+//       Optional fallback: FIREBASE_SA / FIREBASE_DB_SECRET. Needs a Cron Trigger
+//       (*/10 * * * *). Replies carry X-TB-Worker: 13 so the app knows it can register.
 // v12 — AI proxy only answers signed-in users of the app: it checks the Firebase
 //       ID token (Authorization: Bearer …) against Google's public keys. Every
 //       reply carries X-TB-Auth: 1 so the app knows it can start sending the
@@ -194,8 +196,9 @@ export default {
         await env.TB_INBOX.delete('r:' + uid);
         return res({ ok: true, on: false });
       }
-      await env.TB_INBOX.put('r:' + uid, JSON.stringify({ k: String(body.icuKey).slice(0, 200), at: new Date().toISOString() }));
-      return res({ ok: true, on: true, cron: !!(env.FIREBASE_SA || env.FIREBASE_DB_SECRET) });
+      const rt = String(body.refreshToken || '').slice(0, 2000);
+      await env.TB_INBOX.put('r:' + uid, JSON.stringify({ k: String(body.icuKey).slice(0, 200), rt, at: new Date().toISOString() }));
+      return res({ ok: true, on: true, cron: !!(rt || env.FIREBASE_SA || env.FIREBASE_DB_SECRET) });
     }
 
     // ── AI proxy with fallback chain: Gemini → Perplexity → OpenAI ───────────
@@ -338,13 +341,14 @@ function icuToRide(a) {
   for (const k in out) if (out[k] === null || out[k] === undefined) delete out[k];
   return out;
 }
+// The app's public web API key (it's in index.html; it identifies the project, it isn't a secret).
+const FIREBASE_WEB_KEY = 'AIzaSyCSq4c3qF8ylYVFNAqiGFi52AUt57RdpIQ';
 const rideKey = a => String(a.start_date_local || '').slice(0, 16).replace(/[.$#\[\]\/]/g, '_');
 
 async function pollRides(env) {
-  if (!env.TB_INBOX || !(env.FIREBASE_SA || env.FIREBASE_DB_SECRET)) return;
+  if (!env.TB_INBOX) return;
   const dbUrl = (env.FIREBASE_DB_URL || 'https://training-631c1-default-rtdb.firebaseio.com').replace(/\/$/, '');
-  const auth = await firebaseAuthParam(env);
-  if (!auth) return;
+  const admin = (env.FIREBASE_SA || env.FIREBASE_DB_SECRET) ? await firebaseAuthParam(env) : null;
   const day = n => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
   const list = await env.TB_INBOX.list({ prefix: 'r:', limit: 100 });
   for (const k of list.keys) {
@@ -360,6 +364,23 @@ async function pollRides(env) {
       const upd = {};
       for (const a of await r.json()) { const ride = icuToRide(a); if (ride) upd[rideKey(ride)] = ride; }
       if (!Object.keys(upd).length) continue;
+      let auth = admin;
+      if (reg.rt) {
+        // The user's own session: a fresh ID token from their refresh token.
+        const t = await fetch('https://securetoken.googleapis.com/v1/token?key=' + (env.FIREBASE_WEB_KEY || FIREBASE_WEB_KEY), {
+          method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: 'grant_type=refresh_token&refresh_token=' + encodeURIComponent(reg.rt),
+        });
+        const tj = await t.json().catch(() => ({}));
+        if (tj.id_token && tj.user_id === uid) {
+          auth = 'auth=' + encodeURIComponent(tj.id_token);
+          if (tj.refresh_token && tj.refresh_token !== reg.rt) {
+            reg.rt = tj.refresh_token;
+            await env.TB_INBOX.put(k.name, JSON.stringify(reg));
+          }
+        } else if (t.status === 400) { delete reg.rt; await env.TB_INBOX.put(k.name, JSON.stringify(reg)); } // signed out / revoked
+      }
+      if (!auth) continue;
       // PATCH: only these rides change; an unchanged ride raises no event on the devices.
       await fetch(`${dbUrl}/users/${uid}/rides.json?${auth}`, { method: 'PATCH', body: JSON.stringify(upd) });
     } catch (e) { /* one user's failure never stops the others */ }

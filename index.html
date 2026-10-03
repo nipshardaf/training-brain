@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.60';
+const APP_VERSION='3.61';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.61',d:'Rides arrive even with no phone open',det:'Your Worker now checks intervals.icu every 10 minutes and puts new rides straight into your account, so a Garmin ride is already on every device when you open the app. It writes as you, using your sign-in, so it can only reach your own data. Disconnecting intervals.icu in Settings turns it off.'},
   {v:'3.60',d:'Faster, lighter sync between your devices',det:'Each thing you save (a set, a day, a change to the week) now reaches your other devices on its own, the moment it is saved. Before, any save made every other device download your whole account again, and the app re-checked every minute. Rides stay in their own place in your account and are no longer copied as one big list.'},
   {v:'3.59',d:'Rides reach all your devices straight away',det:'Each ride is now kept once in your account in the cloud, and every signed-in device receives new rides live. A ride you finish in Ride mode shows up on your other phone within seconds, and a ride one device fetches from intervals.icu is shared with the others instead of each phone keeping its own list.'},
   {v:'3.58',d:'Your phones always agree on the week',det:'The week is now worked out from what actually happened (your logged sessions, rides and the days that have passed) each time it is shown, instead of each phone re-planning it and saving its own version. Two phones that had heard about different things used to save different weeks and overwrite each other; now the same logs and rides give the same week on every device. Missed days and sessions done differently still re-plan the days left, exactly as before, and a re-planned day keeps its exercises.'},
@@ -2519,20 +2520,23 @@ function _ridesPush(){
   });
 }
 // The Worker (v13+) can fetch rides into the cloud every 10 minutes, so they arrive
-// with no phone open. This hands it this account's intervals.icu key — only once
-// the Worker says it supports that (an older one would pass the request to the AI).
+// with no phone open. This hands it this account's intervals.icu key and sign-in
+// refresh token, so it can write your rides as you (the database rules apply; no
+// admin key needed). Only once the Worker says it supports that — an older one
+// would pass the request to the AI. Disconnecting intervals.icu removes both.
 async function _ridesRegisterWorker(){
   if(S.guest||!_fbAuth||!_fbAuth.currentUser)return;
-  const key=DB.get('icu_key',null),tag=key?String(_hash(key)):'off';
-  if(DB.get('rides_worker_tag',null)===tag&&(tag==='off'||DB.get('rides_worker_cron',false)))return;
+  const key=DB.get('icu_key',null),tag=key?_hash(key)+':rt':'off';
+  // Once a day per device (and on any change), so a session the Worker lost is renewed.
+  if(DB.get('rides_worker_tag',null)===tag&&(tag==='off'||DB.get('rides_worker_day',null)===fd(new Date())))return;
   try{
     const probe=await fetch(GEMINI_PROXY+'/yt-search');
     if(+(probe.headers.get('X-TB-Worker')||0)<13)return;
     const r=await fetch(GEMINI_PROXY+'/rides/register',{method:'POST',
       headers:{'Content-Type':'application/json',Authorization:'Bearer '+await _fbAuth.currentUser.getIdToken()},
-      body:JSON.stringify(key?{icuKey:key}:{off:true})});
+      body:JSON.stringify(key?{icuKey:key,refreshToken:_fbAuth.currentUser.refreshToken||''}:{off:true})});
     const j=await r.json().catch(()=>({}));
-    if(r.ok){DB.set('rides_worker_tag',tag);DB.set('rides_worker_cron',!!j.cron);}
+    if(r.ok){DB.set('rides_worker_tag',tag);DB.set('rides_worker_cron',!!j.cron);DB.set('rides_worker_day',fd(new Date()));}
   }catch(_){}
 }
 // A ride this device just made (Ride mode): into the list and the cloud straight away.
