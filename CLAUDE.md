@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.57 (`index.html`)
+### App — v3.58 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -29,6 +29,14 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   mid-week changes. Rides are placed on the other days jointly with the sessions
   (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
   least one rest day is kept.
+- **The week is worked out, not stored (v3.58).** `plan_<monday>` holds only what was chosen (generated
+  week + your edits). `DB.get` of a plan key returns `_resolveWeek(base)`: logged days show what you did,
+  missed gym days are SKIPPED, and if anything was missed/done differently the open gym days are re-chosen by
+  `_gymCoverage`. Memoised on raw + `_factsVer` (bumped by every non-plan `DB.set`) + today. Never saved.
+  Writers that save the week back bake it in, and days whose type they change get `chosen` (via `_markChosen`),
+  which the resolver keeps fixed like `locked`. Whole-week rebuilds go through `_setFreshWeek` (no marks).
+  Exercises for re-planned days: the moved session's, else `_autoExercises` (seeded `genSession`, cached in
+  synced `auto_ex_<monday>`). `_baseWeek(mon)` reads the raw stored week.
 - **Rides on gym days (v3.57)**: a ride never completes a gym day (`_dayWasDone`). Rides are fetched from
   intervals.icu on resume (5 min) and every 15 min while open (`_icuMaybeFetch`, per-device clock), so a
   ride saved on another phone shows up. "Make it a ride day" (week banner/day screen) and the ride
