@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.59';
+const APP_VERSION='3.60';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.60',d:'Faster, lighter sync between your devices',det:'Each thing you save (a set, a day, a change to the week) now reaches your other devices on its own, the moment it is saved. Before, any save made every other device download your whole account again, and the app re-checked every minute. Rides stay in their own place in your account and are no longer copied as one big list.'},
   {v:'3.59',d:'Rides reach all your devices straight away',det:'Each ride is now kept once in your account in the cloud, and every signed-in device receives new rides live. A ride you finish in Ride mode shows up on your other phone within seconds, and a ride one device fetches from intervals.icu is shared with the others instead of each phone keeping its own list.'},
   {v:'3.58',d:'Your phones always agree on the week',det:'The week is now worked out from what actually happened (your logged sessions, rides and the days that have passed) each time it is shown, instead of each phone re-planning it and saving its own version. Two phones that had heard about different things used to save different weeks and overwrite each other; now the same logs and rides give the same week on every device. Missed days and sessions done differently still re-plan the days left, exactly as before, and a re-planned day keeps its exercises.'},
   {v:'3.57',d:'Rides from your other phone show up, and a ride on a gym day moves that session',det:'Rides from intervals.icu are now fetched whenever you come back to the app (and every 15 minutes while it is open), not only on a fresh launch once an hour, so a ride saved on another phone shows up and the "You rode today" banner appears. "Make it a ride day" now moves the gym session to a free day later in the week and re-plans the rest, the same as after a ride in Ride mode, instead of sliding every session along. A ride no longer counts as doing a planned gym session, so that session is never silently dropped: the days left are re-planned to cover it.'},
@@ -2462,6 +2463,8 @@ function _ridesListen(uid){
     _ridesMerge(Object.values(_ridesCloud));
     _ridesPushSoon(500); // what this device knew before rides moved to the cloud
     _ridesRegisterWorker();
+    // v3.60: the old one-item copy of the ride list isn't synced any more.
+    setTimeout(()=>{if(_ridesCloud&&Object.keys(_ridesCloud).length)_fbDb.ref('users/'+uid+'/data/strava_activities').remove().catch(()=>{});},5000);
     const on=c=>{
       const r=c.val();if(!r||!r.start_date_local)return;
       _ridesCloud[c.key]=r;_ridesQ[c.key]=r;
@@ -4785,7 +4788,7 @@ const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
-  'user_profile','weight_log','strava_token','strava_auth_expired','strava_activities','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
+  'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
   'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
@@ -4822,7 +4825,7 @@ const DB = {
     // wouldn't clear the "welcome back" prompt until a reload. v2.98.
     if(k.startsWith('log_')||k.startsWith('extralog_')||k==='strava_activities')_layoffCache={date:null,days:null};
     if(!k.startsWith('plan_')&&!k.startsWith('auto_ex_'))_factsVer++; // v3.58: a resolved week may change
-    if(k.length===15&&k.startsWith('plan_')&&Array.isArray(v)&&!_weekRebuild)_markChosen(k,v); // v3.58: your own changes stick
+    if(k.length===15&&k.startsWith('plan_')&&Array.isArray(v)&&!_weekRebuild&&!_suppressDirty)_markChosen(k,v); // v3.58: your own changes stick (not a week arriving from the cloud)
     if(S.guest){_guestStore[k]=v;return;}
     try{localStorage.setItem(k,JSON.stringify(v));}
     catch(e){_storageWriteFailed(k,e);}
@@ -6960,47 +6963,107 @@ function _scheduleSyncRetry(){
   _syncRetryMs=Math.min(_syncRetryMs*2,300000);
 }
 
+// One synced key from the cloud into this device. Returns 'kept' (changed here and
+// not uploaded yet, so newer — the next save sends it), true (applied) or false
+// (nothing to do). Shared by the first pull and the live listener. Call with
+// _suppressDirty set, so what came from the cloud isn't sent back.
+function _applyCloudKey(k,v){
+  if(k==='ai_usage'){
+    const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
+    const remote=v||{calls:[]};
+    const seen=new Set((local.calls||[]).map(c=>c.ts));
+    const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
+    merged.sort((a,b)=>a.ts-b.ts);
+    const cutoff=fd(addDays(new Date(),-30));
+    DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
+    return true;
+  }
+  // v3.59: rides from an older device's list are merged, never replace this one's.
+  if(k==='strava_activities'){_ridesMerge(Array.isArray(v)?v:[]);return false;}
+  // Changed on this device and not uploaded yet: keep it (v3.33).
+  if(_dirtyKeys.has(k)||_inflightKeys.has(k))return'kept';
+  // Unchanged — the cloud drops empty values and turns arrays into objects, so
+  // compare like it does. This is also how this device's own writes, echoed back
+  // by the live listener, are told apart.
+  let cur;
+  if(S.guest)cur=_guestStore[k];
+  else{try{const raw=localStorage.getItem(k);cur=raw?JSON.parse(raw):null;}catch(_){cur=null;}}
+  if(JSON.stringify(_rtdbNorm(cur))===JSON.stringify(_rtdbNorm(v)))return false;
+  DB.set(k,v===undefined?null:v);
+  return true;
+}
+function _rtdbNorm(x){
+  if(x===null||x===undefined)return undefined;
+  if(typeof x!=='object')return x;
+  const o={};
+  for(const k of Object.keys(x).sort()){const v=_rtdbNorm(x[k]);if(v!==undefined)o[k]=v;}
+  return Object.keys(o).length?o:undefined;
+}
+// v3.60: LIVE SYNC, ONE KEY AT A TIME. Each synced item (a day's log, a week, your
+// profile…) arrives on its own the moment another device saves it. Before, any
+// save anywhere made every other device download the whole account again (now
+// with every ride in it), polled every minute and on every resume.
+let _liveSync=false,_liveConnected=false,_liveRenderT=null;
+function _liveSyncStart(uid){
+  if(_liveSync||!_fbDb||!uid||S.guest)return;
+  _liveSync=true;
+  const ref=_fbDb.ref('users/'+uid+'/data');
+  const apply=(k,v)=>{
+    if(!_isSyncKey(k)&&k!=='strava_activities')return;
+    let r;_suppressDirty=true;
+    try{r=_applyCloudKey(k,v);}catch(e){console.warn('[live sync]',k,e);}
+    finally{_suppressDirty=false;}
+    if(r==='kept'){debouncedSync();return;}
+    if(!r)return;
+    clearTimeout(_liveRenderT);
+    _liveRenderT=setTimeout(()=>{_autoBuildWeek();_watchPushSoon();if(S.screen!=='ride')render();},400);
+  };
+  ref.on('child_added',c=>apply(c.key,c.val()));
+  ref.on('child_changed',c=>apply(c.key,c.val()));
+  ref.on('child_removed',c=>{if(_isSyncKey(c.key))apply(c.key,null);}); // cleared on another device
+  _fbDb.ref('.info/connected').on('value',c=>{_liveConnected=!!c.val();});
+  // The coach's weekly read is kept beside the data.
+  _fbDb.ref('users/'+uid+'/advisor/'+fd(getMon(new Date()))).on('value',c=>{
+    try{
+      if(!c.exists())return;
+      const fbResult=JSON.parse(c.val()),wk=fd(getMon(new Date()));
+      const local=DB.get('weekly_advisor_'+wk,null);
+      if(!local||fbResult.ts>(local.ts||0)){DB.set('weekly_advisor_'+wk,fbResult);if(S.screen!=='ride')render();}
+    }catch(_){}
+  });
+}
 async function loadFromCloud(manual=false){
   if(!S.fbUser||!_fbDb){if(manual)showToast('⚠️ Not signed in','var(--red)');return;}
   try{
-    const snap=await _fbDb.ref('users/'+S.fbUser.uid).once('value');
-    if(!snap.exists()){
-      if(manual)showToast('☁️ No cloud data yet','var(--amb)');
-      return;
-    }
-    const val=snap.val()||{};
-    const data=val.data||{};
-    const remoteUpdated=val.updated;
+    // v3.60: just the data and its timestamp. The whole account (which this used to
+    // read) now also holds every ride, the coach's notes and friends. An account with
+    // no data yet still counts as pulled, so this device's data goes up.
+    const uref=_fbDb.ref('users/'+S.fbUser.uid);
+    const [snap,uSnap]=await Promise.all([uref.child('data').once('value'),uref.child('updated').once('value')]);
+    if(!snap.exists()&&manual)showToast('☁️ No cloud data yet','var(--amb)');
+    const data=snap.val()||{};
+    const remoteUpdated=uSnap.val();
     let planCount=0,logCount=0,otherCount=0,keptLocal=0;
     // Suppress dirty-tracking while applying the pull — these keys came FROM the
     // cloud, so they're already in sync and must not be queued for re-upload.
     _suppressDirty=true;
     try{
       Object.entries(data).forEach(([k,v])=>{
-        if(k==='ai_usage'){
-          const local=DB.get('ai_usage',{calls:[]})||{calls:[]};
-          const remote=v||{calls:[]};
-          const seen=new Set((local.calls||[]).map(c=>c.ts));
-          const merged=[...(local.calls||[]),...(remote.calls||[]).filter(c=>!seen.has(c.ts))];
-          merged.sort((a,b)=>a.ts-b.ts);
-          const cutoff=fd(addDays(new Date(),-30));
-          DB.set('ai_usage',{calls:merged.filter(c=>c.date>=cutoff)});
-        } else if(k==='strava_activities'){
-          // v3.59: merged, never replaced — another device's list may be missing rides this one has.
-          _ridesMerge(Array.isArray(v)?v:[]);
-        } else if(_dirtyKeys.has(k)||_inflightKeys.has(k)){
-          // Changed on this device and not uploaded yet, so newer than the cloud
-          // copy — keep it; the next save uploads it. v3.33.
-          keptLocal++;
-        } else {
-          DB.set(k,v);
-          if(k.startsWith('plan_'))planCount++;
-          else if(k.startsWith('log_'))logCount++;
-          else otherCount++;
-        }
+        const r=_applyCloudKey(k,v);
+        if(r==='kept')keptLocal++;
+        else if(r&&k.startsWith('plan_'))planCount++;
+        else if(r&&k.startsWith('log_'))logCount++;
+        else if(r)otherCount++;
       });
     }finally{_suppressDirty=false;}
     _pulledOk=true;
+    // v3.60: 3.58–3.59 could mark days of a week arriving from the cloud as changed
+    // by hand, which froze them against re-planning. Clear this week's marks once.
+    if(!DB.get('chosen_reset_v360',false)){
+      const wk=_baseWeek(getMon(new Date()));
+      if(Array.isArray(wk)&&wk.some(d=>d&&d.chosen)){wk.forEach(d=>{if(d)delete d.chosen;});_setFreshWeek(DB.pk(getMon(new Date())),wk);}
+      DB.set('chosen_reset_v360',true);
+    }
     if(keptLocal)debouncedSync();
     setTimeout(()=>{_autoBuildWeek();_watchPushSoon();},0); // v3.44; v3.58: pulled logs can change the week
     DB.set('fb_last_pull',new Date().toISOString());
@@ -7022,7 +7085,8 @@ async function loadFromCloud(manual=false){
 // When another device saves, it's a different timestamp than _myLastSaveTs, so we pull.
 function startSyncListener(uid){
   _ridesListen(uid); // v3.59
-  if(_syncListenerActive||!_fbDb||!uid)return;
+  _liveSyncStart(uid); // v3.60: replaces the whole-account pull below
+  if(_syncListenerActive||!_fbDb||!uid||_liveSync)return;
   _syncListenerActive=true;
   let _firstFire=true; // skip the initial fire (that's our own loadFromCloud data)
   _fbDb.ref('users/'+uid+'/updated').on('value',async snap=>{
@@ -14434,6 +14498,9 @@ function _icuMaybeFetch(mins){
 let _lastVisibilitySync=0;
 async function _autoPullIfNewer(reason){
   if(!S.fbUser||!_fbDb||S.guest)return false;
+  // v3.60: the live listener delivers changes itself. If iOS dropped its connection
+  // while the app was in the background, reconnecting replays what was missed.
+  if(_liveSync){if(!_liveConnected){try{_fbDb.goOffline();_fbDb.goOnline();}catch(_){}}return false;}
   try{
     const snap=await _fbDb.ref('users/'+S.fbUser.uid+'/updated').once('value');
     const remoteUpdated=snap.val();

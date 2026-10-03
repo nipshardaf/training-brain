@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.59 (`index.html`)
+### App — v3.60 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -29,6 +29,12 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   mid-week changes. Rides are placed on the other days jointly with the sessions
   (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
   least one rest day is kept.
+- **Live sync, one key at a time (v3.60).** `_liveSyncStart` (from `startSyncListener`) listens to
+  `users/<uid>/data` child_added/changed/removed and applies each key via `_applyCloudKey` (shared with
+  `loadFromCloud`; dirty keys kept; equality via `_rtdbNorm` so own echoes are no-ops). `loadFromCloud` reads only
+  `data` + `updated`, never the whole account. `_autoPullIfNewer` just reconnects if needed. The old `updated`
+  listener only runs if live sync didn't start. `strava_activities` is no longer a sync key (rides path instead;
+  the old cloud copy is removed). `_markChosen` is skipped while applying cloud data (3.58–3.59 bug, cleared once).
 - **Rides live in the cloud, one entry each (v3.59).** `users/<uid>/rides/<start minute>` (`_rideKey`). `_ridesListen`
   (from `startSyncListener`) loads them once, then child events merge into local `strava_activities` (`_ridesMerge`:
   twins = starts within 10 min + durations within 2 min, the intervals.icu copy wins). Any change to the local list
