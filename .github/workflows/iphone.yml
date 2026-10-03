@@ -1,0 +1,64 @@
+# Builds the iPhone app on a GitHub Mac and takes a simulator screenshot of it
+# loading the live web app. Errors show as annotations on the run; the screenshot
+# is pushed to the iphone-shots branch.
+name: iPhone build
+on:
+  push:
+    branches: [main]
+    paths: ['iphone/**', '.github/workflows/iphone.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate the Xcode project
+        working-directory: iphone
+        run: |
+          brew install xcodegen
+          xcodegen
+      - name: Build for the iPhone simulator
+        working-directory: iphone
+        run: |
+          set +e
+          xcodebuild -project TrainingBrainPhone.xcodeproj -target TrainingBrainPhone -sdk iphonesimulator \
+            -configuration Debug SYMROOT="$PWD/build" CODE_SIGNING_ALLOWED=NO build > build.log 2>&1
+          status=$?
+          grep -E "error:" build.log | sed -E 's#^.*/iphone/([^:]+):([0-9]+):([0-9]+): error: (.*)$#::error file=iphone/\1,line=\2,col=\3::\4#' | sort -u | head -40
+          grep -E "error:" build.log | grep -v "/iphone/" | sed -E 's#^(.*)$#::error::\1#' | sort -u | head -10
+          grep -E "warning:" build.log | grep "/iphone/" | sed -E 's#^.*/iphone/([^:]+):([0-9]+):([0-9]+): warning: (.*)$#::warning file=iphone/\1,line=\2,col=\3::\4#' | sort -u | head -20
+          tail -5 build.log
+          exit $status
+      - name: Screenshot
+        continue-on-error: true
+        working-directory: iphone
+        run: |
+          RT=$(xcrun simctl list runtimes | grep -oE 'com\.apple\.CoreSimulator\.SimRuntime\.iOS-[0-9-]+' | tail -1)
+          DEV=$(xcrun simctl list devicetypes | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-1[0-9][A-Za-z0-9-]*' | tail -1)
+          echo "::notice::runtime=$RT device=$DEV"
+          UDID=$(xcrun simctl create tbphone "$DEV" "$RT")
+          xcrun simctl boot "$UDID"
+          xcrun simctl bootstatus "$UDID" -b
+          APP=$(find build -name "TrainingBrainPhone.app" -type d | head -1)
+          xcrun simctl install "$UDID" "$APP"
+          xcrun simctl launch "$UDID" com.nipshardaf.trainingbrain.phone
+          sleep 25
+          mkdir -p shots
+          xcrun simctl io "$UDID" screenshot shots/launch.png
+          ls -la shots
+      - name: Publish screenshot
+        continue-on-error: true
+        run: |
+          mv iphone/shots /tmp/shots
+          git config user.name "iphone-ci"
+          git config user.email "iphone-ci@users.noreply.github.com"
+          git checkout --orphan iphone-shots
+          git rm -rf -q .
+          cp /tmp/shots/*.png .
+          echo "$GITHUB_SHA" > commit.txt
+          git add *.png commit.txt
+          git commit -q -m "iPhone screenshot for $GITHUB_SHA"
+          git push -f -q origin iphone-shots

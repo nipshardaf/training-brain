@@ -1,0 +1,38 @@
+# Training Brain for iPhone — generate the Xcode project with:  xcodegen
+# (see README.md). The live Training Brain web app in a native shell that adds
+# Bluetooth (the Renpho bike and a heart-rate strap), which Safari doesn't have.
+name: TrainingBrainPhone
+options:
+  bundleIdPrefix: com.nipshardaf
+  deploymentTarget:
+    iOS: "15.0"
+targets:
+  TrainingBrainPhone:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+    info:
+      path: Sources/Info.plist
+      properties:
+        CFBundleDisplayName: Training Brain
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIRequiresFullScreen: false
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        NSBluetoothAlwaysUsageDescription: Training Brain connects to your bike and heart-rate strap to record your rides.
+        NSCameraUsageDescription: Training Brain can take a photo when you add one to a workout.
+        NSPhotoLibraryUsageDescription: Training Brain can attach a photo from your library.
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.nipshardaf.trainingbrain.phone
+        MARKETING_VERSION: "1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.0"
+        TARGETED_DEVICE_FAMILY: "1"
+        CODE_SIGN_STYLE: Automatic
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
