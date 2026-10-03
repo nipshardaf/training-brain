@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.56';
+const APP_VERSION='3.57';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.57',d:'Rides from your other phone show up, and a ride on a gym day moves that session',det:'Rides from intervals.icu are now fetched whenever you come back to the app (and every 15 minutes while it is open), not only on a fresh launch once an hour, so a ride saved on another phone shows up and the "You rode today" banner appears. "Make it a ride day" now moves the gym session to a free day later in the week and re-plans the rest, the same as after a ride in Ride mode, instead of sliding every session along. A ride no longer counts as doing a planned gym session, so that session is never silently dropped: the days left are re-planned to cover it.'},
   {v:'3.56',d:'Missed days: the rest of the week is re-planned to cover what you missed',det:'When gym days go by without a workout, the gym days left this week are now re-chosen to cover what you have not trained yet, instead of the missed sessions just sliding along. Two days left with nothing done becomes Upper + Legs, one day left becomes Full Body, and with Push already done two days become Pull + Legs. Rides, rest days and anything you have logged stay as they are, and whatever still cannot fit leads next week.'},
   {v:'3.55',d:'Smoother bike rides',det:'"Ride with my bike" is now on the main week screen, so you no longer go through a gym day to start a ride. When you finish a ride on a day planned for the gym, the app asks whether to move that session: "Move it" puts it on a free day later in the week and re-plans (the week keeps the same number of gym days), or keep it for later today. The finished ride shows on today straight away.'},
   {v:'3.54',d:'Ride: eases off when your heart rate runs high; realistic calories',det:'In a workout, auto resistance now watches your heart rate as well as your watts. If it climbs past the step\'s ceiling, the bike eases the watts down 5 to 10 W every 15 seconds (30% at once if it is far over, never more than half) until your heart rate settles, then hands them back gradually; the goal panel says how much it has eased off. Heart-rate targets now fit you: they come from your threshold heart rate, estimated like the rest of the app does from the highest heart rate in your rides, with the plan\'s general numbers as a fallback. Calories are now counted like a fitness watch does when your heart-rate strap is connected (heart rate, weight, age and sex), or like the Renpho app does without it; counting only the bike\'s mechanical work read far too low.'},
@@ -5073,6 +5074,10 @@ function _dayWasDone(d){
   const log=DB.get('log_'+d.date,null);
   if(log?.completed)return true;
   if(log?.exercises?.some(e=>e.sets?.some(s=>s.done)))return true;
+  // v3.57: a ride doesn't complete a GYM day. It used to, so a ride on a planned Pull
+  // day made Pull silently vanish from the week; now the session still counts as
+  // owed and the days left are re-planned to cover it.
+  if(_isGymDay(d.type))return false;
   if(log?.ride?.dur!=null)return true;
   if(typeof stravaRideOnDate==='function'&&stravaRideOnDate(d.date))return true;
   return false;
@@ -5181,8 +5186,7 @@ function rRideOnGymDayBanner(){
   if(S.guest)return'';
   const plan=DB.get(DB.pk(S.weekStart),null);
   if(!plan||!plan.length)return'';
-  // Only the types replaceGymWithRide can actually cascade
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
+  const gymTypes=Object.keys(_MUSC);
   const todayStr=fd(new Date());
   const days=[...plan].sort((a,b)=>b.date.localeCompare(a.date));
   for(const dp of days){
@@ -5208,10 +5212,10 @@ function rRideOnGymDayBanner(){
       <div style="font-size:11px;color:var(--t2);margin-top:1px">${_esc(ride.name||'Ride')}</div>
     </div>
   </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">${whenTxt==='today'?'Today':'That day'} was planned as <strong style="color:var(--al)">${gymLbl}</strong>. Want to make it a ride day instead and push the gym session forward?</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">${whenTxt==='today'?'Today':'That day'} was planned as <strong style="color:var(--al)">${gymLbl}</strong>. Make it a ride day? ${gymLbl} moves to a free day later this week and the rest of the week is re-planned.</div>
   <div style="display:flex;gap:6px;flex-wrap:wrap">
-    <button onclick="replaceGymWithRide('${dp.date}')" style="flex:1 1 140px;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:10px 8px;cursor:pointer;line-height:1.35">🔄 Make it a ride day<br><span style="font-size:9px;opacity:.85;font-weight:600">Push ${gymLbl} forward</span></button>
-    <button onclick="dismissRideOnGymPrompt('${dp.date}')" style="flex:1 1 120px;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:10px 8px;cursor:pointer;line-height:1.35">💪 I did both<br><span style="font-size:9px;opacity:.7;font-weight:600">Keep ${gymLbl} too</span></button>
+    <button onclick="replaceGymWithRide('${dp.date}')" style="flex:1 1 140px;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:10px 8px;cursor:pointer;line-height:1.35">🔄 Make it a ride day<br><span style="font-size:9px;opacity:.85;font-weight:600">Move ${gymLbl} later</span></button>
+    <button onclick="dismissRideOnGymPrompt('${dp.date}')" style="flex:1 1 120px;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:10px 8px;cursor:pointer;line-height:1.35">💪 Still lifting today<br><span style="font-size:9px;opacity:.7;font-weight:600">Keep ${gymLbl}</span></button>
     <button onclick="DB.set('rideprompt_dismissed_${dp.date}',true);render()" style="flex:0 0 auto;background:none;border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:10px 12px;cursor:pointer">Later</button>
   </div>
 </div>`;
@@ -7547,25 +7551,32 @@ function _rideGymPrompt(){
 }
 function _rideLabel(t){return typeof WI[t]?.l==='function'?WI[t].l():t;}
 async function rideMoveGym(){
-  const mon=getMon(new Date()),mk=fd(mon),ds=fd(new Date()),moved=Ride.gymPrompt&&Ride.gymPrompt.type;
   Ride.gymPrompt=null;Ride.note='Re-planning your week…';_rideDraw();
   try{await icuFetchActivities(false);}catch(_){} // so the planner sees today's ride
+  Ride.note=await _moveGymOffDay(fd(new Date()));
+  _rideDraw();
+}
+// v3.57: shared by the ride screen and the week's "You rode today" banner, so it
+// works on whichever phone sees the ride first (the banner used to slide every later
+// session along and could turn rest days into gym days).
+async function _moveGymOffDay(ds){
+  const mon=getMon(new Date(ds+'T12:00:00')),mk=fd(mon),todayStr=fd(new Date());
   const plan=DB.get(DB.pk(mon),null)||[];
+  const was=plan.find(d=>d.date===ds),moved=was&&_MUSC[was.type]?was.type:null;
   let days=DB.get('gym_days_'+mk,null);
   if(!Array.isArray(days))days=plan.filter(d=>_MUSC[d.type]).map(d=>d.date);
   days=days.filter(x=>x!==ds);
   const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-  const free=plan.filter(d=>d.date>ds&&!days.includes(d.date)&&!_dayWasDone(d))
+  const free=plan.filter(d=>d.date>ds&&d.date>=todayStr&&!days.includes(d.date)&&!_dayWasDone(d))
     .sort((a,b)=>(a.type==='REST'?0:1)-(b.type==='REST'?0:1)||a.date.localeCompare(b.date));
   if(free[0])days.push(free[0].date);
   DB.set('gym_days_'+mk,days.sort());
   const keep=S.weekStart;S.weekStart=mon;
   try{await genPlan(true);}finally{S.weekStart=keep;}
   const np=DB.get(DB.pk(mon),null)||[];
-  const at=np.find(d=>d.date>ds&&d.type===moved);
-  Ride.note=at?`✅ ${_rideLabel(moved)} moved to ${DN[new Date(at.date+'T12:00:00').getDay()]}.`
-    :free[0]?'✅ Week re-planned around today\'s ride.':'✅ Week re-planned — no free day was left, so it has one less gym day.';
-  _rideDraw();
+  const at=moved&&np.find(d=>d.date>ds&&d.type===moved);
+  return at?`✅ ${_rideLabel(moved)} moved to ${DN[new Date(at.date+'T12:00:00').getDay()]}.`
+    :free[0]?'✅ Week re-planned around the ride.':'✅ Week re-planned — no free day was left, so it has one less gym day.';
 }
 function rideKeepGym(){
   const t=Ride.gymPrompt&&Ride.gymPrompt.type;Ride.gymPrompt=null;
@@ -8004,7 +8015,7 @@ function rDayRow(day,today){
   const w=day.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(day.type);
   const isRest=day.type==='REST';
-  const isGym=!isRide&&!isRest;
+  const isGym=!isRide&&!isRest&&day.type!=='SKIPPED'; // v3.57: a skipped day you rode on shows the ride
   const v=verdict(w.score);
   // Override the day's type display with the Strava ride only when the plan was
   // already a ride day or rest day. On a planned gym day, keep showing the gym
@@ -8096,7 +8107,7 @@ ${stravaRideOnThisDay?(()=>{
   </div>
   <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:10px">You also have a planned <strong style="color:var(--al)">${gymLbl}</strong> workout today. Choose:</div>
   <div style="display:flex;gap:6px">
-    <button onclick="replaceGymWithRide('${ds}')" style="flex:1;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:700;padding:9px 8px;cursor:pointer;line-height:1.3">🔄 Replace gym with ride<br><span style="font-size:9px;opacity:.85;font-weight:600">Cascade ${gymLbl} forward</span></button>
+    <button onclick="replaceGymWithRide('${ds}')" style="flex:1;background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:11px;font-weight:700;padding:9px 8px;cursor:pointer;line-height:1.3">🔄 Make it a ride day<br><span style="font-size:9px;opacity:.85;font-weight:600">Move ${gymLbl} later</span></button>
     <button onclick="dismissRideOnGymPrompt('${ds}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:11px;font-weight:700;padding:9px 8px;cursor:pointer;line-height:1.3">💪 Keep both<br><span style="font-size:9px;opacity:.7;font-weight:600">Do the ${gymLbl} too</span></button>
   </div>
 </div>`;
@@ -9438,13 +9449,12 @@ const COACH_TOOL_HANDLERS={
     }
   },
   replace_gym_with_ride:{
-    summarize:({date})=>`Replace ${_dayLbl(date)} gym with the Strava ride; cascade gym work forward`,
+    summarize:({date})=>`Replace ${_dayLbl(date)} gym with the ride; move that session later in the week`,
     execute:({date})=>{
       const pk=DB.pk(getMon(new Date(date+'T12:00:00')));
       const plan=DB.get(pk,null);
       const d=plan?.find(x=>x.date===date);
-      const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
-      if(!d||!gymTypes.includes(d.type))return{ok:false,msg:'Not a gym day'};
+      if(!d||!_MUSC[d.type])return{ok:false,msg:'Not a gym day'};
       if(!stravaRideOnDate(date))return{ok:false,msg:'No Strava ride on that date'};
       const res=replaceGymWithRide(date);
       if(res==='kept')return{ok:true,msg:`Gym sets are already logged on ${date} — kept that workout and recorded the ride alongside instead of replacing it`};
@@ -13117,50 +13127,12 @@ function replaceGymWithRide(dateStr){
     showToast('You already logged this gym workout — kept it and added the ride alongside','var(--grn)');
     return'kept';
   }
-  const a=stravaRideOnDate(dateStr);
-  if(!a)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
-  const displacedType=plan[di].type;
-  if(!gymTypes.includes(displacedType))return;
-  // Choose the ride plan type that fits the actual ride
-  const isIndoor=(a.type==='VirtualRide'||a.sport_type==='VirtualRide');
-  const isLong=(a.moving_time||0)>=60*60; // ≥1 hr
-  const newType=isIndoor?(isLong?'LONG_INDOOR':'SHORT_INDOOR'):(isLong?'LONG_OUTDOOR':'SHORT_OUTDOOR');
-  plan[di].type=newType;
-  delete plan[di].exercises;
-  delete plan[di].extraGym;
-  // Cascade: shift displaced gym work forward. Insert displacedType at the
-  // earliest available slot (REST or duplicate-of-displaced) AFTER di. If no
-  // slot is available, find the next gym day and shift its type forward, etc.
-  const gymTypesInWeek=plan.map((d,i)=>({d,i})).filter(({d,i})=>i>di&&gymTypes.includes(d.type)&&!d.locked);
-  // Prepend the displaced type so it gets reassigned first
-  const queue=[displacedType,...gymTypesInWeek.map(x=>x.d.type)];
-  const slotIndices=[];
-  // Slot candidates: REST days after di + the existing gym days (we'll overwrite their types in order)
-  for(let i=di+1;i<plan.length;i++){
-    if(plan[i].locked)continue;
-    if(plan[i].type==='REST'||gymTypes.includes(plan[i].type))slotIndices.push(i);
-  }
-  // Take the first N slot indices to place the N items from queue
-  // De-dup the queue: if displacedType already exists later in the week, drop one
-  const seen=new Set();
-  const dedup=queue.filter(t=>{if(seen.has(t))return false;seen.add(t);return true;});
-  for(let j=0;j<slotIndices.length;j++){
-    const idx=slotIndices[j];
-    if(j<dedup.length){
-      plan[idx].type=dedup[j];
-      plan[idx].exercises=genSession(dedup[j]);
-      delete plan[idx].extraGym;
-    }else{
-      // No more gym work to assign — leave as REST
-      plan[idx].type='REST';
-      delete plan[idx].exercises;
-    }
-  }
-  DB.set(pk,plan);
-  syncUp();
-  go('week',{_dir:'back'});
-  showToast(`🔄 ${displacedType.charAt(0)+displacedType.slice(1).toLowerCase()} cascaded forward — today is now a ride day`,'var(--grn)');
+  if(!stravaRideOnDate(dateStr)||!_MUSC[plan[di].type])return;
+  // v3.57: the same move as the ride screen — the day leaves your gym days, a free
+  // later day joins, and the week is re-planned around what's done.
+  showToast('Re-planning your week…','var(--acc)');
+  _moveGymOffDay(dateStr).then(msg=>{go('week',{_dir:'back'});showToast(msg,'var(--grn)');})
+    .catch(e=>{console.warn('[move gym]',e);render();});
   return'converted';
 }
 
@@ -14088,8 +14060,7 @@ function init(){
   // the automatic path now that Strava's API needs a paid subscription. v3.04.
   _ridePendingSend(false); // v3.50: a bike ride that couldn't upload earlier
   if(DB.get('icu_key',null)&&!S.guest){
-    const _icuLast=DB.get('icu_last_sync',null);
-    if(!_icuLast||new Date(_icuLast).getTime()<Date.now()-60*60*1000)icuFetchActivities();
+    _icuMaybeFetch(60);
   }
   // Endurain auto-sync — same hourly rule; silent on failure like the others.
   if(DB.get('endurain_token',null)&&!S.guest){
@@ -14262,6 +14233,17 @@ window.addEventListener('touchcancel',_sbOnEnd,{passive:true,capture:true});
 // Each pull only re-renders if the remote 'updated' timestamp is actually newer than
 // what we last pulled. Avoids unnecessary work and prevents flickers.
 
+// v3.57: fetch rides from intervals.icu if THIS device hasn't in `mins` minutes. Rides
+// used to be fetched only on a cold launch, at most hourly, and the clock was synced
+// between devices — so a ride saved on the other phone never reached a phone that was
+// just brought back from the background, and today still showed the gym session.
+function _icuMaybeFetch(mins){
+  if(!DB.get('icu_key',null)||S.guest)return;
+  let last=0;try{last=+localStorage.getItem('icu_fetch_here')||0;}catch(_){}
+  if(Date.now()-last<mins*60000)return;
+  try{localStorage.setItem('icu_fetch_here',String(Date.now()));}catch(_){}
+  icuFetchActivities().then(()=>{applyAutoSkipShift();render();}).catch(()=>{});
+}
 let _lastVisibilitySync=0;
 async function _autoPullIfNewer(reason){
   if(!S.fbUser||!_fbDb||S.guest)return false;
@@ -14294,6 +14276,7 @@ document.addEventListener('visibilitychange',()=>{
   _autoPullIfNewer('visibilitychange');
   _autoBuildWeek(); // v3.44: opened on a new week
   applyAutoSkipShift(); // v3.45: a day may have passed
+  _icuMaybeFetch(5); // v3.57: a ride saved on another phone
   if(S.fbUser&&!S.guest&&DB.get('icu_key',null))watchImportSets(); // back from the gym
 });
 
@@ -14302,6 +14285,7 @@ document.addEventListener('visibilitychange',()=>{
 setInterval(()=>{
   if(document.visibilityState!=='visible')return;
   _autoPullIfNewer('poll');
+  _icuMaybeFetch(15);
 },60000);
 
 // Also pull when the network comes back online (e.g. phone leaves elevator/tunnel)

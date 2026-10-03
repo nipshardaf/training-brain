@@ -13,7 +13,7 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
-### App — v3.56 (`index.html`)
+### App — v3.57 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -29,6 +29,10 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   mid-week changes. Rides are placed on the other days jointly with the sessions
   (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
   least one rest day is kept.
+- **Rides on gym days (v3.57)**: a ride never completes a gym day (`_dayWasDone`). Rides are fetched from
+  intervals.icu on resume (5 min) and every 15 min while open (`_icuMaybeFetch`, per-device clock), so a
+  ride saved on another phone shows up. "Make it a ride day" (week banner/day screen) and the ride
+  screen share `_moveGymOffDay`.
 - **Missed gym days (v3.56)**: the gym days left this week are re-chosen to cover the muscles
   still untrained (`_gymCoverage` + `_fillGymSlots` in `applyAutoSkipShift`): nothing done with 2
   days left → Upper + Legs, 1 left → Full Body, Push done + 2 left → Pull + Legs. Rides, rest,
