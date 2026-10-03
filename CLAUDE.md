@@ -13,6 +13,13 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
+### iPhone app (`iphone/`, added 2026-10-03)
+- WKWebView of the live site + `bridge.js` (Web Bluetooth subset → `BLEBridge.swift` / CoreBluetooth). Replaces Bluefy for
+  the bike + HR strap. Remembers picked devices; keeps the screen on while connected; alerts/confirms; Google popup sheet.
+  iOS 15+. Free Apple ID install from Xcode (re-run every 7 days, or SideStore) — the user declined the $99 program.
+  CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
+  sandbox against the real Ride code with a fake native side.
+
 ### App — v3.61 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
