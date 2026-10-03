@@ -39,7 +39,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   (from `startSyncListener`) loads them once, then child events merge into local `strava_activities` (`_ridesMerge`:
   twins = starts within 10 min + durations within 2 min, the intervals.icu copy wins). Any change to the local list
   pushes new/better rides (`_ridesPush`). Ride mode writes its ride on save (`job.act` → `_ridesAddLocal`).
-  Pulled `strava_activities` blobs are merged, never replace. Worker v13 (`worker.js`) adds `/rides/register` + a Cron Trigger (`pollRides`) that PATCHes the same
+  Pulled `strava_activities` blobs are merged, never replace. Worker v13 (`worker.js`, DEPLOYED 2026-10-03 with KV `training-brain-inbox` bound as TB_INBOX and cron `*/10 * * * *`; previous version 18 kept in Cloudflare for rollback) adds `/rides/register` + a Cron Trigger (`pollRides`) that PATCHes the same
   entries AS THE USER (v3.61: the app sends its Firebase refresh token; the Worker swaps it for an ID token, so
   rules apply and no admin key is needed). The app registers daily, only when the Worker replies `X-TB-Worker: 13`.
 - **The week is worked out, not stored (v3.58).** `plan_<monday>` holds only what was chosen (generated
