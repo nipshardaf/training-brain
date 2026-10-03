@@ -16,7 +16,9 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
 ### iPhone app (`iphone/`, added 2026-10-03)
 - WKWebView of the live site + `bridge.js` (Web Bluetooth subset → `BLEBridge.swift` / CoreBluetooth). Replaces Bluefy for
   the bike + HR strap. Remembers picked devices; keeps the screen on while connected; alerts/confirms; Google popup sheet.
-  iOS 15+. Free Apple ID install from Xcode (re-run every 7 days, or SideStore) — the user declined the $99 program.
+  iOS 15+. The user declined the $99 program AND doesn't want Xcode: CI publishes an unsigned `TrainingBrain.ipa` + SideStore/AltStore
+  source `apps.json` as release `iphone-latest` (version 1.0.<run>). Install via TrollStore (iOS 14–16.6.1/17.0, permanent) or
+  SideStore (free Apple ID, self-renewing). Don't suggest rented enterprise certificates.
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
