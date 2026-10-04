@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.62';
+const APP_VERSION='3.63';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.63',d:'Bike workouts tuned for your Renpho',det:'Auto resistance now suits the way the Renpho bike works. Each new interval goes straight to its resistance instead of creeping up over 10 to 15 seconds, so short VO2max efforts and recoveries start on time. Sprints get one fixed heavy resistance that you power yourself, because the bike cannot follow a 15-second effort. If your cadence drops under 60 rpm (50 on climbs) in a hard interval, the target eases 10% at a time so you do not stall, and comes back as you spin up; easing counts as the workout being hard when your level is set. Hill climbs use a cadence where the bike can actually reach your target, and the screen tells you when the bike is at its limit for your cadence.'},
   {v:'3.62',d:'Proper bike workouts that get harder as you get fitter',det:'Bike workouts are rebuilt. There are now eight kinds — Endurance, Tempo, Sweet Spot, Threshold, VO2max, Hill Strength, Cadence & Sprints and Recovery — each with levels 1 to 10, built to fit your 45 to 60 minutes and shown with your own watts and heart rate. Your week is set up for fitness, calories and getting faster: mostly Zone 2 rides with one or two quality sessions, picked by what you need most, kept easy the day after legs, easier in recovery weeks and when your fatigue is high. Finish a workout in Ride mode and its level goes up; if it was too much it goes down, and "How did it feel?" fine-tunes it. The plan and the bike screen now use the same workout, and each ride shows why it was picked and roughly how many calories it burns.'},
   {v:'3.61',d:'Rides arrive even with no phone open',det:'Your Worker now checks intervals.icu every 10 minutes and puts new rides straight into your account, so a Garmin ride is already on every device when you open the app. It writes as you, using your sign-in, so it can only reach your own data. Disconnecting intervals.icu in Settings turns it off.'},
   {v:'3.60',d:'Faster, lighter sync between your devices',det:'Each thing you save (a set, a day, a change to the week) now reaches your other devices on its own, the moment it is saved. Before, any save made every other device download your whole account again, and the app re-checked every minute. Rides stay in their own place in your account and are no longer copied as one big list.'},
@@ -4566,7 +4567,10 @@ function _bikeWorkout(cat,level,mins,indoor){
     name=`VO2max ${f.n}×${f.len}`;
   }else if(C==='hills'){
     const f=fit(15+L*2,L<=4?5:L<=7?4:3,3,2,12);
-    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,indoor?'Climb · heavy gear 60–70 rpm':'Climb · seated, low cadence',65),easy(3)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
+    // v3.63 Renpho: the bike's resistance tops out (about 270 W at 65 rpm), so a strong
+    // rider's climbs use a cadence where the target is reachable.
+    const cad=Math.max(65,Math.min(85,Math.ceil((_rideFtp()||0)*K.hi*9.56/38/5)*5));
+    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,indoor?`Climb · heavy gear ${cad-5}–${cad+5} rpm`:'Climb · seated, low cadence',cad),easy(3)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
     name=`Hill Strength ${f.n}×${f.len}`;
   }else{ // skills
     const k=3+Math.floor(L/3),sp=Math.max(2,Math.min(3+Math.floor(L/2),Math.floor((win-2*k+1)/3)));
@@ -7792,6 +7796,20 @@ function _rideTick(){
 // moved by at most 1 N·m a second so the resistance never jumps.
 function _rideErg(d){
   if(!d.cad||!Ride.targetW)return;
+  // v3.63 Renpho: the bike's resistance moves one torque step per second while
+  // following your cadence — smooth within a step, but too slow for the start of an
+  // interval or a 15-second sprint. A new step goes straight to its resistance, and a
+  // sprint gets one fixed heavy resistance (set for about 100 rpm) that you power yourself.
+  const sn=Ride.prog?_rideStepNow():null,step=sn&&sn.step;
+  if(sn&&Ride.ergStep!==sn.i){Ride.ergStep=sn.i;Ride.lastTq=null;Ride.sprintSent=false;}
+  if(step&&step.lo>=1.3){
+    if(!Ride.sprintSent){
+      Ride.sprintSent=true;
+      const tq=Math.min(40,Math.max(8,Math.round(Ride.targetW*9.56/100*2)/2));
+      Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);
+    }
+    return;
+  }
   const cad=Math.min(170,Math.max(40,d.cad));
   let tq=Math.round(Math.min(40,Math.max(1,Ride.targetW*9.56/cad))*2)/2;
   if(Ride.lastTq!=null){
@@ -7831,7 +7849,7 @@ async function _rideWake(){
 function rideStart(){
   try{if(!Ride.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Ride.audio=new AC();}}catch(_){}
   if(Ride.state==='idle'||Ride.state==='done'){
-    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;
+    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;
     _bikeSend(0,0x40,[0,2]);
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
   }
@@ -8092,13 +8110,26 @@ function _rideAutoTick(d){
       else if(hr<tg.hHi-3&&Ride.hrCut>0)Ride.hrCut=Math.max(0,Ride.hrCut-5);
       Ride.hrCut=Math.min(Ride.hrCut,Math.round(base*0.5/5)*5);
     }
+    // v3.63 Renpho: holding watts means more resistance as your cadence drops, so a
+    // tiring rider can stall. Under 60 rpm (50 on climbs) for 4 s in a hard step, the
+    // target eases 10% at a time (up to 30%) and comes back as you spin up again.
+    {
+      const hardStep=sn.step.lo>=0.76&&sn.step.lo<1.3,floor=sn.step.cad&&sn.step.cad<75?50:60,c=d&&d.cad||0;
+      if(hardStep&&c>0&&c<floor){
+        if(!Ride.lowCadAt)Ride.lowCadAt=now;
+        else if(now-Ride.lowCadAt>=4000){Ride.cadEase=Math.min(.3,(Ride.cadEase||0)+.1);Ride.lowCadAt=now;}
+      }else{
+        Ride.lowCadAt=0;
+        if(Ride.cadEase&&(!hardStep||c>=floor+5)&&now-(Ride.cadEaseAt||0)>=4000){Ride.cadEase=Math.max(0,Math.round((Ride.cadEase-.05)*100)/100);Ride.cadEaseAt=now;}
+      }
+    }
     // v3.62: how much the hard parts had to be eased (or were turned up) — sets the next level.
     if(sn.step.lo>=0.76){
       const b0=Math.max(40,base-Ride.bias);
-      Ride.cutPeak=Math.max(Ride.cutPeak||0,(Ride.hrCut+Math.max(0,-Ride.bias))/b0);
+      Ride.cutPeak=Math.max(Ride.cutPeak||0,(Ride.hrCut+Math.max(0,-Ride.bias))/b0+(Ride.cadEase||0));
       Ride.upPeak=Math.max(Ride.upPeak||0,Math.max(0,Ride.bias)/b0);
     }
-    Ride.targetW=Math.max(40,base-Ride.hrCut);
+    Ride.targetW=Math.max(40,Math.round((base-Ride.hrCut)*(1-(Ride.cadEase||0))/5)*5);
   }
   if(!Ride.auto||Bike.status!=='on')return;
   Ride.erg=true;
@@ -8195,6 +8226,9 @@ function _rideGoalHtml(d,hr){
           <div style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(x.label)}</div></div>
         <div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div></div>
       ${Ride.hrCut>0?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">❤️ Heart rate high — eased off ${Ride.hrCut} W</div>`:''}
+      ${Ride.cadEase>0?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">🔄 Cadence low — eased ${Math.round(Ride.cadEase*100)}% so you don't stall. Spin up and it comes back.</div>`:''}
+      ${x.lo>=1.3?`<div style="font-size:12px;font-weight:700;color:var(--grn);margin-top:3px">⚡ Sprint — resistance is fixed, give it everything</div>`
+        :tg.wLo&&d&&d.cad>30&&(tg.wLo+Ride.bias-Ride.hrCut)>40*d.cad/9.56*0.97?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">⚙️ At ${Math.round(d.cad)} rpm the bike tops out near ${Math.round(40*d.cad/9.56)} W — spin a little faster</div>`:''}
       <div style="font-size:12px;margin-top:3px">🎯 ${tg.wLo?`<b>${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W</b> · `:''}❤️ <b>${tg.hLo?`${tg.hLo}–${tg.hHi}`:`under ${tg.hHi}`}</b>${x.cad?` · ${x.cad} rpm`:''}
         ${d||hr?` <span style="color:${ok?'var(--grn)':'var(--amb)'};font-weight:700">${ok?'✓ on target':!inH?(hr>tg.hHi?'↓ ease off':'↑ push a bit'):(pw<tg.wLo?'↑ push a bit':'↓ ease off')}</span>`:''}</div>
       ${bar(1-sn.left/x.sec,'var(--acc)')}

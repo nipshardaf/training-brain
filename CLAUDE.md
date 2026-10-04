@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.62 (`index.html`)
+### App — v3.63 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -45,6 +45,9 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   days since (sweet spot weekly, threshold/VO2 alternate), none the day after legs, no VO2/hills the day before,
   recovery weeks (wk 3) and high fatigue (TSB) → easy. Levels: synced `bike_levels` + `bike_level_log`, moved by
   `_bikeAfterRide` on Ride-mode finish (+ "How did it feel?" `rideFeel`). User goal: fitness & calories + faster; 45–60 min.
+  v3.63 Renpho tuning (`_rideErg`): a new step jumps straight to its torque (no 1-step/s ramp); sprint steps (lo≥1.3)
+  get one fixed torque for ~100 rpm; stall guard eases the target 10%/4 s (max 30%) under 60 rpm (50 on climbs) and
+  counts as easing for levels; hill cadence rises so the target fits the bike's 40-torque cap (≈272 W at 65 rpm).
 - **Live sync, one key at a time (v3.60).** `_liveSyncStart` (from `startSyncListener`) listens to
   `users/<uid>/data` child_added/changed/removed and applies each key via `_applyCloudKey` (shared with
   `loadFromCloud`; dirty keys kept; equality via `_rtdbNorm` so own echoes are no-ops). `loadFromCloud` reads only
