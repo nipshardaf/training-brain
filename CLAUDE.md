@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.61 (`index.html`)
+### App — v3.62 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -38,6 +38,13 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   mid-week changes. Rides are placed on the other days jointly with the sessions
   (scored: weather, spacing, no 3+ training days in a row incl. last weekend), and at
   least one rest day is kept.
+- **Cycling engine (v3.62).** `BIKE_CATS` (recovery, endurance, tempo, sweetspot, threshold, vo2, hills, skills) ×
+  levels 1–10 → `_bikeWorkout(cat,lvl,mins,indoor)` builds steps (fit to the session; level = total work, fewer/longer
+  intervals higher up) used by BOTH the plan card (`_bikeBlocks`, personal watts/HR) and Ride mode (`Ride.plan`/`ridePick`).
+  `_bikeWeek(mon)` picks each ride day on read: long → endurance (≥60 min), Q=1–2 quality days by goal priority ×
+  days since (sweet spot weekly, threshold/VO2 alternate), none the day after legs, no VO2/hills the day before,
+  recovery weeks (wk 3) and high fatigue (TSB) → easy. Levels: synced `bike_levels` + `bike_level_log`, moved by
+  `_bikeAfterRide` on Ride-mode finish (+ "How did it feel?" `rideFeel`). User goal: fitness & calories + faster; 45–60 min.
 - **Live sync, one key at a time (v3.60).** `_liveSyncStart` (from `startSyncListener`) listens to
   `users/<uid>/data` child_added/changed/removed and applies each key via `_applyCloudKey` (shared with
   `loadFromCloud`; dirty keys kept; equality via `_rtdbNorm` so own echoes are no-ops). `loadFromCloud` reads only

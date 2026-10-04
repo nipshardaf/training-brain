@@ -1003,10 +1003,10 @@ const WI = {
   LEGS:         {l:()=>_T('wt_legs'),      i:_icon('legs-workout.png','🏋️'),   c:'#059669',d:()=>_T('wi_legs_d')},
   UPPER_PUMP:   {l:()=>_T('wt_upper'),     i:_icon('gym-weights.png','🏋️'),    c:'#d97706',d:()=>_T('wi_upper_d')},
   SHOULDERS_ARMS:{l:()=>'Shoulders & Arms',  i:_icon('gym-weights.png','💪'),    c:'#0891b2',d:()=>'Delts · Biceps · Triceps'}, // v3.46
-  LONG_OUTDOOR: {l:()=>{const s=getRideSession('LONG_OUTDOOR'); return s.name;}, i:_icon('ride-day.png','🚴'), c:'#0891b2',d:()=>{const s=getRideSession('LONG_OUTDOOR'); return `${s.total} min · Zone 2 · Outdoor`;}},
-  SHORT_OUTDOOR:{l:()=>{const s=getRideSession('SHORT_OUTDOOR');return s.name;},i:_icon('ride-day.png','🚴'), c:'#0891b2',d:()=>{const s=getRideSession('SHORT_OUTDOOR');return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Outdoor`;}},
-  LONG_INDOOR:  {l:()=>{const s=getRideSession('LONG_INDOOR');  return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('LONG_INDOOR');  return `${s.total} min · Zone 2 · Indoor`;}},
-  SHORT_INDOOR: {l:()=>{const s=getRideSession('SHORT_INDOOR'); return s.name;},i:_icon('ride-day.png','🚲'), c:'#6366f1',d:()=>{const s=getRideSession('SHORT_INDOOR'); return `${s.total} min · ${getRideWeek().wk===3?'Recovery':'Quality'} · Indoor`;}},
+  LONG_OUTDOOR: {l:(ds)=>getRideSession('LONG_OUTDOOR',ds).name, i:_icon('ride-day.png','🚴'), c:'#0891b2',d:(ds)=>{const s=getRideSession('LONG_OUTDOOR',ds);return `${s.total} min · ${BIKE_CATS[s.cat].name} · Outdoor`;}},
+  SHORT_OUTDOOR: {l:(ds)=>getRideSession('SHORT_OUTDOOR',ds).name,i:_icon('ride-day.png','🚴'), c:'#0891b2',d:(ds)=>{const s=getRideSession('SHORT_OUTDOOR',ds);return `${s.total} min · ${BIKE_CATS[s.cat].name} · Outdoor`;}},
+  LONG_INDOOR: {l:(ds)=>getRideSession('LONG_INDOOR',ds).name,i:_icon('ride-day.png','🚲'), c:'#6366f1',d:(ds)=>{const s=getRideSession('LONG_INDOOR',ds);return `${s.total} min · ${BIKE_CATS[s.cat].name} · Indoor`;}},
+  SHORT_INDOOR: {l:(ds)=>getRideSession('SHORT_INDOOR',ds).name,i:_icon('ride-day.png','🚲'), c:'#6366f1',d:(ds)=>{const s=getRideSession('SHORT_INDOOR',ds);return `${s.total} min · ${BIKE_CATS[s.cat].name} · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
   SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Gym session missed — the gym days left this week now cover it.'},
   FULL_BODY:    {l:()=>'Full Body',         i:_icon('gym-weights.png','💪'),     c:'#7c3aed',d:()=>'One-session full-body — squat · hinge · press · pull · shoulder · core'},
@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.61';
+const APP_VERSION='3.62';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.62',d:'Proper bike workouts that get harder as you get fitter',det:'Bike workouts are rebuilt. There are now eight kinds — Endurance, Tempo, Sweet Spot, Threshold, VO2max, Hill Strength, Cadence & Sprints and Recovery — each with levels 1 to 10, built to fit your 45 to 60 minutes and shown with your own watts and heart rate. Your week is set up for fitness, calories and getting faster: mostly Zone 2 rides with one or two quality sessions, picked by what you need most, kept easy the day after legs, easier in recovery weeks and when your fatigue is high. Finish a workout in Ride mode and its level goes up; if it was too much it goes down, and "How did it feel?" fine-tunes it. The plan and the bike screen now use the same workout, and each ride shows why it was picked and roughly how many calories it burns.'},
   {v:'3.61',d:'Rides arrive even with no phone open',det:'Your Worker now checks intervals.icu every 10 minutes and puts new rides straight into your account, so a Garmin ride is already on every device when you open the app. It writes as you, using your sign-in, so it can only reach your own data. Disconnecting intervals.icu in Settings turns it off.'},
   {v:'3.60',d:'Faster, lighter sync between your devices',det:'Each thing you save (a set, a day, a change to the week) now reaches your other devices on its own, the moment it is saved. Before, any save made every other device download your whole account again, and the app re-checked every minute. Rides stay in their own place in your account and are no longer copied as one big list.'},
   {v:'3.59',d:'Rides reach all your devices straight away',det:'Each ride is now kept once in your account in the cloud, and every signed-in device receives new rides live. A ride you finish in Ride mode shows up on your other phone within seconds, and a ride one device fetches from intervals.icu is shared with the others instead of each phone keeping its own list.'},
@@ -1441,7 +1442,7 @@ async function getAICoach(energy,ct,dp){
     // power targets" with no FTP to anchor them), current form, the planned
     // session, and today's weather. v2.96.
     const _ftpLine=profile2?.ftp?`FTP: ${profile2.ftp}W${profile2.weight?` (${(profile2.ftp/profile2.weight).toFixed(2)} W/kg)`:''} — Zone 2 ≈ ${Math.round(profile2.ftp*0.56)}-${Math.round(profile2.ftp*0.75)}W, threshold ≈ ${Math.round(profile2.ftp*0.91)}-${Math.round(profile2.ftp*1.05)}W`:'FTP not set — give HR/RPE-based targets, not watts';
-    const _sess2=(()=>{try{const s=getRideSession(dp?.type||ct);return s?`Planned session: ${s.name} — ~${s.total} min`:'';}catch(_){return'';}})();
+    const _sess2=(()=>{try{const s=getRideSession(dp?.type||ct,dp?.date);return s?`Planned session: ${s.name} (${BIKE_CATS[s.cat].name}, level ${s.lvl}) — ~${s.total} min`:'';}catch(_){return'';}})();
     const _wx2=dp?.weather?`Weather today: ${dp.weather.tmin}–${dp.weather.tmax}°C · wind ${dp.weather.wind}km/h · rain ${dp.weather.rain}mm`:'';
     const _fit2=_fitnessLine();
     const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history and give power/HR targets consistent with their FTP and current form.${_layoffNote()}${_dailyLangNote}
@@ -4453,17 +4454,18 @@ const RIDE_PHASE=['Build week 1','Build week 2','Peak week','Recovery week'];
 const RIDE_LONG_DUR=[60,75,90,50];
 const RIDE_QUALITY_SEQ=['tempo','sweetspot','hills','recovery'];
 
-function getRideWeek(){
+function getRideWeek(mon){
+  const ws=mon||S.weekStart;
   let start=DB.get('bike_block_start',null);
-  if(!start){start=fd(S.weekStart);DB.set('bike_block_start',start);}
+  if(!start){start=fd(ws);DB.set('bike_block_start',start);}
   const startMon=new Date(start+'T12:00:00');
-  const weeks=Math.round((S.weekStart-startMon)/6048e5); // 6048e5 ms = 7 days
+  const weeks=Math.round((ws-startMon)/6048e5); // 6048e5 ms = 7 days
   const block=Math.max(0,Math.floor(weeks/4));
   // E: event-aware periodization
   const ev=DB.get('bike_event',null);
   if(ev?.date){
     const evDate=new Date(ev.date+'T12:00:00');
-    const weeksToEvent=Math.round((evDate-S.weekStart)/6048e5);
+    const weeksToEvent=Math.round((evDate-ws)/6048e5);
     if(weeksToEvent<=0)  return{wk:0,block,phase:'done',weeksToEvent:0,ev};
     if(weeksToEvent===1) return{wk:3,block,phase:'taper',weeksToEvent:1,ev};
     if(weeksToEvent===2) return{wk:2,block,phase:'peak',weeksToEvent:2,ev};
@@ -4472,107 +4474,227 @@ function getRideWeek(){
   return{wk:((weeks%4)+4)%4,block,phase:'build',weeksToEvent:null,ev:null};
 }
 
-function getRideSession(type){
-  const{wk,block,phase,weeksToEvent,ev}=getRideWeek();
-  const indoor=type.includes('INDOOR');
-  // A: use onboarding starting duration + goal progression rate
-  const setup=DB.get('bike_setup',{dur:45,goal:'base'});
-  const goalRate={base:15,event:20,active:10}[setup.goal]||15;
-  // C: apply Strava adapt factor
-  const adaptFactor=DB.get('bike_adapt_factor',1.0);
-
-  // E: compute event-aware long ride duration
-  function eventLongDur(){
-    if(!ev?.date||weeksToEvent===null) return null;
-    const distKm=ev.unit==='mi'?ev.dist*1.609:ev.dist;
-    const targetDur=Math.min(Math.round(distKm/22*60*0.75/5)*5,180);
-    if(phase==='taper') return Math.max(Math.round(targetDur*0.5/5)*5,20);
-    if(phase==='peak')  return targetDur;
-    const buildWeeks=Math.max(weeksToEvent-2,1);
-    const prog=Math.min(1,(block*4+wk)/buildWeeks);
-    return Math.min(Math.round((setup.dur+(targetDur-setup.dur)*prog)*adaptFactor/5)*5,180);
-  }
-
-  if(type.includes('LONG')){
-    let dur=eventLongDur();
-    if(dur===null){
-      dur=setup.dur+(wk<3?wk*goalRate+block*10:Math.round(setup.dur*0.6));
-      dur=Math.min(Math.round(dur*adaptFactor/5)*5,150);
+/* ── v3.62 CYCLING ENGINE ─────────────────────────────────────────────────────
+   One workout library drives both the plan and Ride mode. A workout is built from a
+   category and a level (1–10) to fit the time you have, with targets as % of FTP and
+   of threshold heart rate (shown as your own watts and bpm). Levels go up when you
+   finish a workout cleanly in Ride mode and down when it was too much (plus a "how did
+   it feel?" after each one). The week's rides follow your goal — fitness & calories
+   plus getting faster: mostly Zone 2, one or two quality sessions — the 4-week
+   build/recovery cycle, your fatigue (training load) and your gym days (nothing hard
+   the day after legs). Before this there were seven fixed workouts, four of them
+   rotating by calendar week, that never got harder, written twice (plan and bike). */
+const BIKE_CATS={
+  recovery:{name:'Recovery',lo:.45,hi:.55,z:[0,.8],hard:false,prio:0,gloss:'zone2',
+    why:'Deliberately easy — blood flow and recovery, not training. Going hard here costs you the next quality day.'},
+  endurance:{name:'Endurance',lo:.6,hi:.72,z:[.81,.89],hard:false,prio:0,gloss:'zone2',
+    why:'Your calorie burner and aerobic base: steady Zone 2 you could hold a conversation in. Higher levels add short tempo blocks.'},
+  tempo:{name:'Tempo',lo:.76,hi:.87,z:[.88,.93],hard:false,prio:1,gloss:'zone2',
+    why:'Comfortably hard — raises how long you can hold a strong pace, and burns a lot.'},
+  sweetspot:{name:'Sweet Spot',lo:.88,hi:.93,z:[.91,.97],hard:true,prio:3,gloss:'sweetspot',
+    why:'Just under threshold — the most fitness per unit of fatigue. The backbone of getting faster.'},
+  threshold:{name:'Threshold',lo:.95,hi:1.02,z:[.95,1.02],hard:true,prio:2,gloss:'ftp',
+    why:'Right at your FTP — this is what pushes the FTP itself up.'},
+  vo2:{name:'VO2max',lo:1.06,hi:1.18,z:[.98,1.06],hard:true,prio:2,gloss:'ftp',
+    why:'Short, hard efforts that raise your ceiling, so threshold efforts feel easier.'},
+  hills:{name:'Hill Strength',lo:.85,hi:.95,z:[.9,.97],hard:true,prio:1,gloss:'sweetspot',
+    why:'Heavy gear, low cadence (60–70 rpm): leg strength on the bike, a good partner to your gym work.'},
+  skills:{name:'Cadence & Sprints',lo:.6,hi:.7,z:[.8,.9],hard:false,prio:1,gloss:'zone2',
+    why:'High-cadence spin-ups and a few short sprints — smoother pedalling and snap, without deep fatigue.'},
+};
+const BIKE_LEVEL_DEFAULT={recovery:1,endurance:3,tempo:3,sweetspot:3,threshold:2,vo2:2,hills:2,skills:2};
+function _bikeLevels(){return{...BIKE_LEVEL_DEFAULT,...(DB.get('bike_levels',{})||{})};}
+function _bikeLastDone(){
+  const last={};
+  for(const x of DB.get('bike_level_log',[])||[])if(x&&x.cat&&(!last[x.cat]||x.date>last[x.cat]))last[x.cat]=x.date;
+  return last;
+}
+function _bikeWorkout(cat,level,mins,indoor){
+  const C=BIKE_CATS[cat]?cat:'endurance',K=BIKE_CATS[C];
+  const L=Math.max(1,Math.min(10,Math.round((+level||1)*2)/2)),M=Math.max(20,Math.round(+mins||60));
+  const st=(m,lo,hi,z,label,cad)=>({sec:Math.round(m*60),lo,hi,z,h1:z[0]?Math.round(165*z[0]):0,h2:Math.round(165*z[1]),label,cad:cad||0});
+  const E=BIKE_CATS.endurance;
+  const z2=(m,label)=>st(m,E.lo,E.hi,E.z,label||'Steady Zone 2');
+  const easy=m=>st(m,.45,.6,[0,.81],'Easy spin');
+  const reps=(n,work,rest)=>{const a=[];for(let i=0;i<n;i++){a.push({...work,label:`${work.label} ${i+1}/${n}`});if(i<n-1&&rest)a.push(rest);}return a;};
+  const W=K.hard?12:10,CD=K.hard?8:5,win=M-W-CD;
+  const warm=K.hard?[st(W-3,.5,.68,[.68,.85],'Warm-up'),...reps(3,st(.5,.85,.95,[.85,.95],'Pickup'),st(.5,.5,.6,[0,.81],'Easy'))]:[st(W,.5,.68,[.68,.85],'Warm-up')];
+  // n intervals sharing total work T minutes (rest between): each level adds time at
+  // effort, and higher levels use fewer, longer intervals. If it won't fit the session,
+  // the intervals shorten. Time left over is ridden in Zone 2.
+  // If it won't fit, the interval count that gets the most of that work done wins
+  // (a short session does fewer, longer intervals rather than tiny ones), never
+  // longer than maxLen.
+  const fit=(T,n0,rest,mn=2,maxLen=20)=>{
+    const l0=Math.max(1,Math.min(maxLen,Math.round(T/n0)));
+    if(n0*l0+(n0-1)*rest<=win)return{n:n0,len:l0,left:win-(n0*l0+(n0-1)*rest)}; // the level's own structure, when it fits
+    let best=null;
+    for(let n=n0;n>=Math.min(mn,n0);n--){
+      const len=Math.max(1,Math.min(maxLen,Math.round(T/n),Math.floor((win-(n-1)*rest)/n)));
+      if(!best||n*len>best.n*best.len)best={n,len};
     }
-    const phaseLabel=phase==='taper'?'Taper week — event next week!':phase==='peak'?'Peak week — longest ride':phase==='done'?'Post-event recovery':RIDE_PHASE[wk];
-    const focusText=phase==='taper'?'Legs are loaded — this is a confidence ride, not a training ride. Keep it genuinely easy and arrive at your event fresh.':phase==='peak'?'Your longest training ride. You\'ve earned this distance — the event distance will feel achievable after today.':wk===3?'Recovery week — keep it genuinely easy. Lower volume lets your body absorb the last 3 weeks of work.':'Your aerobic engine builder. The discipline is staying in Zone 2 even when the legs feel great.';
-    return{
-      name:'Endurance Ride',phase:phaseLabel,total:dur,
-      blocks:[
-        {t:'10 min',d:'Easy warm-up — spin up gradually, cadence 85-95 RPM'},
-        {t:(dur-15)+' min',d:phase==='taper'?'Easy Zone 1-2 — conversational, save the legs. HR under 130.':'Steady Zone 2 — HR 120-140, fully conversational pace'},
-        {t:'5 min',d:'Easy cool-down spin'},
-      ],
-      focus:focusText,
-    };
+    return{...best,left:win-(best.n*best.len+(best.n-1)*rest)};
+  };
+  const pad=left=>left>=3?[z2(left)]:[];
+  let main=[],name=K.name,cdExtra=0;
+  if(C==='recovery'){
+    return _bikeDone(C,L,'Recovery Spin',[st(M,.45,.55,[0,.8],'Very easy spin · 90+ rpm',90)]);
+  }else if(C==='endurance'){
+    const lo=Math.min(.68,.56+L*.012),hi=Math.min(.75,.68+L*.007);
+    const touches=L>=4?(L>=8?3:2):0,tlen=L>=7?8:5,drills=L>=2&&!touches?3:0;
+    const band=(m,label)=>st(m,lo,hi,E.z,label||'Steady Zone 2');
+    const extra=touches?reps(touches,st(tlen,.78,.85,[.88,.93],'Tempo block'),null):drills?reps(drills,st(1,.62,.7,E.z,'Spin-up · 100+ rpm',100),null):[];
+    const work=extra.reduce((a,x)=>a+x.sec/60,0),gap=(win-work)/(extra.length+1);
+    main=[band(gap)];extra.forEach(x=>{main.push(x,band(gap));});
+    // keep repeats grouped for display: tempo block / Zone 2 alternate
+    name=(M>=75?'Long ':'')+(touches?`Endurance + Tempo ${touches}×${tlen}`:drills?'Endurance + Cadence':'Endurance Ride');
+  }else if(C==='tempo'){
+    const f=fit(16+L*2,L<=5?3:2,4);
+    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,'Tempo'),easy(4)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
+    name=`Tempo ${f.n}×${f.len}`;
+  }else if(C==='sweetspot'){
+    const n=L<=3?4:L<=6?3:2,T=18+L*2,rest=T/n>=15?5:4,f=fit(T,n,rest);
+    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,'Sweet spot'),easy(rest)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
+    name=`Sweet Spot ${f.n}×${f.len}`;
+  }else if(C==='threshold'){
+    const n=L<=2?5:L<=4?4:L<=6?3:2,T=12+L*2,rest=Math.min(6,Math.max(3,Math.round(T/n/2))),f=fit(T,n,rest);
+    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,'Threshold'),easy(rest)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
+    name=`Threshold ${f.n}×${f.len}`;
+  }else if(C==='vo2'){
+    const len=L<=3?2:L<=6?3:4,rest=L>=8?3:len,n=Math.round(L<=3?4+L:L<=6?L:L-3),f=fit(len*n,n,rest,3,len);
+    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,'VO2max'),easy(rest)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
+    name=`VO2max ${f.n}×${f.len}`;
+  }else if(C==='hills'){
+    const f=fit(15+L*2,L<=4?5:L<=7?4:3,3,2,12);
+    main=[...reps(f.n,st(f.len,K.lo,K.hi,K.z,indoor?'Climb · heavy gear 60–70 rpm':'Climb · seated, low cadence',65),easy(3)),...pad(f.left)];cdExtra=f.left<3?f.left:0;
+    name=`Hill Strength ${f.n}×${f.len}`;
+  }else{ // skills
+    const k=3+Math.floor(L/3),sp=Math.max(2,Math.min(3+Math.floor(L/2),Math.floor((win-2*k+1)/3)));
+    const ups=reps(k,st(1,.62,.72,[.8,.9],'Spin-up · 105+ rpm',105),easy(1));
+    const sprints=reps(sp,st(.25,1.5,2,[.9,1.05],'Sprint · all out, seated'),st(2.75,.45,.6,[0,.81],'Easy spin'));
+    const used=(ups.concat(sprints)).reduce((a,x)=>a+x.sec/60,0),left=win-used;
+    main=[...ups,...(left>=3?[z2(left)]:[]),...sprints];cdExtra=left<3?left:0;
+    name=`Cadence & ${sp} Sprints`;
   }
-
-  // E: taper short ride — easy legs shake-out
-  if(phase==='taper'){
-    return{
-      name:'Event Prep Spin',phase:'Taper — event this week!',total:35,
-      blocks:[
-        {t:'10 min',d:'Easy warm-up spin — just get the blood moving'},
-        {t:'3 × 2 min',d:'Race-pace efforts — wake the legs up, not a workout. 3 min easy spin between each'},
-        {t:'10 min',d:'Easy cool-down'},
-      ],
-      focus:'Your legs are loaded from weeks of training. This isn\'t a workout — it\'s a reminder to your neuromuscular system what the event pace feels like. Resist the urge to train hard.',
-    };
+  return _bikeDone(C,L,name,[...warm,...main,st(CD+cdExtra,.45,.55,[0,.81],'Cool-down')]);
+}
+function _bikeDone(cat,lvl,name,steps){
+  const ftp=_rideFtp()||180;
+  const secs=steps.reduce((a,x)=>a+x.sec,0);
+  let kcal=0;for(const x of steps)kcal+=_rideKcalPerSec(ftp*(x.lo+x.hi)/2,0).v*x.sec;
+  return{cat,lvl,name,steps,total:Math.round(secs/60),kcal:Math.round(kcal/10)*10,focus:BIKE_CATS[cat].why,blocks:_bikeBlocks(steps)};
+}
+// Steps → readable blocks, with repeats grouped ("3 × 12 min") and your own targets.
+function _bikeBlocks(steps){
+  const dur=sec=>sec<60?`${sec} s`:`${Math.round(sec/30)/2} min`;
+  const tgt=x=>{
+    const t=_rideStepTargets(x);
+    const w=t.wLo?`${t.wLo}–${t.wHi} W`:`${Math.round(x.lo*100)}–${Math.round(x.hi*100)}% FTP`;
+    const h=t.hHi?(t.hLo?` · HR ${t.hLo}–${t.hHi}`:` · HR under ${t.hHi}`):'';
+    return w+h+(x.cad?` · ${x.cad} rpm`:'');
+  };
+  const out=[];
+  for(let i=0;i<steps.length;i++){
+    const x=steps[i],m=/^(.*) 1\/(\d+)$/.exec(x.label);
+    if(m&&m[1]==='Pickup'){i+=2*(+m[2])-2;continue;} // folded into the warm-up line
+    if(x.label==='Warm-up'&&steps[i+1]&&/^Pickup/.test(steps[i+1].label)){
+      let sec=x.sec,j=i+1;while(steps[j]&&/^Pickup|^Easy$/.test(steps[j].label))sec+=steps[j++].sec;
+      out.push({t:dur(sec),d:`Warm-up, ending with 3 × 30 s pickups — ${tgt(x)}`});
+      i=j-1;continue;
+    }
+    if(m){
+      const n=+m[2],rest=steps[i+1]&&!/ \d+\/\d+$/.test(steps[i+1].label)&&n>1?steps[i+1]:null;
+      const span=rest?2*n-1:n;
+      out.push({t:`${n} × ${dur(x.sec)}`,d:`${m[1]} — ${tgt(x)}${rest?`. ${dur(rest.sec)} ${rest.label.toLowerCase()} between`:''}`});
+      i+=span-1;continue;
+    }
+    out.push({t:dur(x.sec),d:`${x.label} — ${tgt(x)}`});
   }
-  // E: peak short ride — race-pace sharpener
-  if(phase==='peak'&&ev?.date){
-    return{
-      name:'Race-Pace Sharpener',phase:'Peak week',total:60,
-      blocks:[
-        {t:'15 min',d:'Warm-up with 3 × 30s accelerations to wake up the fast-twitch fibres'},
-        {t:'4 × 8 min',d:'At your target event pace — effort should feel "hard but sustainable for an hour". 3 min easy spin between'},
-        {t:'10 min',d:'Easy cool-down — spin out any residual fatigue'},
-      ],
-      focus:'Your last hard quality session before the event. You\'re sharpening, not building — the fitness is already there. Trust the training.',
-    };
+  return out;
+}
+// The week's rides: date → {cat, lvl, mins, kind, why}. Worked out on read, like the week.
+let _bikeWeekMemo={key:null,v:null};
+function _bikeWeek(mon){
+  const plan=DB.get(DB.pk(mon),null)||[];
+  const key=fd(mon)+'|'+_factsVer+'|'+fd(new Date())+'|'+plan.map(d=>d.date+d.type).join();
+  if(_bikeWeekMemo.key===key)return _bikeWeekMemo.v;
+  const out={};
+  const rides=plan.filter(d=>/^(LONG|SHORT)_(IN|OUT)DOOR$/.test(d.type)).sort((a,b)=>a.date.localeCompare(b.date));
+  const rw=getRideWeek(mon),lv=_bikeLevels(),last=_bikeLastDone();
+  const shift=(ds,n)=>fd(addDays(new Date(ds+'T12:00:00'),n));
+  const gymOn=ds=>{
+    const lg=DB.get('log_'+ds,null);
+    if(lg&&_MUSC[lg.type]&&lg.exercises?.some(e=>e.sets?.some(x=>x.done)))return lg.type;
+    const p=plan.find(d=>d.date===ds)||(ds<fd(mon)?(DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null)||[]).find(d=>d.date===ds):null);
+    return p&&_MUSC[p.type]?p.type:null;
+  };
+  const legs=t=>t==='LEGS'||t==='FULL_BODY';
+  let tsb=null;
+  const curve=DB.get('bike_fitness_curve',null);
+  if(curve){const ks=Object.keys(curve).filter(k=>k<=fd(new Date())).sort();if(ks.length)tsb=curve[ks[ks.length-1]].tsb;}
+  const easyWeek=rw.wk===3||rw.phase==='taper'||rw.phase==='done';
+  let Q=easyWeek?0:rides.length>=3?2:rides.length?1:0;
+  if(tsb!=null&&tsb<-30)Q=0;else if(tsb!=null&&tsb<-20)Q=Math.min(Q,1);
+  const longDay=rides.find(d=>d.type.startsWith('LONG'))||(rides.length>=2?rides[rides.length-1]:null);
+  const cands=rides.filter(d=>d!==longDay).map(d=>({d,after:legs(gymOn(shift(d.date,-1))),before:legs(gymOn(shift(d.date,1)))}))
+    .sort((a,b)=>(a.after-b.after)||(a.before-b.before)||a.d.date.localeCompare(b.d.date));
+  const qDays=[];
+  for(const c of cands){
+    if(qDays.length>=Q||c.after)continue;
+    if(qDays.some(q=>Math.abs(new Date(q.d.date)-new Date(c.d.date))<=864e5))continue; // never two hard days in a row
+    qDays.push(c);
   }
-
-  // Quality (shorter) ride — rotates each phase week
-  const q=RIDE_QUALITY_SEQ[wk];
-  if(q==='tempo')return{
-    name:'Tempo Intervals',phase:RIDE_PHASE[wk],total:55,
-    blocks:[
-      {t:'15 min',d:'Warm-up — build from easy to low Zone 2'},
-      {t:'2 × 12 min',d:'Tempo — Zone 3, HR 140-155, steady & strong. 5 min easy spin between'},
-      {t:'10 min',d:'Easy cool-down'},
-    ],
-    focus:'Tempo teaches your body to clear lactate efficiently — the bridge between easy riding and hard efforts.',
-  };
-  if(q==='sweetspot')return{
-    name:'Sweet Spot',phase:RIDE_PHASE[wk],total:60,
-    blocks:[
-      {t:'15 min',d:'Warm-up with 2-3 short 30s pickups near the end'},
-      {t:'3 × 10 min',d:'Sweet Spot — strong but controlled (~88-93% of threshold). 5 min recovery between'},
-      {t:'10 min',d:'Easy cool-down'},
-    ],
-    focus:'The best return-on-time interval for raising sustainable power. Hard, but you should finish each block — not bury yourself.',
-  };
-  if(q==='hills')return{
-    name:'Hill Repeats',phase:RIDE_PHASE[wk],total:55,
-    blocks:[
-      {t:'15 min',d:'Warm-up — easy spinning to the climb'},
-      {t:'5 × 4 min',d:indoor?'High resistance, low cadence 60-70 RPM, strong & seated. Easy 3 min spin between':'Hill climbs — strong seated effort, low cadence. Easy descent to recover'},
-      {t:'10 min',d:'Easy cool-down'},
-    ],
-    focus:'Hills build leg strength and force production — power that carries over to every other ride.',
-  };
-  return{
-    name:'Recovery Spin',phase:RIDE_PHASE[wk],total:35,
-    blocks:[
-      {t:'35 min',d:'Very easy — Zone 1, light pressure on the pedals, high cadence 90+ RPM, flat route'},
-    ],
-    focus:'This is not training — it\'s active recovery. If you feel any strain, you\'re going too hard.',
-  };
+  if(!qDays.length&&Q&&rides.length===1&&rides[0]===longDay&&!legs(gymOn(shift(rides[0].date,-1))))qDays.push({d:rides[0],before:false}); // one ride a week: make it count
+  // Most-needed quality type first: priority × days since you last did one.
+  const since=c=>last[c]?Math.min(21,Math.round((mon-new Date(last[c]+'T12:00:00'))/864e5)+1):8; // never done counts as just over a week, so priorities lead
+  const order=Object.keys(BIKE_CATS).filter(c=>BIKE_CATS[c].prio>0).sort((a,b)=>(BIKE_CATS[b].prio*since(b)-BIKE_CATS[a].prio*since(a))||(since(b)-since(a))); // ties: the one waited for longest
+  // The week's most-needed types first, then each onto a day that suits it: the day
+  // before legs takes one that isn't leg-heavy (not VO2max or hills).
+  const ago=c=>last[c]?`last done ${since(c)-1} day${since(c)===2?'':'s'} ago`:'not done yet';
+  const ok=(q,c)=>!(q.before&&(c==='vo2'||c==='hills'));
+  const pool=order.slice(0,qDays.length),pickFor={};
+  for(const q of [...qDays].sort((a,b)=>b.before-a.before)){
+    const i=pool.findIndex(c=>ok(q,c));
+    pickFor[q.d.date]=i>=0?pool.splice(i,1)[0]
+      :order.find(c=>ok(q,c)&&!pool.includes(c)&&!Object.values(pickFor).includes(c))||'sweetspot';
+  }
+  qDays.sort((a,b)=>a.d.date.localeCompare(b.d.date)).forEach(q=>{
+    const cat=pickFor[q.d.date];
+    const tired=tsb!=null&&tsb<-20;
+    out[q.d.date]={cat,lvl:Math.max(1,lv[cat]-(tired?1:0)),mins:60,kind:'quality',
+      why:`Quality day — ${BIKE_CATS[cat].name} is your most-needed session (${ago(cat)})${tired?'; a level easier while your form is low':''}${q.before?'; nothing too leg-heavy before tomorrow\'s legs':''}.`};
+  });
+  for(const d of rides){
+    if(out[d.date])continue;
+    if(d===longDay){
+      out[d.date]={cat:'endurance',lvl:lv.endurance,mins:Math.max(easyWeek?50:60,getRideDuration('LONG')),kind:'long',
+        why:easyWeek?'Long ride in a recovery week — shorter and fully easy.':'Long ride — steady Zone 2, the big calorie burn and your aerobic base.'};
+      continue;
+    }
+    const after=legs(gymOn(shift(d.date,-1)));
+    if(tsb!=null&&tsb<-30)out[d.date]={cat:'recovery',lvl:1,mins:35,kind:'recovery',why:`Your fatigue is high (form ${Math.round(tsb)}) — an easy spin today.`};
+    else out[d.date]={cat:'endurance',lvl:Math.max(1,lv.endurance-(after||easyWeek?1:0)),mins:after||easyWeek?45:50,kind:'endurance',
+      why:after?'The day after legs — kept to easy Zone 2 so your legs recover.':easyWeek?'Recovery week — easier on purpose so the last three weeks sink in.':'Zone 2 between the harder days — burns calories without adding fatigue.'};
+  }
+  if(rw.phase==='taper')for(const d of rides)if(d!==longDay)out[d.date]={cat:'skills',lvl:2,mins:35,kind:'recovery',why:'Event week — short openers to keep the legs awake, nothing more.'};
+  _bikeWeekMemo={key,v:out};
+  return out;
+}
+function getRideSession(type,ds){
+  const mon=ds?getMon(new Date(ds+'T12:00:00')):S.weekStart;
+  const wk=_bikeWeek(mon);
+  let pick=ds?wk[ds]:null;
+  if(!pick){ // no date given: the next day of this type this week
+    const plan=DB.get(DB.pk(mon),null)||[],today=fd(new Date());
+    const d=plan.find(x=>x.type===type&&wk[x.date]&&x.date>=today)||plan.find(x=>x.type===type&&wk[x.date]);
+    pick=d?wk[d.date]:type.startsWith('LONG')?{cat:'endurance',lvl:_bikeLevels().endurance,mins:getRideDuration('LONG'),kind:'long',why:''}
+      :{cat:'endurance',lvl:_bikeLevels().endurance,mins:50,kind:'endurance',why:''};
+  }
+  const rw=getRideWeek(mon);
+  const w=_bikeWorkout(pick.cat,pick.lvl,pick.mins,type.includes('INDOOR'));
+  if(pick.kind==='long'&&!/^Long/.test(w.name))w.name='Long '+w.name;
+  const phase=rw.phase==='taper'?'Taper — event this week':rw.phase==='peak'?'Peak week':rw.phase==='done'?'Post-event recovery':RIDE_PHASE[rw.wk];
+  return{...w,kind:pick.kind,why:pick.why,phase};
 }
 
 const MOBILITY=[
@@ -4793,7 +4915,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -7709,7 +7831,7 @@ async function _rideWake(){
 function rideStart(){
   try{if(!Ride.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Ride.audio=new AC();}}catch(_){}
   if(Ride.state==='idle'||Ride.state==='done'){
-    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;
+    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;
     _bikeSend(0,0x40,[0,2]);
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
   }
@@ -7757,12 +7879,41 @@ async function _rideUpload(job){
   }
   return id;
 }
+// v3.62: after a workout in Ride mode, its category's level moves: finished cleanly →
+// up (more if you turned it up yourself), stopped early or heavily eased → down.
+// "How did it feel?" then nudges it.
+function _bikeAfterRide(){
+  const p=Ride.prog;if(!p||!p.cat||p.cat==='recovery')return null;
+  const total=p.steps.reduce((a,x)=>a+x.sec,0)||1;
+  const done=Math.min(1,Ride.elapsed/total),cut=Ride.cutPeak||0,up=Ride.upPeak||0;
+  const lv=_bikeLevels(),cur=lv[p.cat];
+  let delta=0,why='held where it is';
+  if(done<0.75){delta=-0.5;why='stopped early';}
+  else if(cut>=0.15){delta=-0.5;why='your heart rate needed the watts eased a lot';}
+  else if(done>=0.95&&cut<0.08){delta=p.lvl>=cur-0.5?(up>=0.05?1.5:1):0.5;why=up>=0.05?'finished strong — you even turned it up':'finished cleanly';}
+  const to=Math.max(1,Math.min(10,Math.round((cur+delta)*2)/2));
+  lv[p.cat]=to;DB.set('bike_levels',lv);
+  const log=(DB.get('bike_level_log',[])||[]).filter(x=>!(x.date===fd(new Date())&&x.cat===p.cat));
+  log.push({date:fd(new Date()),cat:p.cat,lvl:p.lvl,from:cur,to,why});
+  DB.set('bike_level_log',log.slice(-150));
+  return{cat:p.cat,from:cur,to,why,feel:null};
+}
+function rideFeel(n){
+  const ln=Ride.levelNote;if(!ln||ln.feel!=null)return;
+  const lv=_bikeLevels();
+  lv[ln.cat]=Math.max(1,Math.min(10,Math.round((lv[ln.cat]+n)*2)/2));
+  DB.set('bike_levels',lv);
+  const log=DB.get('bike_level_log',[])||[];const e=log[log.length-1];
+  if(e&&e.cat===ln.cat){e.to=lv[ln.cat];e.feel=n;DB.set('bike_level_log',log);}
+  ln.to=lv[ln.cat];ln.feel=n;_rideDraw();
+}
 async function rideFinish(){
   if(Ride.samples.length<60){
     if(!confirm('This ride is under a minute — discard it?'))return;
     rideDiscard();return;
   }
   Ride.state='done';
+  try{Ride.levelNote=_bikeAfterRide();}catch(e){console.warn('[bike level]',e);}
   _bikeSend(0,0x40,[0,5]);
   if(Ride.deposit)rideKnob();
   try{if(Ride.wake)Ride.wake.release();}catch(_){}
@@ -7852,26 +8003,6 @@ function rideDiag(){
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
   const el=document.getElementById('rd-diag');if(el)el.textContent=t;
 }
-// v3.53: structured versions of the plan's bike workouts (getRideSession) so the
-// Ride screen can run them step by step — minutes, % of FTP, heart-rate range.
-const BIKE_PROGRAM_NAMES=['Recovery Spin','Endurance Ride','Tempo Intervals','Sweet Spot','Hill Repeats','Race-Pace Sharpener','Event Prep Spin'];
-function _bikeProgram(name,mins){
-  // z = heart-rate range as a fraction of your threshold heart rate (cycling zones),
-  // used when it's known; h1/h2 are the plan's generic bpm otherwise.
-  const st=(m,lo,hi,h1,h2,label,z,cad)=>({sec:Math.round(m*60),lo,hi,h1,h2,label,z,cad:cad||0});
-  const wu=m=>st(m,0.5,0.65,100,125,'Warm-up',[0.68,0.85]),cd=m=>st(m,0.45,0.55,0,125,'Cool-down',[0,0.81]),easy=m=>st(m,0.45,0.6,0,125,'Easy spin',[0,0.81]);
-  const rep=(n,work,rest)=>{const a=[];for(let i=0;i<n;i++){a.push({...work,label:`${work.label} ${i+1}/${n}`});if(i<n-1)a.push(rest);}return a;};
-  switch(name){
-    case 'Recovery Spin':return[st(Math.max(20,mins||35),0.45,0.6,0,125,'Very easy spin · 90+ rpm',[0,0.8],90)];
-    case 'Endurance Ride':{const d=Math.max(30,mins||60);return[wu(10),st(d-15,0.56,0.75,120,140,'Steady Zone 2',[0.81,0.89]),cd(5)];}
-    case 'Tempo Intervals':return[wu(15),...rep(2,st(12,0.76,0.87,140,155,'Tempo',[0.88,0.93]),easy(5)),cd(10)];
-    case 'Sweet Spot':return[wu(15),...rep(3,st(10,0.88,0.93,150,165,'Sweet spot',[0.91,0.97]),easy(5)),cd(10)];
-    case 'Hill Repeats':return[wu(15),...rep(5,st(4,0.9,1.05,150,170,'Climb · 60–70 rpm',[0.93,1.0],65),easy(3)),cd(10)];
-    case 'Race-Pace Sharpener':return[wu(15),...rep(4,st(8,0.95,1.0,155,170,'Race pace',[0.95,1.02]),easy(3)),cd(10)];
-    case 'Event Prep Spin':return[wu(10),...rep(3,st(2,0.95,1.0,150,165,'Race-pace effort',[0.93,1.0]),easy(3)),cd(10)];
-  }
-  return null;
-}
 function _rideFtp(){const v=parseFloat((DB.get('user_profile',{})||{}).ftp);return v>40?v:0;}
 // Where the ride is in its program: the step, seconds left in it, overall progress.
 function _rideStepNow(){
@@ -7908,11 +8039,10 @@ function ridePick(kind,arg,auto){
     Ride.prog=null;Ride.goal=arg||null;Ride.name='Free ride';
     Ride.auto=!!(arg&&arg.type==='hr');
   }else{
-    const name=kind==='plan'&&Ride.plan?Ride.plan.name:arg;
-    const mins=kind==='plan'&&Ride.plan?Ride.plan.total:null;
-    const steps=_bikeProgram(name,mins);
-    if(!steps)return;
-    Ride.prog={name,steps};Ride.goal=null;Ride.name=name;Ride.auto=true;
+    // v3.62: today's planned workout as is, or any category at your current level.
+    const w=kind==='plan'&&Ride.plan?Ride.plan:BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
+    if(!w)return;
+    Ride.prog={name:w.name,steps:w.steps,cat:w.cat,lvl:w.lvl};Ride.goal=null;Ride.name=w.name;Ride.auto=true;
   }
   if(!auto)Ride.picked=true;
   Ride.stepIdx=-1;Ride.bias=0;
@@ -7962,6 +8092,12 @@ function _rideAutoTick(d){
       else if(hr<tg.hHi-3&&Ride.hrCut>0)Ride.hrCut=Math.max(0,Ride.hrCut-5);
       Ride.hrCut=Math.min(Ride.hrCut,Math.round(base*0.5/5)*5);
     }
+    // v3.62: how much the hard parts had to be eased (or were turned up) — sets the next level.
+    if(sn.step.lo>=0.76){
+      const b0=Math.max(40,base-Ride.bias);
+      Ride.cutPeak=Math.max(Ride.cutPeak||0,(Ride.hrCut+Math.max(0,-Ride.bias))/b0);
+      Ride.upPeak=Math.max(Ride.upPeak||0,Math.max(0,Ride.bias)/b0);
+    }
     Ride.targetW=Math.max(40,base-Ride.hrCut);
   }
   if(!Ride.auto||Bike.status!=='on')return;
@@ -7980,9 +8116,9 @@ function _rideAutoTick(d){
 function _rideContext(){
   const ds=fd(new Date());
   const dp=(DB.get(DB.pk(getMon(new Date())),null)||[]).find(d=>d.date===ds);
-  const sess=dp&&/OUTDOOR|INDOOR/.test(dp.type)?getRideSession(dp.type):null;
-  Ride.plan=sess?{name:sess.name,total:sess.total}:null;
-  if(!Ride.picked&&Ride.state==='idle'){if(sess&&_bikeProgram(sess.name,sess.total))ridePick('plan',null,true);else ridePick('free',null,true);}
+  const sess=dp&&/OUTDOOR|INDOOR/.test(dp.type)?getRideSession(dp.type,ds):null;
+  Ride.plan=sess||null;
+  if(!Ride.picked&&Ride.state==='idle'){if(sess)ridePick('plan',null,true);else ridePick('free',null,true);}
   return sess;
 }
 function _rideEntry(){
@@ -8033,7 +8169,7 @@ function _rideGoalHtml(d,hr){
   if(Ride.state==='idle'||Ride.state==='done'){
     const chip=(on,label,act)=>`<button onclick="${act}" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:999px;color:${on?'#fff':'var(--txt)'};font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer;margin:0 6px 6px 0">${label}</button>`;
     const g=Ride.goal,free=!Ride.prog;
-    const progs=BIKE_PROGRAM_NAMES.filter(n=>!Ride.plan||n!==Ride.plan.name);
+    const lv=_bikeLevels(),progs=Object.keys(BIKE_CATS).filter(c=>!Ride.plan||c!==Ride.plan.cat);
     const mins=Ride.prog?Math.round(Ride.prog.steps.reduce((a,x)=>a+x.sec,0)/60):0;
     return box(`<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px">What are you riding?</div>
       ${Ride.plan?chip(Ride.prog&&Ride.prog.name===Ride.plan.name,`📋 Today: ${Ride.plan.name}`,"ridePick('plan')"):''}
@@ -8043,7 +8179,7 @@ function _rideGoalHtml(d,hr){
         ${[200,300,500].map(k=>chip(g&&g.type==='kcal'&&g.val===k,`${k} kcal`,`ridePick('free',{type:'kcal',val:${k}})`)).join('')}
         ${[[110,130,'Easy'],[120,140,'Zone 2'],[140,155,'Tempo']].map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
       <details style="margin-top:2px"><summary style="cursor:pointer;font-size:12px;color:var(--al);font-weight:700;padding:3px 0">Other workouts</summary>
-        <div style="margin-top:6px">${progs.map(n=>chip(Ride.prog&&Ride.prog.name===n,n,`ridePick('prog','${n}')`)).join('')}</div></details>
+        <div style="margin-top:6px">${progs.map(c=>chip(Ride.prog&&Ride.prog.cat===c&&(!Ride.plan||Ride.prog.name!==Ride.plan.name),`${BIKE_CATS[c].name}${c==='recovery'?'':` · L${lv[c]}`}`,`ridePick('prog','${c}')`)).join('')}</div></details>
       ${Ride.prog?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:4px">${Ride.prog.steps.length} steps · ${mins} min${_rideFtp()?' · auto resistance holds each step\'s watts and eases off if your heart rate runs high':' · set your FTP for watt targets; auto resistance follows heart rate'}</div>`:''}
       ${free&&g&&g.type==='hr'?`<div style="font-size:11px;color:var(--t2);margin-top:4px">Auto resistance keeps your heart rate in the zone.</div>`:''}`);
   }
@@ -8131,11 +8267,16 @@ function _rideDraw(){
     :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
-  const gp=Ride.gymPrompt;
-  put('rd-after',gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+  const gp=Ride.gymPrompt,ln=Ride.levelNote;
+  const lvHtml=ln?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+    <div style="font-size:13px;font-weight:700">${BIKE_CATS[ln.cat].name} level ${ln.from}${ln.to!==ln.from?` → <span style="color:${ln.to>ln.from?'var(--grn)':'var(--amb)'}">${ln.to}</span>`:''}</div>
+    <div style="font-size:12px;color:var(--t2);margin:2px 0 8px">${_esc(ln.why)}.${ln.feel==null?' How did it feel?':' Thanks — noted for next time.'}</div>
+    ${ln.feel==null?`<div style="display:flex;gap:6px">${[[0.5,'😴 Too easy'],[0,'👌 About right'],[-1,'🥵 Too hard']].map(([n,t])=>`<button class="btn btn-s" style="flex:1;margin:0;font-size:12px;padding:8px 4px" onclick="rideFeel(${n})">${t}</button>`).join('')}</div>`:''}
+  </div>`:'';
+  put('rd-after',lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
-    <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:'');
+    <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
   put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-res',res);put('rd-ctl',ctl);
   set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Bike connected. Pick your ride and press Start.':''));
 }
@@ -8283,8 +8424,8 @@ function rDayRow(day,today){
   return`<div class="day-row${isToday?' is-today':''}${(done||isPast)?' is-done':''}" onclick="openDay('${day.date}')">
 <div class="dr-l">
   <div class="dr-day">${DNAMES[date.getDay()]} ${date.getDate()}</div>
-  <div class="dr-type" style="color:${showStravaOverride?'#0891b2':wi.c}">${showStravaOverride?_icon('ride-day.png','🚴',16)+' '+(stravaRide.name||'Ride'):wi.i+' '+(typeof wi.l==='function'?wi.l():wi.l)}</div>
-  <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min':(typeof wi.d==='function'?wi.d():wi.d)}</div>
+  <div class="dr-type" style="color:${showStravaOverride?'#0891b2':wi.c}">${showStravaOverride?_icon('ride-day.png','🚴',16)+' '+(stravaRide.name||'Ride'):wi.i+' '+(typeof wi.l==='function'?wi.l(day.date):wi.l)}</div>
+  <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min':(typeof wi.d==='function'?wi.d(day.date):wi.d)}</div>
   ${rideOnGymDay?`<div style="font-size:11px;color:#fc4c02;font-weight:600;margin-top:3px">+ 🚴 ${distStr?distStr+' km · ':''}${durStr} min logged</div>`:''}
 </div>
 <div class="dr-r">
@@ -8534,31 +8675,22 @@ function rLoggedRideCard(actual){
 /* Session-name explainers. A heading like "Sweet Spot" is jargon on its own —
    these say in one line what the session is FOR and, when an FTP is known, the
    actual watts to aim at, so the name means something. v3.09. */
-const SESSION_INFO={
-  'Sweet Spot':{k:'sweetspot',why:'Just below threshold — the best fitness gain per unit of fatigue, which is why it earns a whole week.',lo:0.88,hi:0.93},
-  'Tempo Intervals':{k:'zone2',why:'Comfortably hard — quicker than endurance pace but well short of all-out. Raises how long you can hold a strong effort.',lo:0.76,hi:0.87},
-  'Hill Repeats':{k:'sweetspot',why:'Strength for your legs — high force at low cadence, power that carries into every other ride.',lo:0.9,hi:1.05},
-  'Recovery Spin':{k:'zone2',why:'Deliberately easy. The point is blood flow and recovery, not training — going hard here costs you next week.',lo:0.45,hi:0.6},
-  'Endurance Ride':{k:'zone2',why:'Long and steady in Zone 2. The discipline is staying easy even when the legs feel great.',lo:0.56,hi:0.75},
-  'Race-Pace Sharpener':{k:'if',why:'Event-pace efforts to remind your legs what race intensity feels like, without digging a hole.',lo:0.95,hi:1.0},
-  'Event Prep Spin':{k:'tsb',why:'A shake-out, not a workout. Your legs are loaded from weeks of work — arrive fresh.',lo:0.5,hi:0.65},
-};
-function _sessionInfoBtn(name){
-  const m=SESSION_INFO[name];
-  return m?_glossBtn(m.k,13):'';
+function _sessionInfoBtn(s){
+  const m=s&&BIKE_CATS[s.cat];
+  return m?_glossBtn(m.gloss,13):'';
 }
-function _sessionExplainer(name){
-  const m=SESSION_INFO[name];
+function _sessionExplainer(s){
+  const m=s&&BIKE_CATS[s.cat];
   if(!m)return'';
-  const ftp=DB.get('user_profile',{})?.ftp;
-  const target=ftp?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-top:5px">🎯 Aim for ~${Math.round(ftp*m.lo)}–${Math.round(ftp*m.hi)}W${m.lo>=0.88&&m.hi<=0.93?' (your sweet spot)':''}</div>`
-    :`<div style="font-size:11px;color:var(--t2);margin-top:5px">Set your FTP in My Training to see this as a watts target.</div>`;
-  return`<div style="font-size:12px;color:var(--t2);line-height:1.55;margin:2px 14px 0;text-align:center">${m.why}${target}</div>`;
+  const ftp=_rideFtp();
+  const target=ftp?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-top:5px">🎯 Main efforts ~${Math.round(ftp*m.lo)}–${Math.round(ftp*m.hi)}W</div>`
+    :`<div style="font-size:11px;color:var(--t2);margin-top:5px">Set your FTP in My Training to see watts targets.</div>`;
+  return`<div style="font-size:12px;color:var(--t2);line-height:1.55;margin:2px 14px 0;text-align:center">${s.why?`<b style="color:var(--txt)">${_esc(s.why)}</b><br>`:''}${m.why}${target}</div>`;
 }
 
 function rRideCard(dp){
   const indoor=dp.type.includes('INDOOR');
-  const s=getRideSession(dp.type);
+  const s=getRideSession(dp.type,dp.date);
   const isRec=s.phase==='Recovery week';
   const actual=stravaRideOnDate(dp.date);
   const actualHtml=rLoggedRideCard(actual);
@@ -8634,11 +8766,13 @@ function rRideCard(dp){
   return`<div class="ride-card" style="text-align:left">
 <div style="text-align:center;margin-bottom:14px">
   <span class="ride-icon">${_icon('ride-day.png',indoor?'🚲':'🚴',52)}</span>
-  <div class="ride-lbl" style="margin-bottom:5px">${s.name}${_sessionInfoBtn(s.name)}</div>
-  ${_sessionExplainer(s.name)}
+  <div class="ride-lbl" style="margin-bottom:5px">${s.name}${_sessionInfoBtn(s)}</div>
+  ${_sessionExplainer(s)}
   <div style="display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">${indoor?'Indoor':'Outdoor'}</span>
     <span class="bdg" style="background:rgba(59,130,246,.12);color:#60a5fa">⏱ ${s.total} min</span>
+    ${s.cat!=='recovery'?`<span class="bdg" style="background:rgba(124,58,237,.12);color:var(--al)">${BIKE_CATS[s.cat].name} · level ${s.lvl}</span>`:''}
+    <span class="bdg" style="background:rgba(239,68,68,.1);color:#f87171">🔥 ~${s.kcal} kcal</span>
     <span class="bdg" style="background:${isRec?'rgba(16,185,129,.14)':'rgba(245,158,11,.14)'};color:${isRec?'var(--grn)':'var(--amb)'}">${s.phase}</span>
     ${(()=>{
       const af=DB.get('bike_adapt_factor',1.0);
@@ -8668,7 +8802,12 @@ ${hasLogged?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-tra
     <span style="font-size:13px;line-height:1.5;color:var(--txt)">${b.d}</span>
   </div>`).join('')}
 </div>
-<div style="font-size:12px;color:var(--t2);line-height:1.6;background:rgba(59,130,246,.06);border-left:2px solid var(--blu);border-radius:8px;padding:9px 12px">💡 ${s.focus}</div>
+${(()=>{ // v3.62: where you are in each type — levels rise as you complete workouts in Ride mode
+  const lv=_bikeLevels();
+  return`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:2px 0 7px">📈 Your bike levels</div>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px">${Object.keys(BIKE_CATS).filter(c=>c!=='recovery').map(c=>`<span class="bdg" style="background:${c===s.cat?'rgba(124,58,237,.16)':'var(--s2)'};color:${c===s.cat?'var(--al)':'var(--t2)'}">${BIKE_CATS[c].name} ${lv[c]}</span>`).join('')}</div>
+  <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-bottom:12px">Levels go up when you finish a workout cleanly in Ride mode, and down when it was too much.</div>`;
+})()}
 </div>`;
 }
 
