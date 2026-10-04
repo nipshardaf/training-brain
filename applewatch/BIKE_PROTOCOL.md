@@ -4,7 +4,7 @@ How the Renpho "AI Gym" app (Android `com.renpho.aigym` 1.9.07) talks to the bik
 worked out from the app for interoperability with the owner's own bike. The app is built
 on the bike maker's ("Mage Fitness", model code MG03) Bluetooth kit and does **not** use
 the standard Fitness Machine Service — it uses the private service below.
-**Not yet verified against the real bike.**
+**Verified on the real bike (Training Brain v3.50+).**
 
 ## Services
 | | UUID |
@@ -66,3 +66,40 @@ torque capped at 40), re-sent as cadence changes.
 | 21 | 2 | motor-controller temperature ÷ 10 (23-byte payloads) |
 
 The app discards samples outside: speed 0–200, power 0–1000 W, torque 0–50, heart rate 0–300.
+
+## How AI Gym drives the bike (full review, 2026-10-04)
+Checked against the decompiled app before its emulator was removed. Our protocol use has been
+confirmed on the real bike since Training Brain v3.50.
+
+### Ride modes in AI Gym
+| Mode | What it does with the bike |
+|---|---|
+| ERG courses | Every live-data sample: torque = target W × 9.56 ÷ cadence, sent at once (no smoothing). Course segments come from the server. |
+| Video courses (Les Mills, licensed) | Same, with segment torque / cadence range / stand cues. Content is licensed — not reproducible. |
+| Target ride | Free ride toward a time / distance / calorie goal; resistance from the knob. |
+| Map routes / video routes | Display switches to gears (`00 46 01`), app takes control (`00 45 01`) and sets torque from road physics (below). Knob clicks (`00 52`) change the virtual gear. |
+| FTP test | Ramp test (below). |
+Model `R-Q002 N` only: the app sends zero torque (`00 44 00`) when a ride starts.
+
+### Course segments (server "script points")
+start/end time, `intensity` (% of FTP), `torque`, `rpm` / `rpm_min` / `rpm_max`, `stand` (stand-up cue),
+`zone`, `position`, plus audio/tips text. Cadence is "on target" when inside rpm_min…rpm_max.
+
+### Road physics (map routes)
+torque (N·m) = m·g·(sin θ + cos θ·Crr) × wheel radius × front/rear teeth, with m = rider mass (75 kg
+default), Crr 0.015, wheel radius 0.30 m, gears 30/20, θ = atan(slope % / 100), air drag ignored for
+torque; clamped 1–40. Example: 111 kg rider, 5 % grade ≈ 32 N·m. Virtual speed uses the same model plus
+CdA 0.1548 (solved each sample).
+
+### FTP and zones
+- No test yet → FTP 100 W (men) / 70 W (women).
+- FTP test = ramp: each step targets base FTP × step intensity %; more than 20 W under target for
+  15 s ends it; FTP = 0.75 × (last full step + fraction of current step × the step's increase).
+- Power zones (% FTP): 0 / 56 / 76 / 91 / 106 / 121. Heart-rate zone tables: 61/71/81/91/101 and
+  51/61/71/81/91 (% of max HR).
+- FTP levels (W): men 101 / 134 / 167 / 200, women 71 / 104 / 137 / 170 → Beginner, Junior, Senior,
+  Superior, Professional.
+
+### Not used by Training Brain
+Firmware update (OTA) characteristics, account/family features, Health Connect / Samsung / Huawei
+sync, cloud course downloads.
