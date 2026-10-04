@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.63 (`index.html`)
+### App — v3.64 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -45,6 +45,11 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   days since (sweet spot weekly, threshold/VO2 alternate), none the day after legs, no VO2/hills the day before,
   recovery weeks (wk 3) and high fatigue (TSB) → easy. Levels: synced `bike_levels` + `bike_level_log`, moved by
   `_bikeAfterRide` on Ride-mode finish (+ "How did it feel?" `rideFeel`). User goal: fitness & calories + faster; 45–60 min.
+  v3.64: `BIKE_GOALS` (synced `bike_goal`, default "comfort" = ride 2–3 h comfortably: 1 quality/wk unless 5+ rides,
+  rotation Brisk → Steady Push → Hill Climbs; "faster" = old mix). Long ride = longest ride of last 3 weeks + 15 min
+  (`_bikeLongMins`, cap 180 outdoor / 90 indoor) with fuel/pacing tips. Plain names (Easy Spin, Steady Ride, Brisk Ride,
+  Steady Push, Hard Push, Short Bursts, Hill Climbs, Spins & Sprints) + `short`/`feel` (talk test); internal keys unchanged.
+  Week ranking ignores this week's log entries (stable); ridden days show what was done.
   v3.63 Renpho tuning (`_rideErg`): a new step jumps straight to its torque (no 1-step/s ramp); sprint steps (lo≥1.3)
   get one fixed torque for ~100 rpm; stall guard eases the target 10%/4 s (max 30%) under 60 rpm (50 on climbs) and
   counts as easing for levels; hill cadence rises so the target fits the bike's 40-torque cap (≈272 W at 65 rpm).
