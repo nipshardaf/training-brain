@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.65';
+const APP_VERSION='3.66';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.66',d:'One ride, however many devices record it',det:'If two devices record the same ride — say an Apple Watch Indoor Cycle workout and Ride mode, started and stopped a few minutes apart — the app now treats them as one ride when they overlap for most of the time, and keeps the copy with power (Ride mode: watts, cadence and your strap\'s heart rate). Before, they had to start within 10 minutes and be within 2 minutes of each other in length, so a ride could show twice with double the calories and training load. Rides fetched from intervals.icu are now checked for duplicates straight away too.'},
   {v:'3.65',d:'FTP test, and auto resistance you can feel',det:'Ride mode has an FTP test: a 5-minute warm-up, then the bike holds a target that rises every minute until you cannot keep it (more than 20 W under for 15 seconds, or tap I\'m done). Your FTP is 75% of the power you reached — the same method as the Renpho app — and you choose whether to save it; every workout then gets real watt targets. Ride mode suggests it when you have no FTP, or when yours is over 8 weeks old. Auto resistance with a heart-rate goal now aims for the middle of the band instead of sitting at the bottom (your last ride held about 100 W at heart rate 130 all hour). The − and + buttons now do something in every mode: in a heart-rate ride each tap moves the band 5 bpm and the watts 10 W, in a workout each tap is 10 W, and in manual each tap is a bigger resistance step.'},
   {v:'3.64',d:'Bike plan aimed at comfortable 2–3 hour rides',det:'The bike plan now trains for what you want: riding 2 to 3 hours outdoors comfortably, not racing. Your long ride builds toward that — 15 minutes more than your longest ride of the last three weeks, up to 3 hours outdoors (90 minutes indoors), shorter in recovery weeks — and long rides come with simple drinking, eating and hill-pacing tips. You get one quality session a week, mostly sweet spot, tempo and hill strength (the steady power that makes long rides and hills easy at your weight), with threshold now and then and VO2max rarely. If you ever want to get faster, switch the bike goal under Your bike levels on any ride day. The workout types also have plain names now, each with a one-line description and how hard it should feel: Easy Spin, Steady Ride, Brisk Ride, Steady Push, Hard Push, Short Bursts, Hill Climbs, and Spins & Sprints.'},
   {v:'3.63',d:'Bike workouts tuned for your Renpho',det:'Auto resistance now suits the way the Renpho bike works. Each new interval goes straight to its resistance instead of creeping up over 10 to 15 seconds, so short VO2max efforts and recoveries start on time. Sprints get one fixed heavy resistance that you power yourself, because the bike cannot follow a 15-second effort. If your cadence drops under 60 rpm (50 on climbs) in a hard interval, the target eases 10% at a time so you do not stall, and comes back as you spin up; easing counts as the workout being hard when your level is set. Hill climbs use a cadence where the bike can actually reach your target, and the screen tells you when the bike is at its limit for your cadence.'},
@@ -2452,11 +2453,28 @@ function _rideSig(a){return[a.moving_time,a.distance,a.kilojoules,a.average_watt
 // The same ride from two sources (starts within 10 min, durations within 2 min; two
 // separate rides on one day start further apart): the intervals.icu copy wins,
 // otherwise the newer copy does.
+// v3.66: also the same ride when the two overlap for at least 60% of the longer one —
+// e.g. an Apple Watch Indoor Cycle and Ride mode recording one session, started and
+// stopped a few minutes apart. Two separate rides on one day don't overlap.
 function _rideSame(a,b){
   const ta=Date.parse(a.start_date_local),tb=Date.parse(b.start_date_local);
-  return Math.abs(ta-tb)<600000&&Math.abs((a.moving_time||0)-(b.moving_time||0))<120;
+  if(Math.abs(ta-tb)<600000&&Math.abs((a.moving_time||0)-(b.moving_time||0))<120)return true;
+  const da=(a.elapsed_time||a.moving_time||0)*1000,db=(b.elapsed_time||b.moving_time||0)*1000;
+  const ov=Math.min(ta+da,tb+db)-Math.max(ta,tb);
+  return ov>0&&ov>=0.6*Math.max(da,db);
 }
-function _rideBetter(a,b){return!b||!!a._icu||!b._icu;}
+// Which copy of a ride to keep: the one with power (Ride mode, a power meter) first —
+// it also has cadence and training load — then intervals.icu's, then the newer.
+function _rideRank(a){return(a&&a.average_watts>0?2:0)+(a&&a._icu?1:0);}
+function _rideBetter(a,b){return!b||_rideRank(a)>=_rideRank(b);}
+function _ridesDedupe(list){
+  const out=[];
+  for(const a of [...list].sort((x,y)=>_rideRank(y)-_rideRank(x))){
+    if(!a)continue;
+    if(_isRunAct(a)||!out.some(b=>!_isRunAct(b)&&_rideSame(a,b)))out.push(a);
+  }
+  return out.sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
+}
 function _rideTwin(a,list){const k=_rideKey(a);return list.find(b=>_rideKey(b)===k)||list.find(b=>_rideSame(a,b))||null;}
 let _ridesRef=null,_ridesCloud=null,_ridesApplying=false,_ridesQ={},_ridesQT=null,_ridesUpT=null;
 function _ridesListen(uid){
@@ -2489,8 +2507,8 @@ function _ridesMerge(list){
     cur.push(r);changed=true;
   }
   // One copy per ride in this device's list too.
-  const one=[];
-  for(const a of cur.sort((a,b)=>(b._icu?1:0)-(a._icu?1:0))){if(_isRunAct(a)||!one.some(b=>_rideSame(a,b)))one.push(a);else changed=true;}
+  const one=_ridesDedupe(cur);
+  if(one.length!==cur.length)changed=true;
   if(!changed)return false;
   cur.length=0;cur.push(...one);
   cur.sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
@@ -2506,7 +2524,7 @@ function _ridesPush(){
   if(!_ridesRef||!_ridesCloud||S.guest)return;
   const cloud=Object.values(_ridesCloud),upd={},seen=[];
   // intervals.icu copies first, so a twin from another source never goes up instead
-  const local=(DB.get('strava_activities',[])||[]).filter(a=>!_isRunAct(a)).sort((a,b)=>(b._icu?1:0)-(a._icu?1:0));
+  const local=(DB.get('strava_activities',[])||[]).filter(a=>!_isRunAct(a)).sort((a,b)=>_rideRank(b)-_rideRank(a));
   for(const a of local){
     const k=_rideKey(a);if(!k)continue;
     if(seen.some(b=>_rideKey(b)===k||_rideSame(a,b)))continue;
@@ -2668,7 +2686,7 @@ async function icuFetchActivities(manual=false){
       return !mapped.some(m=>(m.start_date_local||'').slice(0,10)===d
         &&Math.abs((m.moving_time||0)-(a.moving_time||0))<120);
     });
-    const all=[...mapped,...existing]
+    const all=_ridesDedupe([...mapped,...existing])
       .sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
     DB.set('strava_activities',all);
     const ftp=DB.get('user_profile',{})?.ftp||null;
@@ -2975,7 +2993,7 @@ async function endurainFetchActivities(manual=false){
       return !mapped.some(m=>(m.start_date_local||'').slice(0,10)===d
         &&Math.abs((m.moving_time||0)-(a.moving_time||0))<120);
     });
-    const all=[...mapped,...existing].sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
+    const all=_ridesDedupe([...mapped,...existing]).sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||''));
     DB.set('strava_activities',all);
     const ftp=DB.get('user_profile',{})?.ftp||null;
     _annotateRideLoad(all,ftp);
