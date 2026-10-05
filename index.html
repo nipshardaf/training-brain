@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.64';
+const APP_VERSION='3.65';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.65',d:'FTP test, and auto resistance you can feel',det:'Ride mode has an FTP test: a 5-minute warm-up, then the bike holds a target that rises every minute until you cannot keep it (more than 20 W under for 15 seconds, or tap I\'m done). Your FTP is 75% of the power you reached — the same method as the Renpho app — and you choose whether to save it; every workout then gets real watt targets. Ride mode suggests it when you have no FTP, or when yours is over 8 weeks old. Auto resistance with a heart-rate goal now aims for the middle of the band instead of sitting at the bottom (your last ride held about 100 W at heart rate 130 all hour). The − and + buttons now do something in every mode: in a heart-rate ride each tap moves the band 5 bpm and the watts 10 W, in a workout each tap is 10 W, and in manual each tap is a bigger resistance step.'},
   {v:'3.64',d:'Bike plan aimed at comfortable 2–3 hour rides',det:'The bike plan now trains for what you want: riding 2 to 3 hours outdoors comfortably, not racing. Your long ride builds toward that — 15 minutes more than your longest ride of the last three weeks, up to 3 hours outdoors (90 minutes indoors), shorter in recovery weeks — and long rides come with simple drinking, eating and hill-pacing tips. You get one quality session a week, mostly sweet spot, tempo and hill strength (the steady power that makes long rides and hills easy at your weight), with threshold now and then and VO2max rarely. If you ever want to get faster, switch the bike goal under Your bike levels on any ride day. The workout types also have plain names now, each with a one-line description and how hard it should feel: Easy Spin, Steady Ride, Brisk Ride, Steady Push, Hard Push, Short Bursts, Hill Climbs, and Spins & Sprints.'},
   {v:'3.63',d:'Bike workouts tuned for your Renpho',det:'Auto resistance now suits the way the Renpho bike works. Each new interval goes straight to its resistance instead of creeping up over 10 to 15 seconds, so short VO2max efforts and recoveries start on time. Sprints get one fixed heavy resistance that you power yourself, because the bike cannot follow a 15-second effort. If your cadence drops under 60 rpm (50 on climbs) in a hard interval, the target eases 10% at a time so you do not stall, and comes back as you spin up; easing counts as the workout being hard when your level is set. Hill climbs use a cadence where the bike can actually reach your target, and the screen tells you when the bike is at its limit for your cadence.'},
   {v:'3.62',d:'Proper bike workouts that get harder as you get fitter',det:'Bike workouts are rebuilt. There are now eight kinds — Endurance, Tempo, Sweet Spot, Threshold, VO2max, Hill Strength, Cadence & Sprints and Recovery — each with levels 1 to 10, built to fit your 45 to 60 minutes and shown with your own watts and heart rate. Your week is set up for fitness, calories and getting faster: mostly Zone 2 rides with one or two quality sessions, picked by what you need most, kept easy the day after legs, easier in recovery weeks and when your fatigue is high. Finish a workout in Ride mode and its level goes up; if it was too much it goes down, and "How did it feel?" fine-tunes it. The plan and the bike screen now use the same workout, and each ride shows why it was picked and roughly how many calories it burns.'},
@@ -7867,7 +7868,17 @@ function rideResist(delta){
   const tq=Math.min(40,Math.max(1,Math.round((base+delta)*2)/2));
   Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);_rideDraw();
 }
+// v3.65: in a heart-rate ride (a heart-rate goal, or a workout without an FTP) − / +
+// move the heart-rate band 5 bpm and the watts 10 W at once; they used to change a
+// value that mode never read, so they did nothing. In a watt workout they're 10 W.
+function _rideHrMode(){return!!(Ride.goal&&Ride.goal.type==='hr')||!!(Ride.prog&&!Ride.prog.test&&!_rideFtp());}
 function rideTarget(delta){
+  if(Ride.auto&&_rideHrMode()){
+    const up=delta>0?1:-1;
+    Ride.hrShift=Math.max(-20,Math.min(20,(Ride.hrShift||0)+5*up));
+    Ride.targetW=Math.max(40,Math.min(400,(Ride.targetW||100)+10*up));
+    Ride.hrAdjAt=Date.now();_rideDraw();return;
+  }
   if(Ride.auto){Ride.bias=Math.max(-100,Math.min(100,Ride.bias+delta));Ride.retarget=true;_rideDraw();return;}
   Ride.targetW=Math.min(600,Math.max(30,(Ride.targetW||100)+delta));_rideDraw();
 }
@@ -7886,8 +7897,9 @@ async function _rideWake(){
 function rideStart(){
   try{if(!Ride.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Ride.audio=new AC();}}catch(_){}
   if(Ride.state==='idle'||Ride.state==='done'){
-    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;
+    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;Ride.hrShift=0;Ride.testLowAt=null;
     _bikeSend(0,0x40,[0,2]);
+    if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
   }
   else _bikeSend(0,0x40,[0,4]);
@@ -7938,7 +7950,7 @@ async function _rideUpload(job){
 // up (more if you turned it up yourself), stopped early or heavily eased → down.
 // "How did it feel?" then nudges it.
 function _bikeAfterRide(){
-  const p=Ride.prog;if(!p||!p.cat||p.cat==='recovery')return null;
+  const p=Ride.prog;if(!p||!p.cat||p.cat==='recovery'||p.test)return null;
   const total=p.steps.reduce((a,x)=>a+x.sec,0)||1;
   const done=Math.min(1,Ride.elapsed/total),cut=Ride.cutPeak||0,up=Ride.upPeak||0;
   const lv=_bikeLevels(),cur=lv[p.cat];
@@ -8058,6 +8070,48 @@ function rideDiag(){
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
   const el=document.getElementById('rd-diag');if(el)el.textContent=t;
 }
+// v3.65 FTP test — a ramp, as in the Renpho app. 5 min warm-up, then the bike holds a
+// target that rises every minute (about 8% of your estimated FTP, 10–25 W) until you
+// can't hold it: more than 20 W under for 15 s, or "I'm done". FTP = 75% of the power
+// reached (the last full step plus the share of the step you were on). The heart-rate
+// and low-cadence easing are off: the point is to find where you stop.
+function _ftpTestProgram(){
+  const pr=DB.get('user_profile',{})||{};
+  let kg=parseFloat(pr.weight)||0;if(pr.weightUnit==='lbs'||pr.weightUnit==='lb')kg*=0.4536;
+  const est=_rideFtp()||(kg>35&&kg<200?kg*2:150);
+  const step=Math.max(10,Math.min(25,Math.round(est*0.08/5)*5));
+  const start=Math.max(60,Math.round(est*0.45/5)*5);
+  const S=(sec,w,label)=>({sec,w,lo:0,hi:0,z:[0,1],h1:0,h2:0,label,cad:0});
+  const steps=[S(180,Math.max(50,Math.round(start*0.6/5)*5),'Warm-up · easy'),S(120,start,'Warm-up · a bit firmer')];
+  for(let i=1;i<=40;i++)steps.push(S(60,start+step*i,`Ramp ${i} · ${start+step*i} W`));
+  return{name:'FTP Test',steps,test:{start,step}};
+}
+function _rideTestEnd(manual){
+  const p=Ride.prog,sn=_rideStepNow();
+  if(!p||!p.test||Ride.testResult||!sn||!sn.step)return;
+  const st=sn.step,ramp=/^Ramp/.test(st.label);
+  if(!ramp){ // stopped during the warm-up: no result
+    Ride.testResult={none:true};Ride.note='The test ended before the ramp started — no FTP this time.';_rideDraw();return;
+  }
+  const done=(st.sec-sn.left)/st.sec;
+  const reached=Math.round(st.w-p.test.step+Math.max(0,Math.min(1,done))*p.test.step);
+  const ftp=Math.round(reached*0.75);
+  // the rest of the ride becomes a 5-minute easy cool-down
+  const keep=p.steps.slice(0,sn.i);
+  if(st.sec-sn.left>=1)keep.push({...st,sec:Math.round(st.sec-sn.left)});
+  keep.push({sec:300,w:Math.max(50,Math.round(ftp*0.45/5)*5),lo:0,hi:0,z:[0,1],h1:0,h2:0,label:'Cool-down · easy',cad:0});
+  p.steps=keep;Ride.ergStep=null;
+  Ride.testResult={ftp,reached,prev:_rideFtp()||0,saved:false,manual:!!manual};
+  _rideBeep(3);_rideDraw();
+}
+function rideTestSave(){
+  const r=Ride.testResult;if(!r||!r.ftp||r.saved)return;
+  const pr=DB.get('user_profile',{})||{};
+  pr.ftp=r.ftp;pr.ftp_tested=fd(new Date());
+  DB.set('user_profile',pr);r.saved=true;
+  showToast(`📏 FTP saved: ${r.ftp} W — your workouts now use it`,'var(--grn)');_rideDraw();
+}
+function rideTestSkip(){const r=Ride.testResult;if(r){r.saved='no';_rideDraw();}}
 function _rideFtp(){const v=parseFloat((DB.get('user_profile',{})||{}).ftp);return v>40?v:0;}
 // Where the ride is in its program: the step, seconds left in it, overall progress.
 function _rideStepNow(){
@@ -8082,6 +8136,7 @@ function _rideLthr(){
   return Ride._lthr;
 }
 function _rideStepTargets(x){
+  if(x.w)return{wLo:x.w,wHi:x.w,hLo:0,hHi:0}; // FTP test steps are in plain watts
   const ftp=_rideFtp(),L=_rideLthr();
   return{wLo:ftp?Math.round(ftp*x.lo):0,wHi:ftp?Math.round(ftp*x.hi):0,
     hLo:L&&x.z?Math.round(L*x.z[0]):x.h1,hHi:L&&x.z?Math.round(L*x.z[1]):x.h2};
@@ -8095,9 +8150,9 @@ function ridePick(kind,arg,auto){
     Ride.auto=!!(arg&&arg.type==='hr');
   }else{
     // v3.62: today's planned workout as is, or any category at your current level.
-    const w=kind==='plan'&&Ride.plan?Ride.plan:BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
+    const w=kind==='ftp'?_ftpTestProgram():kind==='plan'&&Ride.plan?Ride.plan:BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
     if(!w)return;
-    Ride.prog={name:w.name,steps:w.steps,cat:w.cat,lvl:w.lvl};Ride.goal=null;Ride.name=w.name;Ride.auto=true;
+    Ride.prog={name:w.name,steps:w.steps,cat:w.cat,lvl:w.lvl,test:w.test||null};Ride.goal=null;Ride.name=w.name;Ride.auto=true;Ride.testResult=null;Ride.testLowAt=null;
   }
   if(!auto)Ride.picked=true;
   Ride.stepIdx=-1;Ride.bias=0;
@@ -8136,7 +8191,15 @@ function _rideAutoTick(d){
   // the watts down (5–10 W every 15 s; 30% at once if it's far over, never more than
   // half), and hands them back 5 W every 15 s once it's under again. Recovery steps
   // only hand back — heart rate is naturally still high just after an interval.
-  if(sn&&sn.step&&_rideFtp()){
+  if(sn&&sn.step&&sn.step.w){
+    // FTP test (plain-watt steps): hold the step's watts; on the ramp, watch for the end.
+    Ride.targetW=sn.step.w;
+    if(Ride.prog&&Ride.prog.test&&!Ride.testResult&&/^Ramp/.test(sn.step.label)&&Ride.state==='riding'){
+      const pw=d?d.pw:0,cad=d?d.cad:0;
+      if(pw<sn.step.w-20||cad<40){if(Ride.testLowAt==null)Ride.testLowAt=Ride.elapsed;else if(Ride.elapsed-Ride.testLowAt>=15)_rideTestEnd(false);}
+      else Ride.testLowAt=null;
+    }
+  }else if(sn&&sn.step&&_rideFtp()){
     const tg=_rideStepTargets(sn.step),base=Math.round((tg.wLo+tg.wHi)/2/5)*5+Ride.bias;
     const hr=_rideHr(d),now=Date.now();
     if(Ride.auto&&hr&&tg.hHi&&now-Ride.hrAdjAt>=15000){
@@ -8170,16 +8233,26 @@ function _rideAutoTick(d){
   }
   if(!Ride.auto||Bike.status!=='on')return;
   Ride.erg=true;
-  const zone=Ride.goal&&Ride.goal.type==='hr'?{lo:Ride.goal.lo,hi:Ride.goal.hi}
-    :(sn&&sn.step&&!_rideFtp()?(t=>({lo:t.hLo,hi:t.hHi}))(_rideStepTargets(sn.step)):null);
+  const zone=_rideHrZone(sn);
   if(!zone)return;
   const hr=_rideHr(d),now=Date.now();
   if(!hr||now-Ride.hrAdjAt<15000)return;
   if(!Ride.targetW)Ride.targetW=d&&d.pw?Math.round(d.pw/5)*5:100;
   Ride.hrAdjAt=now;
-  if(hr>zone.hi+2)Ride.targetW-=hr>zone.hi+10?10:5;
-  else if(zone.lo&&hr<zone.lo-2)Ride.targetW+=hr<zone.lo-10?10:5;
+  // v3.65: aim for the MIDDLE of the band. It used to act only outside the band, so a
+  // ride could sit at its bottom all hour (100 W, heart rate 130 in a 120–140 goal).
+  const mid=zone.lo?(zone.lo+zone.hi)/2:zone.hi-8;
+  if(hr>zone.hi+2)Ride.targetW-=hr>zone.hi+10?15:10;
+  else if(hr>mid+4)Ride.targetW-=5;
+  else if(hr<mid-4)Ride.targetW+=zone.lo&&hr<zone.lo-5?10:5;
   Ride.targetW=Math.max(40,Math.min(400,Ride.targetW));
+}
+function _rideHrZone(sn){
+  const base=Ride.goal&&Ride.goal.type==='hr'?{lo:Ride.goal.lo,hi:Ride.goal.hi}
+    :(sn&&sn.step&&!sn.step.w&&!_rideFtp()?(t=>({lo:t.hLo,hi:t.hHi}))(_rideStepTargets(sn.step)):null);
+  if(!base)return null;
+  const k=Ride.hrShift||0;
+  return{lo:base.lo?base.lo+k:0,hi:base.hi+k};
 }
 function _rideContext(){
   const ds=fd(new Date());
@@ -8239,13 +8312,16 @@ function _rideGoalHtml(d,hr){
     const g=Ride.goal,free=!Ride.prog;
     const lv=_bikeLevels(),progs=Object.keys(BIKE_CATS).filter(c=>!Ride.plan||c!==Ride.plan.cat);
     const mins=Ride.prog?Math.round(Ride.prog.steps.reduce((a,x)=>a+x.sec,0)/60):0;
+    const noFtp=!_rideFtp(),old=(DB.get('user_profile',{})||{}).ftp_tested,stale=!noFtp&&old&&(Date.now()-new Date(old+'T12:00:00'))/864e5>56;
     return box(`<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px">What are you riding?</div>
+      ${noFtp||stale?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
+      ${chip(!!(Ride.prog&&Ride.prog.test),'📏 FTP test · 15–20 min',"ridePick('ftp')")}
       ${Ride.plan?chip(Ride.prog&&Ride.prog.name===Ride.plan.name,`📋 Today: ${Ride.plan.name}`,"ridePick('plan')"):''}
       ${chip(free,'🚲 Free ride',"ridePick('free',Ride.goal)")}
       ${free?`<div style="font-size:11px;color:var(--t2);margin:2px 0 6px">Goal (optional)</div>
         ${chip(!g,'None',"ridePick('free',null)")}${[20,30,45,60].map(m=>chip(g&&g.type==='time'&&g.val===m*60,`${m} min`,`ridePick('free',{type:'time',val:${m*60}})`)).join('')}
         ${[200,300,500].map(k=>chip(g&&g.type==='kcal'&&g.val===k,`${k} kcal`,`ridePick('free',{type:'kcal',val:${k}})`)).join('')}
-        ${[[110,130,'Easy'],[120,140,'Zone 2'],[140,155,'Tempo']].map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
+        ${(L=>L?[[Math.round(L*.68),Math.round(L*.81),'Easy'],[Math.round(L*.81),Math.round(L*.89),'Zone 2'],[Math.round(L*.89),Math.round(L*.94),'Brisk']]:[[110,130,'Easy'],[120,140,'Zone 2'],[140,155,'Brisk']])(_rideLthr()).map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
       <details style="margin-top:2px"><summary style="cursor:pointer;font-size:12px;color:var(--al);font-weight:700;padding:3px 0">Pick a different workout</summary>
         <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">${progs.map(c=>{const on=Ride.prog&&Ride.prog.cat===c&&(!Ride.plan||Ride.prog.name!==Ride.plan.name),k=BIKE_CATS[c];
           return`<button onclick="ridePick('prog','${c}')" style="text-align:left;background:${on?'rgba(124,58,237,.14)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:11px;color:var(--txt);padding:8px 10px;cursor:pointer">
@@ -8253,6 +8329,22 @@ function _rideGoalHtml(d,hr){
             <div style="font-size:11px;color:var(--t2);line-height:1.4;margin-top:1px">${k.short}${k.feel!=='—'?` · feels like ${k.feel}`:''}</div></button>`;}).join('')}</div></details>
       ${Ride.prog?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:4px">${Ride.prog.steps.length} steps · ${mins} min${_rideFtp()?' · auto resistance holds each step\'s watts and eases off if your heart rate runs high':' · set your FTP for watt targets; auto resistance follows heart rate'}</div>`:''}
       ${free&&g&&g.type==='hr'?`<div style="font-size:11px;color:var(--t2);margin-top:4px">Auto resistance keeps your heart rate in the zone.</div>`:''}`);
+  }
+  if(Ride.prog&&Ride.prog.test&&Ride.state!=='idle'){
+    const sn=_rideStepNow(),x=sn&&sn.step,r=Ride.testResult,pw=d?d.pw:0;
+    if(!x)return box(`<div style="font-size:15px;font-weight:800">✅ FTP test done</div><div style="font-size:12px;color:var(--t2);margin-top:2px">Finish to save the ride.</div>`,'var(--grn)');
+    if(r)return box(`<div style="font-size:12px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${_esc(x.label)} · ${_mmss(sn.left)}</div>
+      <div style="font-size:13px;margin-top:3px">Spin easy at ${x.w} W, then Finish to save the ride.</div>`,'var(--grn)');
+    const ramp=/^Ramp/.test(x.label),low=Ride.testLowAt!=null?Math.max(0,15-(Ride.elapsed-Ride.testLowAt)):null;
+    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+        <div><div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">📏 FTP test${ramp?'':' · warm-up'}</div>
+          <div style="font-size:22px;font-weight:800">${x.w} W</div></div>
+        <div style="text-align:right"><div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div>
+          <div style="font-size:10px;color:var(--t2)">${ramp?`then ${x.w+Ride.prog.test.step} W`:'until the ramp'}</div></div></div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-top:4px">${ramp?'Keep your cadence up (80–95 rpm) and hold on as long as you can. It ends when you can\'t hold the power for 15 seconds.':'Easy now — the ramp starts after the warm-up and gets harder every minute.'}</div>
+      ${low!=null?`<div style="font-size:13px;font-weight:800;color:var(--amb);margin-top:5px">⚠️ Power dropping — ${low} s to recover</div>`:''}
+      ${ramp?`<button class="btn btn-s" style="margin:8px 0 0;width:100%;font-size:13px;padding:9px" onclick="_rideTestEnd(true)">I'm done — stop the ramp</button>`:''}`,
+      low!=null?'var(--amb)':'var(--acc)');
   }
   if(Ride.prog){
     const sn=_rideStepNow();
@@ -8303,7 +8395,7 @@ function _rideDraw(){
   if(pe)pe.style.color=pw!=null&&range?(pw<range[0]-5?'var(--amb)':pw>range[1]+5?'var(--red)':'var(--grn)'):'';
   set('rd-pw-l',range?`Watts · ${range[0]}–${range[1]}`:'Watts');
   set('rd-hr',hr||'–');
-  const he=$('rd-hr'),hz=tg?{lo:tg.hLo,hi:tg.hHi}:(Ride.goal&&Ride.goal.type==='hr'?Ride.goal:null);
+  const he=$('rd-hr'),hz=tg?{lo:tg.hLo,hi:tg.hHi}:(Ride.goal&&Ride.goal.type==='hr'?_rideHrZone(null):null);
   if(he)he.style.color=hr&&hz?(hr>hz.hi?'var(--red)':hz.lo&&hr<hz.lo?'var(--amb)':'var(--grn)'):'';
   set('rd-cad',d?d.cad:'–');
   set('rd-time',_mmss(Ride.elapsed));
@@ -8321,13 +8413,14 @@ function _rideDraw(){
   const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:18px;font-weight:800;width:46px;height:42px;cursor:pointer;flex-shrink:0';
   const autoAvail=!!(Ride.prog||(Ride.goal&&Ride.goal.type==='hr'));
   const midTxt=Ride.auto?`${Ride.targetW||'–'} W`:Ride.erg?`${Ride.targetW} W`:`${d?d.torque.toFixed(1):'–'}`;
-  const midLbl=Ride.auto?(Ride.bias?`Auto · ${Ride.bias>0?'+':''}${Ride.bias} W harder`:'Auto resistance'):Ride.erg?'Holding this power':'Resistance (1–40)';
+  const hzB=Ride.auto&&_rideHrMode()?_rideHrZone(_rideStepNow()):null;
+  const midLbl=Ride.auto?(hzB?`Auto · aiming for ❤️ ${hzB.lo?hzB.lo+'–':'under '}${hzB.hi}`:Ride.bias?`Auto · ${Ride.bias>0?'+':''}${Ride.bias} W harder`:'Auto resistance'):Ride.erg?'Holding this power':'Resistance (1–40)';
   const res=`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;align-items:center;gap:10px">
-      <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(-5)':'rideResist(-0.5)'}">−</button>
+      <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(-10)':'rideResist(-1.5)'}">−</button>
       <div style="flex:1;text-align:center;min-width:0"><div style="font-size:18px;font-weight:800">${midTxt}</div>
         <div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${midLbl}</div></div>
-      <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(5)':'rideResist(0.5)'}">+</button>
+      <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(10)':'rideResist(1.5)'}">+</button>
     </div>
     <div style="display:flex;gap:8px;margin-top:9px;flex-wrap:wrap">
       ${autoAvail?`<button onclick="rideAutoToggle()" style="flex:1;background:${Ride.auto?'var(--acc)':'var(--s2)'};border:1px solid ${Ride.auto?'var(--acc)':'var(--bord)'};border-radius:9px;color:${Ride.auto?'#fff':'var(--al)'};font-size:12px;font-weight:700;padding:8px;cursor:pointer">${Ride.auto?'✓ Auto resistance':'Auto resistance off'}</button>`
@@ -8341,13 +8434,20 @@ function _rideDraw(){
     :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
-  const gp=Ride.gymPrompt,ln=Ride.levelNote;
+  const gp=Ride.gymPrompt,ln=Ride.levelNote,tr=Ride.testResult;
+  const trHtml=tr&&tr.ftp?`<div style="background:var(--s1);border:1px solid var(--grn);border-radius:14px;padding:12px;margin-bottom:10px">
+    <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">📏 Your FTP</div>
+    <div style="font-size:28px;font-weight:800">${tr.ftp} W</div>
+    <div style="font-size:12px;color:var(--t2);line-height:1.5">You reached ${tr.reached} W on the ramp; FTP is 75% of that${tr.prev?` · was ${tr.prev} W (${tr.ftp>=tr.prev?'+':''}${tr.ftp-tr.prev})`:''}. Every workout's watt targets come from this number.</div>
+    ${tr.saved===true?`<div style="font-size:12px;font-weight:700;color:var(--grn);margin-top:6px">✓ Saved</div>`:tr.saved==='no'?`<div style="font-size:12px;color:var(--t2);margin-top:6px">Not saved.</div>`
+      :`<div style="display:flex;gap:8px;margin-top:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideTestSave()">Save ${tr.ftp} W</button><button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideTestSkip()">Not now</button></div>`}
+  </div>`:'';
   const lvHtml=ln?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 12px;margin-bottom:10px">
     <div style="font-size:13px;font-weight:700">${BIKE_CATS[ln.cat].name} level ${ln.from}${ln.to!==ln.from?` → <span style="color:${ln.to>ln.from?'var(--grn)':'var(--amb)'}">${ln.to}</span>`:''}</div>
     <div style="font-size:12px;color:var(--t2);margin:2px 0 8px">${_esc(ln.why)}.${ln.feel==null?' How did it feel?':' Thanks — noted for next time.'}</div>
     ${ln.feel==null?`<div style="display:flex;gap:6px">${[[0.5,'😴 Too easy'],[0,'👌 About right'],[-1,'🥵 Too hard']].map(([n,t])=>`<button class="btn btn-s" style="flex:1;margin:0;font-size:12px;padding:8px 4px" onclick="rideFeel(${n})">${t}</button>`).join('')}</div>`:''}
   </div>`:'';
-  put('rd-after',lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+  put('rd-after',trHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
     <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
@@ -8758,7 +8858,7 @@ function _sessionExplainer(s){
   if(!m)return'';
   const ftp=_rideFtp();
   const target=ftp?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-top:5px">🎯 Main efforts ~${Math.round(ftp*m.lo)}–${Math.round(ftp*m.hi)}W</div>`
-    :`<div style="font-size:11px;color:var(--t2);margin-top:5px">Set your FTP in My Training to see watts targets.</div>`;
+    :`<div style="font-size:11px;color:var(--t2);margin-top:5px">No FTP yet — take the 15–20 minute FTP test in Ride mode to see watt targets.</div>`;
   return`<div style="font-size:12px;color:var(--t2);line-height:1.55;margin:2px 14px 0;text-align:center">${s.why?`<b style="color:var(--txt)">${_esc(s.why)}</b><br>`:''}${m.why}${target}</div>`;
 }
 

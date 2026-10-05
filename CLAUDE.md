@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.64 (`index.html`)
+### App — v3.65 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -45,6 +45,10 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   days since (sweet spot weekly, threshold/VO2 alternate), none the day after legs, no VO2/hills the day before,
   recovery weeks (wk 3) and high fatigue (TSB) → easy. Levels: synced `bike_levels` + `bike_level_log`, moved by
   `_bikeAfterRide` on Ride-mode finish (+ "How did it feel?" `rideFeel`). User goal: fitness & calories + faster; 45–60 min.
+  v3.65: FTP test (`_ftpTestProgram`: warm-up 5 min, ramp +8% est. FTP/min (10–25 W), ends at >20 W short for 15 s or
+  "I'm done"; FTP = 0.75 × reached, `rideTestSave` → user_profile.ftp + ftp_tested; picker nudges if no FTP or >8 wks).
+  Steps with `w` = plain watts. HR-goal rides aim for the band middle; − / + shift the band ±5 bpm + 10 W (`hrShift`),
+  10 W in watt workouts, ±1.5 torque in manual. Free-ride HR chips use LTHR zones. R-Q002 N: `00 44 00` at start.
   v3.64: `BIKE_GOALS` (synced `bike_goal`, default "comfort" = ride 2–3 h comfortably: 1 quality/wk unless 5+ rides,
   rotation Brisk → Steady Push → Hill Climbs; "faster" = old mix). Long ride = longest ride of last 3 weeks + 15 min
   (`_bikeLongMins`, cap 180 outdoor / 90 indoor) with fuel/pacing tips. Plain names (Easy Spin, Steady Ride, Brisk Ride,
