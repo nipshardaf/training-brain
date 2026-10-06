@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.67 (`index.html`)
+### App — v3.68 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -46,6 +46,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   recovery weeks (wk 3) and high fatigue (TSB) → easy. Levels: synced `bike_levels` + `bike_level_log`, moved by
   `_bikeAfterRide` on Ride-mode finish (+ "How did it feel?" `rideFeel`). User goal: fitness & calories + faster; 45–60 min.
   v3.67: real rides showed the bike NOT following the app (power tracked cadence at fixed torque; target ran to 400 W).
+  v3.68: AI Gym sends 0x44 torque EVERY 1-s tick unconditionally (ca/f.T → r0 → F0, no dedupe); we only sent on change, so the bike (deposit on, knob dead) sat at its own resistance. Now sent every tick (erg, sprint, manual deposit). Unconfirmed on the bike yet.
   Start now = AI Gym order (46 00, 45 01, [N: 44 00], 40 00 02), control re-sent at start/resume; `_rideErg` compares
   bike-reported torque with `lastTq`, retakes control after 5 s off (max 3, then `ctlLost` banner); HR controller capped
   at bike watts + 30 and the torque ceiling; panel shows actual watts + target + ↑/↓. Root cause still unconfirmed.
