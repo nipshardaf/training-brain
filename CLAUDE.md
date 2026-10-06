@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.66 (`index.html`)
+### App — v3.67 (`index.html`)
 - Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
   (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
@@ -45,6 +45,10 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   days since (sweet spot weekly, threshold/VO2 alternate), none the day after legs, no VO2/hills the day before,
   recovery weeks (wk 3) and high fatigue (TSB) → easy. Levels: synced `bike_levels` + `bike_level_log`, moved by
   `_bikeAfterRide` on Ride-mode finish (+ "How did it feel?" `rideFeel`). User goal: fitness & calories + faster; 45–60 min.
+  v3.67: real rides showed the bike NOT following the app (power tracked cadence at fixed torque; target ran to 400 W).
+  Start now = AI Gym order (46 00, 45 01, [N: 44 00], 40 00 02), control re-sent at start/resume; `_rideErg` compares
+  bike-reported torque with `lastTq`, retakes control after 5 s off (max 3, then `ctlLost` banner); HR controller capped
+  at bike watts + 30 and the torque ceiling; panel shows actual watts + target + ↑/↓. Root cause still unconfirmed.
   v3.66: `_rideSame` also = overlap ≥ 60% of the longer ride (watch + Ride mode recording one session); `_rideRank`
   keeps the copy with power, then icu; `_ridesDedupe` runs on intervals.icu/Endurain fetches, cloud merges and pushes.
   v3.65: FTP test (`_ftpTestProgram`: warm-up 5 min, ramp +8% est. FTP/min (10–25 W), ends at >20 W short for 15 s or

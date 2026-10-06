@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.66';
+const APP_VERSION='3.67';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.67',d:'Auto resistance checks the bike is really following',det:'Your last two rides showed the bike staying at the knob\'s resistance: power rose and fell with your cadence, and on the latest ride the app\'s target climbed to 400 W while you were doing about 115 W. Now: the app takes control the way the Renpho app does (display, control, then start) and re-sends it at every start and resume; every second it compares the resistance the bike reports with what it asked for and takes control again if they differ for 5 seconds, telling you if the bike still will not follow; auto resistance never asks for more than 30 W above what the bike is actually giving; and the big number now shows the watts the bike is giving, with the target and whether it is adding or easing underneath. Connection details shows who controls the resistance, for troubleshooting.'},
   {v:'3.66',d:'One ride, however many devices record it',det:'If two devices record the same ride — say an Apple Watch Indoor Cycle workout and Ride mode, started and stopped a few minutes apart — the app now treats them as one ride when they overlap for most of the time, and keeps the copy with power (Ride mode: watts, cadence and your strap\'s heart rate). Before, they had to start within 10 minutes and be within 2 minutes of each other in length, so a ride could show twice with double the calories and training load. Rides fetched from intervals.icu are now checked for duplicates straight away too.'},
   {v:'3.65',d:'FTP test, and auto resistance you can feel',det:'Ride mode has an FTP test: a 5-minute warm-up, then the bike holds a target that rises every minute until you cannot keep it (more than 20 W under for 15 seconds, or tap I\'m done). Your FTP is 75% of the power you reached — the same method as the Renpho app — and you choose whether to save it; every workout then gets real watt targets. Ride mode suggests it when you have no FTP, or when yours is over 8 weeks old. Auto resistance with a heart-rate goal now aims for the middle of the band instead of sitting at the bottom (your last ride held about 100 W at heart rate 130 all hour). The − and + buttons now do something in every mode: in a heart-rate ride each tap moves the band 5 bpm and the watts 10 W, in a workout each tap is 10 W, and in manual each tap is a bigger resistance step.'},
   {v:'3.64',d:'Bike plan aimed at comfortable 2–3 hour rides',det:'The bike plan now trains for what you want: riding 2 to 3 hours outdoors comfortably, not racing. Your long ride builds toward that — 15 minutes more than your longest ride of the last three weeks, up to 3 hours outdoors (90 minutes indoors), shorter in recovery weeks — and long rides come with simple drinking, eating and hill-pacing tips. You get one quality session a week, mostly sweet spot, tempo and hill strength (the steady power that makes long rides and hills easy at your weight), with threshold now and then and VO2max rarely. If you ever want to get faster, switch the bike goal under Your bike levels on any ride day. The workout types also have plain names now, each with a one-line description and how hard it should feel: Easy Spin, Steady Ride, Brisk Ride, Steady Push, Hard Push, Short Bursts, Hill Climbs, and Spins & Sprints.'},
@@ -7866,6 +7867,19 @@ function _rideErg(d){
     }
     return;
   }
+  // v3.67: is the bike actually following? It reports its current torque in every
+  // sample. If that stays off what we asked for 5 s in a row, take control again
+  // (display → control → torque); after 3 tries say so on screen. Before this nothing
+  // checked: the bike sat at the knob's resistance while the app's target climbed.
+  if(Ride.lastTq!=null&&d.torque!=null&&Ride.state==='riding'){
+    if(Math.abs(d.torque-Ride.lastTq)>1.5)Ride.ctlBad=(Ride.ctlBad||0)+1;else{Ride.ctlBad=0;if(Ride.ctlTries)Ride.ctlTries=0;Ride.ctlLost=false;}
+    if(Ride.ctlBad>=5&&!Ride.ctlLost&&Date.now()-(Ride.ctlAt||0)>5000){
+      Ride.ctlAt=Date.now();Ride.ctlBad=0;Ride.ctlTries=(Ride.ctlTries||0)+1;
+      if(Ride.ctlTries>3)Ride.ctlLost=true;
+      else{Ride.deposit=false;_rideTakeControl();const t=Ride.lastTq;Ride.lastTq=null;_bikeSend(0,0x44,[Math.round(t*2)]);Ride.lastTq=t;}
+      _bikeTrace('!',[0xEE,Ride.ctlTries,Math.round(d.torque*2),Math.round((Ride.lastTq||0)*2)]);
+    }
+  }
   const cad=Math.min(170,Math.max(40,d.cad));
   let tq=Math.round(Math.min(40,Math.max(1,Ride.targetW*9.56/cad))*2)/2;
   if(Ride.lastTq!=null){
@@ -7916,11 +7930,14 @@ function rideStart(){
   try{if(!Ride.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Ride.audio=new AC();}}catch(_){}
   if(Ride.state==='idle'||Ride.state==='done'){
     Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;Ride.hrShift=0;Ride.testLowAt=null;
-    _bikeSend(0,0x40,[0,2]);
+    // v3.67: AI Gym's order — display, take control, (R-Q002 N: zero torque), then
+    // start — and control is always re-sent, never assumed from an old flag.
+    Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;
+    if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
-    if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
+    _bikeSend(0,0x40,[0,2]);
   }
-  else _bikeSend(0,0x40,[0,4]);
+  else{if(Ride.erg&&Bike.status==='on'){Ride.deposit=false;_rideTakeControl();Ride.lastTq=null;}_bikeSend(0,0x40,[0,4]);}
   Ride.note='';
   Ride.state='riding';_rideWake();_rideDraw();
 }
@@ -8084,7 +8101,7 @@ function rideDiscard(){
   _rideDraw();
 }
 function rideDiag(){
-  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n${Bike.trace.join('\n')}`;
+  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\ncontrol: ${Ride.deposit?'app':'knob'} · auto ${Ride.auto} · erg ${Ride.erg} · target ${Ride.targetW} W · asked torque ${Ride.lastTq} · bike torque ${Bike.live?Bike.live.torque:'-'} · retakes ${Ride.ctlTries||0}${Ride.ctlLost?' (gave up)':''}\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n${Bike.trace.join('\n')}`;
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
   const el=document.getElementById('rd-diag');if(el)el.textContent=t;
 }
@@ -8259,11 +8276,16 @@ function _rideAutoTick(d){
   Ride.hrAdjAt=now;
   // v3.65: aim for the MIDDLE of the band. It used to act only outside the band, so a
   // ride could sit at its bottom all hour (100 W, heart rate 130 in a 120–140 goal).
-  const mid=zone.lo?(zone.lo+zone.hi)/2:zone.hi-8;
+  const mid=zone.lo?(zone.lo+zone.hi)/2:zone.hi-8,before=Ride.targetW,pw=d&&d.pw||0;
   if(hr>zone.hi+2)Ride.targetW-=hr>zone.hi+10?15:10;
   else if(hr>mid+4)Ride.targetW-=5;
   else if(hr<mid-4)Ride.targetW+=zone.lo&&hr<zone.lo-5?10:5;
+  // v3.67: never more than 30 W above what the bike is giving (it used to climb to
+  // 400 W while the bike, not following, gave 115 W), and never past the bike's ceiling.
+  if(pw>20)Ride.targetW=Math.min(Ride.targetW,Math.round((pw+30)/5)*5);
+  if(d&&d.cad>30)Ride.targetW=Math.min(Ride.targetW,Math.round(40*d.cad/9.56/5)*5);
   Ride.targetW=Math.max(40,Math.min(400,Ride.targetW));
+  Ride.adjDir=Ride.targetW>before?1:Ride.targetW<before?-1:0;Ride.adjAt=now;
 }
 function _rideHrZone(sn){
   const base=Ride.goal&&Ride.goal.type==='hr'?{lo:Ride.goal.lo,hi:Ride.goal.hi}
@@ -8430,9 +8452,13 @@ function _rideDraw(){
   </div>${Bike.err?`<div style="font-size:11px;color:var(--red);margin:-4px 0 8px;word-break:break-word">${_esc(Bike.err)}</div>`:''}`;
   const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:18px;font-weight:800;width:46px;height:42px;cursor:pointer;flex-shrink:0';
   const autoAvail=!!(Ride.prog||(Ride.goal&&Ride.goal.type==='hr'));
-  const midTxt=Ride.auto?`${Ride.targetW||'–'} W`:Ride.erg?`${Ride.targetW} W`:`${d?d.torque.toFixed(1):'–'}`;
+  // v3.67: the big number is what the bike is giving; the label says the target and
+  // which way it last moved, so you can see it working.
+  const adj=Ride.auto&&Ride.adjAt&&Date.now()-Ride.adjAt<20000&&Ride.adjDir?(Ride.adjDir>0?' · ↑ adding':' · ↓ easing'):'';
+  const midTxt=Ride.auto||Ride.erg?`${d?Math.round(d.pw):'–'} W`:`${d?d.torque.toFixed(1):'–'}`;
   const hzB=Ride.auto&&_rideHrMode()?_rideHrZone(_rideStepNow()):null;
-  const midLbl=Ride.auto?(hzB?`Auto · aiming for ❤️ ${hzB.lo?hzB.lo+'–':'under '}${hzB.hi}`:Ride.bias?`Auto · ${Ride.bias>0?'+':''}${Ride.bias} W harder`:'Auto resistance'):Ride.erg?'Holding this power':'Resistance (1–40)';
+  const tgtTxt=Ride.targetW?`target ${Ride.targetW} W`:'';
+  const midLbl=Ride.ctlLost?'⚠️ Bike isn\'t following the app':Ride.auto?(hzB?`${tgtTxt}${adj} · ❤️ ${hzB.lo?hzB.lo+'–':'under '}${hzB.hi}`:`${tgtTxt}${adj}${Ride.bias?` · ${Ride.bias>0?'+':''}${Ride.bias} W`:''}`):Ride.erg?`holding ${tgtTxt}`:'Resistance (1–40)';
   const res=`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:10px 12px;margin-bottom:12px">
     <div style="display:flex;align-items:center;gap:10px">
       <button style="${sb}" onclick="${Ride.auto||Ride.erg?'rideTarget(-10)':'rideResist(-1.5)'}">−</button>
@@ -8453,6 +8479,9 @@ function _rideDraw(){
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
   const gp=Ride.gymPrompt,ln=Ride.levelNote,tr=Ride.testResult;
+  const lostHtml=Ride.ctlLost&&Ride.state==='riding'?`<div style="background:rgba(245,158,11,.12);border:1px solid var(--amb);border-radius:14px;padding:11px 12px;margin-bottom:10px;font-size:12px;line-height:1.5">
+    <b>The bike isn't taking the app's resistance.</b> It's staying at the knob's setting, so auto resistance can't work right now. Open <b>Connection details</b> below, tap <b>Show &amp; copy details</b>, and paste it to Claude.
+    <button class="btn btn-s" style="margin:8px 0 0;width:100%;font-size:12px;padding:8px" onclick="Ride.ctlTries=0;Ride.ctlLost=false;Ride.deposit=false;_rideTakeControl();Ride.lastTq=null;_rideDraw()">Try taking control again</button></div>`:'';
   const trHtml=tr&&tr.ftp?`<div style="background:var(--s1);border:1px solid var(--grn);border-radius:14px;padding:12px;margin-bottom:10px">
     <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">📏 Your FTP</div>
     <div style="font-size:28px;font-weight:800">${tr.ftp} W</div>
@@ -8465,7 +8494,7 @@ function _rideDraw(){
     <div style="font-size:12px;color:var(--t2);margin:2px 0 8px">${_esc(ln.why)}.${ln.feel==null?' How did it feel?':' Thanks — noted for next time.'}</div>
     ${ln.feel==null?`<div style="display:flex;gap:6px">${[[0.5,'😴 Too easy'],[0,'👌 About right'],[-1,'🥵 Too hard']].map(([n,t])=>`<button class="btn btn-s" style="flex:1;margin:0;font-size:12px;padding:8px 4px" onclick="rideFeel(${n})">${t}</button>`).join('')}</div>`:''}
   </div>`:'';
-  put('rd-after',trHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+  put('rd-after',lostHtml+trHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
     <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
