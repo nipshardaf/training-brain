@@ -103,3 +103,6 @@ CdA 0.1548 (solved each sample).
 ### Not used by Training Brain
 Firmware update (OTA) characteristics, account/family features, Health Connect / Samsung / Huawei
 sync, cloud course downloads.
+
+## iPhone / Bluefy note (2026-10-06)
+Confirmed on the real bike: on iPhone (Bluefy), write-without-response frames are silently dropped (no error) — the bike kept its knob resistance. Writing **with response** works (v3.69). AI Gym on Android uses no-response; that is fine on Android only.
