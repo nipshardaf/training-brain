@@ -5,8 +5,8 @@
 Two Claude chats work on this repo, and this section is how they stay in sync:
 - **Local PC chat** ("Training Brain — Apple Watch app", runs on the user's Windows PC,
   reachable from Mac/iPhone via Remote Control). It has the Garmin Connect IQ SDK and
-  simulator, the Firebase CLI (deploys the web.app copy), the user's Chrome (Garmin
-  store uploads) and USB access to the Garmin watch. Watch builds and Firebase deploys
+  simulator, the Firebase CLI, the user's Chrome (Garmin
+  store uploads) and USB access to the Garmin watch. Watch builds
   happen there.
 - **Cloud chat** ("Training brain project"). Repo access only.
 
@@ -23,8 +23,10 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   sandbox against the real Ride code with a fake native side.
 
 ### App — v3.68 (`index.html`)
-- Hosting: GitHub Pages from `main` (auto) + Firebase copy https://training-631c1.web.app
-  (manual deploy from the PC: `/training-brain/` rewritten to `/`, `changelog.json` copied).
+- Hosting: GitHub Pages from `main` only (auto on push). Since 2026-10-06 (user only uses GitHub)
+  https://training-631c1.web.app is just a redirect page to GitHub Pages, plus a sw.js that
+  clears old caches. Do NOT disable Firebase Hosting: authDomain training-631c1.firebaseapp.com
+  serves the Google sign-in handler (/__/auth/handler).
 - Service worker: stale-while-revalidate shell. A "New version ready — Reload" bar appears
   when a newer `APP_VERSION` is found; v3.47 also re-checks whenever the app is resumed.
 - **Gym planning is by muscle group (v3.46).** The session set comes from the number of
@@ -176,9 +178,7 @@ Then update the "Current state" section above (version + what changed) and push 
 Tell the user in plain words what changed and that the app shows a "New version ready —
 Reload" bar (or pick it up on the next launch).
 
-**Firebase copy:** https://training-631c1.web.app is NOT updated by a push. Only the local
-PC chat can deploy it. If you shipped from the cloud chat, add
-"deploy v<X.Y> to Firebase" to Open items so the PC chat does it next time.
+**Firebase copy:** retired 2026-10-06. Don't deploy the app there; the web.app site only redirects.
 
 **Can't test in a browser here?** Say so. At least check the JS still parses, e.g. extract
 the main `<script>` and run `node --check` on it if node exists, before pushing.
