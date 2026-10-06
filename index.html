@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.68';
+const APP_VERSION='3.69';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.69',d:'Auto resistance: a second way of talking to the bike',det:'Your ride details showed the bike reporting the same resistance (its knob setting) the whole ride while the app asked for much more, and the bike never answered a single command. Everything the app sends now matches the Renpho app byte for byte, so the likely culprit is how the iPhone delivers the messages. The app now asks the bike to confirm each message it receives, and if the bike still will not follow, it switches to the other way of sending on its own before giving up. Connection details now list every command sent and whether it got through.'},
   {v:'3.68',d:'Auto resistance talks to the bike the way the Renpho app does',det:'The Renpho app sends the bike its resistance every second, even when nothing has changed. Training Brain only sent it when the value changed, so on a steady ride the bike stopped hearing from the app: it had handed control over (the knob stopped working) but stayed on its own resistance. Now the resistance is sent every second in auto, power and manual − / + modes.'},
   {v:'3.67',d:'Auto resistance checks the bike is really following',det:'Your last two rides showed the bike staying at the knob\'s resistance: power rose and fell with your cadence, and on the latest ride the app\'s target climbed to 400 W while you were doing about 115 W. Now: the app takes control the way the Renpho app does (display, control, then start) and re-sends it at every start and resume; every second it compares the resistance the bike reports with what it asked for and takes control again if they differ for 5 seconds, telling you if the bike still will not follow; auto resistance never asks for more than 30 W above what the bike is actually giving; and the big number now shows the watts the bike is giving, with the target and whether it is adding or easing underneath. Connection details shows who controls the resistance, for troubleshooting.'},
   {v:'3.66',d:'One ride, however many devices record it',det:'If two devices record the same ride — say an Apple Watch Indoor Cycle workout and Ride mode, started and stopped a few minutes apart — the app now treats them as one ride when they overlap for most of the time, and keeps the copy with power (Ride mode: watts, cadence and your strap\'s heart rate). Before, they had to start within 10 minutes and be within 2 minutes of each other in length, so a ride could show twice with double the calories and training load. Rides fetched from intervals.icu are now checked for duplicates straight away too.'},
@@ -7672,9 +7673,16 @@ function _bikeLive(p){
   if(d.pw>1000||d.spd>200||d.torque>50)return null; // the bike's own app drops these too
   return d;
 }
+function _bikeHex(bytes){return[...bytes].map(b=>b.toString(16).padStart(2,'0')).join(' ');}
 function _bikeTrace(dir,bytes){
-  Bike.trace.push(dir+' '+[...bytes].map(b=>b.toString(16).padStart(2,'0')).join(' '));
+  Bike.trace.push(dir+' '+_bikeHex(bytes));
   if(Bike.trace.length>40)Bike.trace.shift();
+}
+// v3.69: what the app sent, kept apart so the bike's once-a-second messages can't push it out.
+function _bikeSent(line,res){
+  const s=Ride.start?Math.round((Date.now()-Ride.start)/1000)+'s ':'';
+  (Bike.sent=Bike.sent||[]).push(s+line+' · '+res);
+  if(Bike.sent.length>25)Bike.sent.shift();
 }
 function _bikeOnMsg(m){
   const k=m.cmd.toString(16).padStart(2,'0')+' '+m.sub.toString(16).padStart(2,'0');
@@ -7692,12 +7700,21 @@ function _bikeSend(cmd,sub,payload=[]){
   Bike.q=Bike.q.then(async()=>{
     if(!Bike.ch)return false;
     _bikeTrace('>',f);
+    // v3.69: two ways to write. "resp" waits for the bike to confirm each write; "nr"
+    // doesn't (what the Renpho app uses on Android). On iPhone a no-response write the
+    // bike doesn't take can vanish without an error, so "resp" comes first when the bike
+    // allows it, and the app swaps modes if the bike still won't follow.
+    const ch=Bike.ch,line=_bikeHex(f);
+    const nr=()=>ch.writeValueWithoutResponse?ch.writeValueWithoutResponse(f):ch.writeValue(f);
+    const rs=()=>ch.writeValueWithResponse?ch.writeValueWithResponse(f):ch.writeValue(f);
+    const t0=Date.now();
     try{
-      if(Bike.ch.writeValueWithoutResponse)await Bike.ch.writeValueWithoutResponse(f);else await Bike.ch.writeValue(f);
+      await(Bike.wmode==='resp'?rs():nr());
+      Bike.nSent=(Bike.nSent||0)+1;_bikeSent(line,Bike.wmode+' ok '+(Date.now()-t0)+'ms');
       return true;
     }catch(e){
-      try{await Bike.ch.writeValue(f);return true;}
-      catch(e2){Bike.err='send failed: '+(e2&&e2.message||e2);return false;}
+      try{await(Bike.wmode==='resp'?nr():rs());Bike.nSent=(Bike.nSent||0)+1;_bikeSent(line,'fallback ok');return true;}
+      catch(e2){Bike.nFail=(Bike.nFail||0)+1;Bike.err='send failed: '+(e2&&e2.message||e2);_bikeSent(line,'FAILED '+(e2&&e2.message||e2));return false;}
     }
   });
   return Bike.q;
@@ -7710,6 +7727,9 @@ async function _bikeAttach(){
   }
   if(!ch)throw new Error('that device doesn\'t have the bike service');
   Bike.ch=ch;Bike.buf=[];
+  const pp=ch.properties||{};
+  Bike.props=['read','write','writeWithoutResponse','notify','indicate'].filter(k=>pp[k]).join(',')||'?';
+  if(!Bike.wmode)Bike.wmode=pp.write||!pp.writeWithoutResponse?'resp':'nr';
   if(!ch._tbBound){
     ch._tbBound=true;
     ch.addEventListener('characteristicvaluechanged',e=>{
@@ -7877,6 +7897,7 @@ function _rideErg(d){
     if(Math.abs(d.torque-Ride.lastTq)>1.5)Ride.ctlBad=(Ride.ctlBad||0)+1;else{Ride.ctlBad=0;if(Ride.ctlTries)Ride.ctlTries=0;Ride.ctlLost=false;}
     if(Ride.ctlBad>=5&&!Ride.ctlLost&&Date.now()-(Ride.ctlAt||0)>5000){
       Ride.ctlAt=Date.now();Ride.ctlBad=0;Ride.ctlTries=(Ride.ctlTries||0)+1;
+      if(Ride.ctlTries>3&&!Ride.modeSwapped){Ride.modeSwapped=true;Ride.ctlTries=1;Bike.wmode=Bike.wmode==='resp'?'nr':'resp';} // v3.69: try the other write mode first
       if(Ride.ctlTries>3)Ride.ctlLost=true;
       else{Ride.deposit=false;_rideTakeControl();const t=Ride.lastTq;Ride.lastTq=null;_bikeSend(0,0x44,[Math.round(t*2)]);Ride.lastTq=t;}
       _bikeTrace('!',[0xEE,Ride.ctlTries,Math.round(d.torque*2),Math.round((Ride.lastTq||0)*2)]);
@@ -7938,7 +7959,7 @@ function rideStart(){
     Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;Ride.hrShift=0;Ride.testLowAt=null;
     // v3.67: AI Gym's order — display, take control, (R-Q002 N: zero torque), then
     // start — and control is always re-sent, never assumed from an old flag.
-    Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;
+    Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     _bikeSend(0,0x40,[0,2]);
@@ -8107,7 +8128,7 @@ function rideDiscard(){
   _rideDraw();
 }
 function rideDiag(){
-  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\ncontrol: ${Ride.deposit?'app':'knob'} · auto ${Ride.auto} · erg ${Ride.erg} · target ${Ride.targetW} W · asked torque ${Ride.lastTq} · bike torque ${Bike.live?Bike.live.torque:'-'} · retakes ${Ride.ctlTries||0}${Ride.ctlLost?' (gave up)':''}\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n${Bike.trace.join('\n')}`;
+  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\ncontrol: ${Ride.deposit?'app':'knob'} · auto ${Ride.auto} · erg ${Ride.erg} · target ${Ride.targetW} W · asked torque ${Ride.lastTq} · bike torque ${Bike.live?Bike.live.torque:'-'} · retakes ${Ride.ctlTries||0}${Ride.ctlLost?' (gave up)':''}\nwrites: ${Bike.wmode||'-'} (bike allows ${Bike.props||'?'}) · sent ${Bike.nSent||0} · failed ${Bike.nFail||0}${Ride.modeSwapped?' · swapped mode':''}\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n— sent —\n${(Bike.sent||[]).join('\n')}\n— recent —\n${Bike.trace.join('\n')}`;
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
   const el=document.getElementById('rd-diag');if(el)el.textContent=t;
 }
