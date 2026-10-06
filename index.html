@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.67';
+const APP_VERSION='3.68';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.68',d:'Auto resistance talks to the bike the way the Renpho app does',det:'The Renpho app sends the bike its resistance every second, even when nothing has changed. Training Brain only sent it when the value changed, so on a steady ride the bike stopped hearing from the app: it had handed control over (the knob stopped working) but stayed on its own resistance. Now the resistance is sent every second in auto, power and manual − / + modes.'},
   {v:'3.67',d:'Auto resistance checks the bike is really following',det:'Your last two rides showed the bike staying at the knob\'s resistance: power rose and fell with your cadence, and on the latest ride the app\'s target climbed to 400 W while you were doing about 115 W. Now: the app takes control the way the Renpho app does (display, control, then start) and re-sends it at every start and resume; every second it compares the resistance the bike reports with what it asked for and takes control again if they differ for 5 seconds, telling you if the bike still will not follow; auto resistance never asks for more than 30 W above what the bike is actually giving; and the big number now shows the watts the bike is giving, with the target and whether it is adding or easing underneath. Connection details shows who controls the resistance, for troubleshooting.'},
   {v:'3.66',d:'One ride, however many devices record it',det:'If two devices record the same ride — say an Apple Watch Indoor Cycle workout and Ride mode, started and stopped a few minutes apart — the app now treats them as one ride when they overlap for most of the time, and keeps the copy with power (Ride mode: watts, cadence and your strap\'s heart rate). Before, they had to start within 10 minutes and be within 2 minutes of each other in length, so a ride could show twice with double the calories and training load. Rides fetched from intervals.icu are now checked for duplicates straight away too.'},
   {v:'3.65',d:'FTP test, and auto resistance you can feel',det:'Ride mode has an FTP test: a 5-minute warm-up, then the bike holds a target that rises every minute until you cannot keep it (more than 20 W under for 15 seconds, or tap I\'m done). Your FTP is 75% of the power you reached — the same method as the Renpho app — and you choose whether to save it; every workout then gets real watt targets. Ride mode suggests it when you have no FTP, or when yours is over 8 weeks old. Auto resistance with a heart-rate goal now aims for the middle of the band instead of sitting at the bottom (your last ride held about 100 W at heart rate 130 all hour). The − and + buttons now do something in every mode: in a heart-rate ride each tap moves the band 5 bpm and the watts 10 W, in a workout each tap is 10 W, and in manual each tap is a bigger resistance step.'},
@@ -7845,6 +7846,7 @@ function _rideTick(){
     Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist)]);
     _rideAutoTick(d);
     if(Ride.erg&&d)_rideErg(d);
+    else if(Ride.deposit&&Ride.lastTq!=null&&Bike.status==='on')_bikeSend(0,0x44,[Math.round(Ride.lastTq*2)]); // v3.68: manual − / + held every second too
     if(Ride.elapsed%15===0)_rideStash();
   }
   if(S.screen==='ride')_rideDraw();
@@ -7862,9 +7864,9 @@ function _rideErg(d){
   if(step&&step.lo>=1.3){
     if(!Ride.sprintSent){
       Ride.sprintSent=true;
-      const tq=Math.min(40,Math.max(8,Math.round(Ride.targetW*9.56/100*2)/2));
-      Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);
+      Ride.lastTq=Math.min(40,Math.max(8,Math.round(Ride.targetW*9.56/100*2)/2));
     }
+    _bikeSend(0,0x44,[Math.round(Ride.lastTq*2)]); // every second, like the Renpho app
     return;
   }
   // v3.67: is the bike actually following? It reports its current torque in every
@@ -7883,9 +7885,13 @@ function _rideErg(d){
   const cad=Math.min(170,Math.max(40,d.cad));
   let tq=Math.round(Math.min(40,Math.max(1,Ride.targetW*9.56/cad))*2)/2;
   if(Ride.lastTq!=null){
-    if(Math.abs(tq-Ride.lastTq)<0.5)return;
-    tq=Ride.lastTq+Math.max(-1,Math.min(1,tq-Ride.lastTq));
+    if(Math.abs(tq-Ride.lastTq)<0.5)tq=Ride.lastTq;
+    else tq=Ride.lastTq+Math.max(-1,Math.min(1,tq-Ride.lastTq));
   }
+  // v3.68: sent every second even when unchanged. The Renpho app does exactly this (a
+  // 1-second timer: torque = watts × 9.56 ÷ cadence, no "only if it changed"); we only
+  // sent on a change, so on a steady ride the bike heard nothing after the first few
+  // seconds and stayed on its own resistance.
   Ride.lastTq=tq;_bikeSend(0,0x44,[Math.round(tq*2)]);
 }
 function _rideTakeControl(){
