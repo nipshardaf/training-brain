@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.69 (`index.html`)
+### App — v3.70 (`index.html`)
 - Hosting: GitHub Pages from `main` only (auto on push). Since 2026-10-06 (user only uses GitHub)
   https://training-631c1.web.app is just a redirect page to GitHub Pages, plus a sw.js that
   clears old caches. Do NOT disable Firebase Hosting: authDomain training-631c1.firebaseapp.com
@@ -51,6 +51,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   v3.68: AI Gym sends 0x44 torque EVERY 1-s tick unconditionally (ca/f.T → r0 → F0, no dedupe); we only sent on change, so the bike (deposit on, knob dead) sat at its own resistance. Now sent every tick (erg, sprint, manual deposit). Unconfirmed on the bike yet.
   v3.69 CONFIRMED WORKING 2026-10-06 (user: "it's controlling it now"). Root cause: on iPhone/Bluefy, writes without response to the bike are silently dropped; writes WITH response work. Keep wmode resp.
   v3.69 history: user diag (10-06): name "RQ002", bike torque stuck at 12 (=gear 24 raw), asked 31, never any reply frames. Verified vs AI Gym: frame bytes, CRC, SLIP, UUIDs, write type (NO_RESPONSE), command set all identical; RQ002 handled same as others. Suspect iOS/Bluefy silently dropping no-response writes → now writes with response when allowed, swaps mode before giving up, logs every sent frame ("— sent —" in diag). 00 50 payload len 23: p19-20 mc_status, p21-22 mc_temper/10.
+  v3.70: mid-ride "Change workout" (rideChangeOpen/_rideSwitch). Ride.progAt offsets the step clock, goalAt/goalKcal offset goals, name0 + " → " + new name; warm-up skipped when 5+ min in; leaving a workout = no level change (_bikeAfterRide uses the final prog only). "Make it easy" = free ride with the Easy HR goal + auto.
   Start now = AI Gym order (46 00, 45 01, [N: 44 00], 40 00 02), control re-sent at start/resume; `_rideErg` compares
   bike-reported torque with `lastTq`, retakes control after 5 s off (max 3, then `ctlLost` banner); HR controller capped
   at bike watts + 30 and the torque ceiling; panel shows actual watts + target + ↑/↓. Root cause still unconfirmed.
