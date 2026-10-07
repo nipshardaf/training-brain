@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.69';
+const APP_VERSION='3.70';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.70',d:'Change workout mid-ride',det:'A new Change workout button on the ride screen (riding or paused) lets you switch to a free ride, today\'s workout or any other workout without stopping. At the top, Make it easy switches to a free ride where auto resistance keeps your heart rate in the easy zone, for when you want to do something else while you ride. It stays one ride: time, distance, calories and heart rate carry on, and it saves as, say, "Steady Push → Free ride". A new workout starts at its first step and skips its warm-up if you are 5+ minutes in. Leaving a workout does not change its level; only the workout you finish on counts.'},
   {v:'3.69',d:'Auto resistance: a second way of talking to the bike',det:'Your ride details showed the bike reporting the same resistance (its knob setting) the whole ride while the app asked for much more, and the bike never answered a single command. Everything the app sends now matches the Renpho app byte for byte, so the likely culprit is how the iPhone delivers the messages. The app now asks the bike to confirm each message it receives, and if the bike still will not follow, it switches to the other way of sending on its own before giving up. Connection details now list every command sent and whether it got through.'},
   {v:'3.68',d:'Auto resistance talks to the bike the way the Renpho app does',det:'The Renpho app sends the bike its resistance every second, even when nothing has changed. Training Brain only sent it when the value changed, so on a steady ride the bike stopped hearing from the app: it had handed control over (the knob stopped working) but stayed on its own resistance. Now the resistance is sent every second in auto, power and manual − / + modes.'},
   {v:'3.67',d:'Auto resistance checks the bike is really following',det:'Your last two rides showed the bike staying at the knob\'s resistance: power rose and fell with your cadence, and on the latest ride the app\'s target climbed to 400 W while you were doing about 115 W. Now: the app takes control the way the Renpho app does (display, control, then start) and re-sends it at every start and resume; every second it compares the resistance the bike reports with what it asked for and takes control again if they differ for 5 seconds, telling you if the bike still will not follow; auto resistance never asks for more than 30 W above what the bike is actually giving; and the big number now shows the watts the bike is giving, with the target and whether it is adding or easing underneath. Connection details shows who controls the resistance, for troubleshooting.'},
@@ -7960,6 +7961,7 @@ function rideStart(){
     // v3.67: AI Gym's order — display, take control, (R-Q002 N: zero torque), then
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
+    Ride.progAt=0;Ride.goalAt=0;Ride.goalKcal=0;Ride.name0=Ride.name;Ride.changeOpen=false;
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     _bikeSend(0,0x40,[0,2]);
@@ -8014,7 +8016,7 @@ async function _rideUpload(job){
 function _bikeAfterRide(){
   const p=Ride.prog;if(!p||!p.cat||p.cat==='recovery'||p.test)return null;
   const total=p.steps.reduce((a,x)=>a+x.sec,0)||1;
-  const done=Math.min(1,Ride.elapsed/total),cut=Ride.cutPeak||0,up=Ride.upPeak||0;
+  const done=Math.min(1,(Ride.elapsed-(Ride.progAt||0))/total),cut=Ride.cutPeak||0,up=Ride.upPeak||0;
   const lv=_bikeLevels(),cur=lv[p.cat];
   let delta=0,why='held where it is';
   if(done<0.75){delta=-0.5;why='stopped early';}
@@ -8041,7 +8043,7 @@ async function rideFinish(){
     if(!confirm('This ride is under a minute — discard it?'))return;
     rideDiscard();return;
   }
-  Ride.state='done';
+  Ride.state='done';Ride.changeOpen=false;
   try{Ride.levelNote=_bikeAfterRide();}catch(e){console.warn('[bike level]',e);}
   _bikeSend(0,0x40,[0,5]);
   if(Ride.deposit)rideKnob();
@@ -8178,7 +8180,7 @@ function _rideFtp(){const v=parseFloat((DB.get('user_profile',{})||{}).ftp);retu
 // Where the ride is in its program: the step, seconds left in it, overall progress.
 function _rideStepNow(){
   const p=Ride.prog;if(!p)return null;
-  let t=Ride.elapsed,total=p.steps.reduce((a,x)=>a+x.sec,0);
+  let t=Ride.elapsed-(Ride.progAt||0),total=p.steps.reduce((a,x)=>a+x.sec,0);
   for(let i=0;i<p.steps.length;i++){
     const x=p.steps[i];
     if(t<x.sec)return{i,step:x,left:x.sec-t,next:p.steps[i+1]||null,total,done:false};
@@ -8206,7 +8208,9 @@ function _rideStepTargets(x){
 // What you're riding: today's workout, any library workout, or a free ride with an
 // optional goal (time, calories, or a heart-rate zone).
 function ridePick(kind,arg,auto){
-  if(Ride.state==='riding'||Ride.state==='paused')return;
+  const mid=Ride.state==='riding'||Ride.state==='paused';
+  if(mid&&!Ride.changeOpen)return;
+  if(mid)return _rideSwitch(kind,arg);
   if(kind==='free'){
     Ride.prog=null;Ride.goal=arg||null;Ride.name='Free ride';
     Ride.auto=!!(arg&&arg.type==='hr');
@@ -8218,6 +8222,40 @@ function ridePick(kind,arg,auto){
   }
   if(!auto)Ride.picked=true;
   Ride.stepIdx=-1;Ride.bias=0;
+  const e=document.getElementById('rd-goal');if(e)e._h='';
+  _rideDraw();
+}
+// v3.70: change what you're riding without stopping. It stays one ride (time,
+// distance, calories and heart rate carry on, saved as "Steady Push → Free ride");
+// the new workout starts at its first step, skipping its warm-up if you're 5+ minutes
+// in. A workout you leave doesn't move its level; only the one you finish on does.
+function rideChangeOpen(on){Ride.changeOpen=on!==false;const e=document.getElementById('rd-goal');if(e)e._h='';_rideDraw();}
+function _rideSwitch(kind,arg){
+  const was=Ride.prog,wasFree=!was,now=Ride.elapsed;
+  if(kind==='free'){
+    // From a workout with no goal picked, keep auto resistance on at Zone 2.
+    if(!arg&&!wasFree&&Ride.auto){const L=_rideLthr();arg=L?{type:'hr',lo:Math.round(L*.81),hi:Math.round(L*.89)}:{type:'hr',lo:120,hi:140};}
+    Ride.prog=null;Ride.goal=arg||null;Ride.goalAt=now;Ride.goalKcal=Ride.kcal;
+    Ride.auto=!!(arg&&arg.type==='hr');
+    if(!wasFree)Ride.name=(Ride.name0||Ride.name)+' → Free ride';
+  }else{
+    const w=kind==='ftp'?_ftpTestProgram():kind==='plan'&&Ride.plan?Ride.plan:BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
+    if(!w)return;
+    let steps=w.steps.map(x=>({...x}));
+    if(now>=300&&!w.test&&w.cat!=='recovery'){
+      let i=0;while(i<steps.length-1&&/^(Warm|Pickup|Easy)/.test(steps[i].label||''))i++;
+      if(i>0&&i<steps.length-1)steps=steps.slice(i);
+    }
+    Ride.prog={name:w.name,steps,cat:w.cat,lvl:w.lvl,test:w.test||null};Ride.goal=null;
+    Ride.auto=true;Ride.testResult=null;Ride.testLowAt=null;
+    Ride.name=w.name===Ride.name0?w.name:(Ride.name0||Ride.name)+' → '+w.name;
+  }
+  Ride.progAt=now;Ride.stepIdx=-1;Ride.ergStep=null;Ride.sprintSent=false;Ride.retarget=true;
+  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;
+  if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
+  else if(!Ride.auto)Ride.erg=false; // free ride without a heart-rate goal: − / + set the resistance yourself
+  if(kind!=='free')Ride.changeOpen=false;
+  Ride.note=kind==='free'?'Switched to a free ride.':'Switched to '+Ride.prog.name+'.';
   const e=document.getElementById('rd-goal');if(e)e._h='';
   _rideDraw();
 }
@@ -8244,7 +8282,7 @@ function _rideBeep(n=2){
 function _rideAutoTick(d){
   const sn=_rideStepNow();
   if(sn&&(sn.i!==Ride.stepIdx||Ride.retarget)){
-    const changed=sn.i!==Ride.stepIdx,first=Ride.stepIdx===-1&&Ride.elapsed<=1;
+    const changed=sn.i!==Ride.stepIdx,first=Ride.stepIdx===-1&&Ride.elapsed-(Ride.progAt||0)<=1;
     Ride.stepIdx=sn.i;Ride.retarget=false;
     if(changed&&!first)_rideBeep(sn.done?3:2);
     if(changed&&sn.done&&!first)Ride.note='Workout complete — keep spinning easy, or Finish to save.';
@@ -8374,15 +8412,19 @@ const _mmss=t=>`${Math.floor(Math.max(0,t)/60)}:${String(Math.max(0,Math.round(t
 function _rideGoalHtml(d,hr){
   const box=(inner,border)=>`<div style="background:var(--s1);border:1px solid ${border||'var(--bord)'};border-radius:14px;padding:10px 12px;margin-bottom:8px">${inner}</div>`;
   const bar=(frac,color)=>`<div style="height:6px;background:var(--s2);border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${Math.round(Math.min(1,Math.max(0,frac))*100)}%;background:${color||'var(--acc)'}"></div></div>`;
-  if(Ride.state==='idle'||Ride.state==='done'){
+  if(Ride.state==='idle'||Ride.state==='done'||Ride.changeOpen){
     const chip=(on,label,act)=>`<button onclick="${act}" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:999px;color:${on?'#fff':'var(--txt)'};font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer;margin:0 6px 6px 0">${label}</button>`;
     const g=Ride.goal,free=!Ride.prog;
     const lv=_bikeLevels(),progs=Object.keys(BIKE_CATS).filter(c=>!Ride.plan||c!==Ride.plan.cat);
     const mins=Ride.prog?Math.round(Ride.prog.steps.reduce((a,x)=>a+x.sec,0)/60):0;
     const noFtp=!_rideFtp(),old=(DB.get('user_profile',{})||{}).ftp_tested,stale=!noFtp&&old&&(Date.now()-new Date(old+'T12:00:00'))/864e5>56;
-    return box(`<div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:7px">What are you riding?</div>
-      ${noFtp||stale?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
-      ${chip(!!(Ride.prog&&Ride.prog.test),'📏 FTP test · 15–20 min',"ridePick('ftp')")}
+    const chg=Ride.changeOpen&&Ride.state!=='idle'&&Ride.state!=='done';
+    const ez=(L=>L?{lo:Math.round(L*.68),hi:Math.round(L*.81)}:{lo:110,hi:130})(_rideLthr());
+    return box(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${chg?'Change to…':'What are you riding?'}</div>${chg?`<button onclick="rideChangeOpen(false)" style="background:none;border:none;color:var(--al);font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px">Done</button>`:''}</div>
+      ${chg?`<button onclick="ridePick('free',{type:'hr',lo:${ez.lo},hi:${ez.hi}});rideChangeOpen(false)" style="width:100%;text-align:left;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.45);border-radius:11px;color:var(--txt);padding:9px 11px;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:700">😌 Make it easy</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Free ride · auto resistance keeps your heart rate ${ez.lo}–${ez.hi}, so you can focus on something else</div></button>
+      <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
+      ${!chg&&(noFtp||stale)?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
+      ${chg?'':chip(!!(Ride.prog&&Ride.prog.test),'📏 FTP test · 15–20 min',"ridePick('ftp')")}
       ${Ride.plan?chip(Ride.prog&&Ride.prog.name===Ride.plan.name,`📋 Today: ${Ride.plan.name}`,"ridePick('plan')"):''}
       ${chip(free,'🚲 Free ride',"ridePick('free',Ride.goal)")}
       ${free?`<div style="font-size:11px;color:var(--t2);margin:2px 0 6px">Goal (optional)</div>
@@ -8436,8 +8478,8 @@ function _rideGoalHtml(d,hr){
   }
   const g=Ride.goal;
   if(!g)return'';
-  if(g.type==='time')return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${Math.round(g.val/60)} min ride</b><span style="font-size:13px;font-weight:700">${Ride.elapsed>=g.val?'✅ done!':`${_mmss(g.val-Ride.elapsed)} to go`}</span></div>${bar(Ride.elapsed/g.val,Ride.elapsed>=g.val?'var(--grn)':'var(--acc)')}`);
-  if(g.type==='kcal'){const k=Math.round(Ride.kcal);return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🔥 ${g.val} kcal</b><span style="font-size:13px;font-weight:700">${k>=g.val?'✅ done!':`${g.val-k} to go`}</span></div>${bar(k/g.val,k>=g.val?'var(--grn)':'#f97316')}`);}
+  if(g.type==='time')return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${Math.round(g.val/60)} min ride</b><span style="font-size:13px;font-weight:700">${(Ride.elapsed-(Ride.goalAt||0))>=g.val?'✅ done!':`${_mmss(g.val-(Ride.elapsed-(Ride.goalAt||0)))} to go`}</span></div>${bar((Ride.elapsed-(Ride.goalAt||0))/g.val,(Ride.elapsed-(Ride.goalAt||0))>=g.val?'var(--grn)':'var(--acc)')}`);
+  if(g.type==='kcal'){const k=Math.round(Ride.kcal-(Ride.goalKcal||0));return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🔥 ${g.val} kcal</b><span style="font-size:13px;font-weight:700">${k>=g.val?'✅ done!':`${g.val-k} to go`}</span></div>${bar(k/g.val,k>=g.val?'var(--grn)':'#f97316')}`);}
   if(g.type==='hr'){
     const st=!hr?'waiting for heart rate':hr>g.hi?'↓ ease off':hr<g.lo?'↑ push a bit':'✓ in the zone';
     const ok=hr&&hr>=g.lo&&hr<=g.hi;
@@ -8503,6 +8545,7 @@ function _rideDraw(){
     Ride.state==='riding'?b('⏸ Pause','ridePause()','btn-s')+b('🏁 Finish','rideFinish()','btn-p')
     :Ride.state==='paused'?b('▶ Resume','rideStart()','btn-p')+b('🏁 Finish','rideFinish()','btn-s')
     :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
+    ${(Ride.state==='riding'||Ride.state==='paused')&&!Ride.changeOpen?`<button class="btn btn-s" style="margin-top:8px" onclick="rideChangeOpen()">🔀 Change workout</button>`:''}
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
   const gp=Ride.gymPrompt,ln=Ride.levelNote,tr=Ride.testResult;
