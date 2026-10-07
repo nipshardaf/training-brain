@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.71';
+const APP_VERSION='3.72';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.72',d:'Heart-rate auto resistance keeps YOUR zone',det:'In a heart-rate ride, each tap of + (or click of the bike\'s knob) quietly moved the zone up 5 bpm, so the screen said keep 135–149 while the bike aimed for 150–164 and kept adding resistance at 148. Now − / + make it easier or harder straight away, give you a minute to settle, then auto resistance carries on towards the zone you picked, which never moves. The bike\'s knob is ignored while heart-rate auto resistance is on.'},
   {v:'3.71',d:'Heart-rate auto resistance: gentle start, keeps adjusting',det:'Three fixes. A new ride started from the previous ride\'s watts, so it could start hard; now every ride starts fresh, from about 80% of the watts that kept you in that zone last time, and creeps up. Heart rate lags effort by a minute or two, so adding watts every 15 seconds until you reached the zone overshot; now it looks at where your heart rate is heading and adds slowly, waiting while it is still climbing. Within 4 bpm of the zone\'s middle it did nothing; now it keeps steering towards the middle. And it no longer holds watts (which made the pedals heavier the moment you slowed down): it holds a resistance level like the knob, changes it at most every 30 seconds and a minute apart in the same direction, so you have time to settle. With a heart-rate strap connected, the easy steady parts of a workout (warm-up, Zone 2, cool-down) follow your heart rate even when you have an FTP; intervals still hold their watts.'},
   {v:'3.70',d:'Change workout mid-ride',det:'A new Change workout button on the ride screen (riding or paused) lets you switch to a free ride, today\'s workout or any other workout without stopping. At the top, Make it easy switches to a free ride where auto resistance keeps your heart rate in the easy zone, for when you want to do something else while you ride. It stays one ride: time, distance, calories and heart rate carry on, and it saves as, say, "Steady Push → Free ride". A new workout starts at its first step and skips its warm-up if you are 5+ minutes in. Leaving a workout does not change its level; only the workout you finish on counts.'},
   {v:'3.69',d:'Auto resistance: a second way of talking to the bike',det:'Your ride details showed the bike reporting the same resistance (its knob setting) the whole ride while the app asked for much more, and the bike never answered a single command. Everything the app sends now matches the Renpho app byte for byte, so the likely culprit is how the iPhone delivers the messages. The app now asks the bike to confirm each message it receives, and if the bike still will not follow, it switches to the other way of sending on its own before giving up. Connection details now list every command sent and whether it got through.'},
@@ -7693,7 +7694,9 @@ function _bikeOnMsg(m){
   else if(m.cmd===0&&m.sub===0x31)_bikeSend(1,0x31);   // the bike asks to disconnect — acknowledge
   else if(m.cmd===0&&m.sub===0x52&&m.p.length){        // resistance knob turned N clicks
     const n=m.p[0]>127?m.p[0]-256:m.p[0];
-    if(Ride.erg)rideTarget(n*5);else if(Ride.deposit)rideResist(n*0.5);
+    // v3.72: ignored while heart-rate auto resistance is on — each click used to raise the zone 5 bpm.
+    if(Ride.auto&&_rideHrMode())Ride.note='The knob is off while auto resistance follows your heart rate — use − / +, or "Use the bike\'s knob".';
+    else if(Ride.erg)rideTarget(n*5);else if(Ride.deposit)rideResist(n*0.5);
   }
 }
 // Web Bluetooth allows one operation at a time per device: queue the writes.
@@ -7949,10 +7952,14 @@ function rideResist(delta){
 function _rideHrMode(){return!!(Ride.goal&&Ride.goal.type==='hr')||!!(Ride.prog&&!Ride.prog.test&&(!_rideFtp()||_rideHrLed(_rideStepNow(),null)));}
 function rideTarget(delta){
   if(Ride.auto&&_rideHrMode()){
-    const up=delta>0?1:-1;
-    Ride.hrShift=Math.max(-20,Math.min(20,(Ride.hrShift||0)+5*up));
+    // v3.72: − / + make it easier / harder NOW and leave you a minute to settle; the
+    // heart-rate zone stays the one you picked. They used to move the zone 5 bpm per tap
+    // without showing it (the goal said 135–149 while the bike aimed for 150–164).
+    const up=delta>0?1:-1,now=Date.now();
     Ride.targetW=Math.max(40,Math.min(400,(Ride.targetW||100)+10*up));
-    Ride.hrAdjAt=Date.now();_rideDraw();return;
+    Ride.hrAdjAt=now+50000;Ride.lvlAt=now;Ride.lvlDir=0;Ride.adjDir=up;Ride.adjAt=now;
+    Ride.note=(up>0?'Harder':'Easier')+' for now — auto resistance takes over again in a minute.';
+    _rideDraw();return;
   }
   if(Ride.auto){Ride.bias=Math.max(-100,Math.min(100,Ride.bias+delta));Ride.retarget=true;_rideDraw();return;}
   Ride.targetW=Math.min(600,Math.max(30,(Ride.targetW||100)+delta));_rideDraw();
@@ -8414,8 +8421,7 @@ function _rideHrZone(sn){
   const base=Ride.goal&&Ride.goal.type==='hr'?{lo:Ride.goal.lo,hi:Ride.goal.hi}
     :(sn&&sn.step&&!sn.step.w&&(!_rideFtp()||_rideHrLed(sn,null))?(t=>({lo:t.hLo,hi:t.hHi}))(_rideStepTargets(sn.step)):null);
   if(!base)return null;
-  const k=Ride.hrShift||0;
-  return{lo:base.lo?base.lo+k:0,hi:base.hi+k};
+  return{lo:base.lo||0,hi:base.hi};
 }
 function _rideContext(){
   const ds=fd(new Date());
