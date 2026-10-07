@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.72 (`index.html`)
+### App — v3.73 (`index.html`)
 - Hosting: GitHub Pages from `main` only (auto on push). Since 2026-10-06 (user only uses GitHub)
   https://training-631c1.web.app is just a redirect page to GitHub Pages, plus a sw.js that
   clears old caches. Do NOT disable Firebase Hosting: authDomain training-631c1.firebaseapp.com
@@ -53,7 +53,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   v3.69 history: user diag (10-06): name "RQ002", bike torque stuck at 12 (=gear 24 raw), asked 31, never any reply frames. Verified vs AI Gym: frame bytes, CRC, SLIP, UUIDs, write type (NO_RESPONSE), command set all identical; RQ002 handled same as others. Suspect iOS/Bluefy silently dropping no-response writes → now writes with response when allowed, swaps mode before giving up, logs every sent frame ("— sent —" in diag). 00 50 payload len 23: p19-20 mc_status, p21-22 mc_temper/10.
   v3.70: mid-ride "Change workout" (rideChangeOpen/_rideSwitch). Ride.progAt offsets the step clock, goalAt/goalKcal offset goals, name0 + " → " + new name; warm-up skipped when 5+ min in; leaving a workout = no level change (_bikeAfterRide uses the final prog only). "Make it easy" = free ride with the Easy HR goal + auto.
   v3.71: HR auto resistance reworked after user feedback (hard start, no adjusting in zone, "not allowing time to adjust"): targetW reset per ride (used to carry over!); start = 80% of learned bike_zone_watts[lo-hi] (else 1 W/kg); HR trend over 30 s projected 1 min; changes ≥30 s apart, ≥60 s same direction, +3/+6 up, −10/−20 down; HR mode holds a torque LEVEL (target W at 30-s avg cadence, ±0.5 N·m/s) instead of ERG watts; easy steps ≥5 min with a strap follow HR even with FTP (_rideHrLed). Sim: no overshoot, ~10 min to zone.
-  v3.72: hrShift REMOVED (each +/knob click silently moved the HR band +5; user saw "keep 135–149" while it aimed 150–164). −/+ in HR mode = ±10 W now + 60-s hold; 0x52 knob ignored in HR auto.
+  v3.72: hrShift REMOVED (each +/knob click silently moved the HR band +5; user saw "keep 135–149" while it aimed 150–164). −/+ in HR mode = ±10 W now + 60-s hold (_rideHrNudge). v3.73: user wants the knob usable → 0x52 knob = ±5 W per click via _rideHrNudge (AI Gym also reads 0x52 as knob delta).
   Start now = AI Gym order (46 00, 45 01, [N: 44 00], 40 00 02), control re-sent at start/resume; `_rideErg` compares
   bike-reported torque with `lastTq`, retakes control after 5 s off (max 3, then `ctlLost` banner); HR controller capped
   at bike watts + 30 and the torque ceiling; panel shows actual watts + target + ↑/↓. Root cause still unconfirmed.
