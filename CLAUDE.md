@@ -22,7 +22,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.75 (`index.html`)
+### App — v3.76 (`index.html`)
 - Hosting: GitHub Pages from `main` only (auto on push). Since 2026-10-06 (user only uses GitHub)
   https://training-631c1.web.app is just a redirect page to GitHub Pages, plus a sw.js that
   clears old caches. Do NOT disable Firebase Hosting: authDomain training-631c1.firebaseapp.com
@@ -56,6 +56,7 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   v3.72: hrShift REMOVED (each +/knob click silently moved the HR band +5; user saw "keep 135–149" while it aimed 150–164). −/+ in HR mode = ±10 W now + 60-s hold (_rideHrNudge). v3.73: user wants the knob usable → 0x52 knob = ±5 W per click via _rideHrNudge (AI Gym also reads 0x52 as knob delta).
   v3.74: HR-goal rides start with a 5-min warm-up ramp: 70%→95% of _rideZoneW (learned bike_zone_watts), HR only lowers it (wuAdj −10/30 s over zone), nudges add to wuAdj. User: "dont kill me" but "dont need super easy… dont make it like 200w".
   v3.75: user data (intervals.icu): ~100 W at HR 129–137, LTHR 168. Zones now Easy .68–.75, Zone 2 .75–.85, Brisk .85–.92 of LTHR (was .68–.81/.81–.89/.89–.94; Zone 2 aimed 142 = 150–165 W). Steady Ride z [.75,.85]. _rideZoneInfo: median of last 8 rides (15+ min, 120 d) with avg HR in/near zone (else within 20 bpm), scaled 1.2%/bpm to zone mid, blended with learned bike_zone_watts2 (old bike_zone_watts with 165 W dropped). Shown on goal card. FIX: _icuToActivity read average_watts but intervals sends icu_average_watts → icu rides had no watts.
+  v3.76: _rideLearnZones at finish: samples[6]=Ride.erg flag; only manual seconds (no erg in prior 60 s), after 5 min, HR within 4 of 30 s earlier, HR paired with 60-s avg power; ≥5 min in a band → bike_zone_watts2 (50/50 EMA, matched ±4 bpm via _rideLearnedFor); _rideZoneInfo = learned×0.7 + history×0.3. "Learned from this ride" card. _rideLthr prefers intervals.icu lthr (_lthr kept by _icuToActivity) over 90% of max HR (sandbox with 3 months gave 145 vs real 168).
   Start now = AI Gym order (46 00, 45 01, [N: 44 00], 40 00 02), control re-sent at start/resume; `_rideErg` compares
   bike-reported torque with `lastTq`, retakes control after 5 s off (max 3, then `ctlLost` banner); HR controller capped
   at bike watts + 30 and the torque ceiling; panel shows actual watts + target + ↑/↓. Root cause still unconfirmed.
