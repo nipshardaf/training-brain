@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.73';
+const APP_VERSION='3.74';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.74',d:'A gentle warm-up at the start of heart-rate rides',det:'Heart-rate rides now start with a 5-minute warm-up: the resistance begins at about 70% of what normally keeps you in your zone and rises smoothly to just under it, never above, whatever your heart rate is doing. It only eases off if your heart rate goes over the zone, and the knob and − / + still make it easier or harder. After 5 minutes auto resistance takes over as usual.'},
   {v:'3.73',d:'The bike\'s knob works with heart-rate auto resistance',det:'Turn the knob right for harder, left for easier: each click is 5 W, straight away. Auto resistance then gives you a minute to settle before steering back towards your heart-rate zone, which stays the one you picked. − / + do the same in 10 W steps.'},
   {v:'3.72',d:'Heart-rate auto resistance keeps YOUR zone',det:'In a heart-rate ride, each tap of + (or click of the bike\'s knob) quietly moved the zone up 5 bpm, so the screen said keep 135–149 while the bike aimed for 150–164 and kept adding resistance at 148. Now − / + make it easier or harder straight away, give you a minute to settle, then auto resistance carries on towards the zone you picked, which never moves. The bike\'s knob is ignored while heart-rate auto resistance is on.'},
   {v:'3.71',d:'Heart-rate auto resistance: gentle start, keeps adjusting',det:'Three fixes. A new ride started from the previous ride\'s watts, so it could start hard; now every ride starts fresh, from about 80% of the watts that kept you in that zone last time, and creeps up. Heart rate lags effort by a minute or two, so adding watts every 15 seconds until you reached the zone overshot; now it looks at where your heart rate is heading and adds slowly, waiting while it is still climbing. Within 4 bpm of the zone\'s middle it did nothing; now it keeps steering towards the middle. And it no longer holds watts (which made the pedals heavier the moment you slowed down): it holds a resistance level like the knob, changes it at most every 30 seconds and a minute apart in the same direction, so you have time to settle. With a heart-rate strap connected, the easy steady parts of a workout (warm-up, Zone 2, cool-down) follow your heart rate even when you have an FTP; intervals still hold their watts.'},
@@ -7957,6 +7958,7 @@ function _rideHrMode(){return!!(Ride.goal&&Ride.goal.type==='hr')||!!(Ride.prog&
 function _rideHrNudge(dw){
   const now=Date.now();
   Ride.targetW=Math.max(40,Math.min(400,(Ride.targetW||100)+dw));
+  if(Ride.wuW&&Ride.elapsed-(Ride.goalAt||0)<300)Ride.wuAdj=(Ride.wuAdj||0)+dw; // the warm-up keeps your change
   Ride.hrAdjAt=now+50000;Ride.lvlAt=now;Ride.lvlDir=0;Ride.adjDir=dw>0?1:-1;Ride.adjAt=now;
   Ride.note=(dw>0?'Harder':'Easier')+` (target ${Ride.targetW} W) — auto resistance takes over again in a minute.`;
   _rideDraw();
@@ -7991,7 +7993,7 @@ function rideStart(){
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
     Ride.progAt=0;Ride.goalAt=0;Ride.goalKcal=0;Ride.name0=Ride.name;Ride.changeOpen=false;
-    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.z2Sum=0;Ride.z2N=0; // v3.71: the last ride's target used to carry over
+    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.z2Sum=0;Ride.z2N=0; // v3.71: the last ride's target used to carry over
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     _bikeSend(0,0x40,[0,2]);
@@ -8282,7 +8284,7 @@ function _rideSwitch(kind,arg){
     Ride.name=w.name===Ride.name0?w.name:(Ride.name0||Ride.name)+' → '+w.name;
   }
   Ride.progAt=now;Ride.stepIdx=-1;Ride.ergStep=null;Ride.sprintSent=false;Ride.retarget=true;
-  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.levelTq=null;
+  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.levelTq=null;Ride.wuW=0;
   if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
   else if(!Ride.auto)Ride.erg=false; // free ride without a heart-rate goal: − / + set the resistance yourself
   if(kind!=='free')Ride.changeOpen=false;
@@ -8377,7 +8379,11 @@ function _rideAutoTick(d){
   // projected a minute on), and nudge every 10 s in proportion to how far off that is.
   (Ride.hrHist=Ride.hrHist||[]).push([now,hr]);
   while(Ride.hrHist.length&&now-Ride.hrHist[0][0]>45000)Ride.hrHist.shift();
-  if(!Ride.targetW)Ride.targetW=_rideZoneStartW(zone);
+  if(!Ride.targetW){
+    // v3.74: a heart-rate ride starts with a 5-minute warm-up from 70% of your usual zone watts.
+    if(Ride.goal&&Ride.goal.type==='hr'){Ride.wuW=_rideZoneW(zone);Ride.wuAdj=0;Ride.targetW=Math.max(40,Math.round(Ride.wuW*0.7/5)*5);}
+    else Ride.targetW=_rideZoneStartW(zone);
+  }
   if(Math.abs(hr-mid)<=4&&pw>20){Ride.z2Sum=(Ride.z2Sum||0)+pw;Ride.z2N=(Ride.z2N||0)+1;Ride.z2Key=zone.lo+'-'+zone.hi;}
   if(now-(Ride.hrAdjAt||0)<10000)return;
   Ride.hrAdjAt=now;
@@ -8387,8 +8393,14 @@ function _rideAutoTick(d){
   const err=pred-mid,before=Ride.targetW,warm=Ride.elapsed-(Ride.progAt||0)<240;
   // Changes at most every 30 s, and a minute apart in the same direction, so your
   // body has time to respond before the next one.
-  const since=now-(Ride.lvlAt||0);
-  if(Math.abs(err)>2&&since>=30000){
+  const since=now-(Ride.lvlAt||0),wuT=Ride.elapsed-(Ride.goalAt||0);
+  if(Ride.wuW&&wuT<300){
+    // v3.74 warm-up: rises smoothly from 70% to 95% of the watts that keep you in this
+    // zone over 5 minutes, whatever your heart rate is doing; it only comes DOWN if your
+    // heart rate goes over the zone. The knob and − / + still shift it.
+    if(hr>zone.hi&&since>=30000){Ride.wuAdj=(Ride.wuAdj||0)-10;Ride.lvlAt=now;}
+    Ride.targetW=Math.max(40,Math.round((Ride.wuW*(0.7+0.25*wuT/300)+(Ride.wuAdj||0))/5)*5);
+  }else if(Math.abs(err)>2&&since>=30000){
     let dw=-err;
     if(dw>0)dw=Math.min(dw,warm?3:6);                             // up gently, slower while warming up
     else dw=Math.max(dw,hr>zone.hi+8?-20:-10);                    // down more readily
@@ -8409,12 +8421,15 @@ function _rideAutoTick(d){
 // v3.71: where a heart-rate ride starts — 80% of the watts that kept you in this zone
 // last time (learned at the end of every ride), else 1 W/kg, else 70 W. It then
 // creeps up while your heart rate rises, instead of starting hard.
-function _rideZoneStartW(zone){
+function _rideZoneStartW(zone){return Math.max(40,Math.round(_rideZoneW(zone)*0.8/5)*5);}
+// The watts that kept you in this zone last time (learned at the end of every ride),
+// else 1 W/kg, else 70 W.
+function _rideZoneW(zone){
   const m=DB.get('bike_zone_watts',{})||{},k=zone.lo+'-'+zone.hi;
   let w=m[k];
   if(!w){const near=Object.keys(m).map(x=>[Math.abs(+x.split('-')[0]-zone.lo),m[x]]).sort((a,b)=>a[0]-b[0])[0];if(near&&near[0]<=8)w=near[1];}
   if(!w){const pr=DB.get('user_profile',{})||{};let kg=parseFloat(pr.weight)||0;if(pr.weightUnit==='lbs'||pr.weightUnit==='lb')kg*=0.4536;w=kg>35&&kg<200?kg:70;}
-  return Math.max(40,Math.round(w*0.8/5)*5);
+  return w;
 }
 // v3.71: an easy steady step (warm-up, Zone 2, cool-down) follows your heart rate when a
 // strap is connected, even with an FTP: holding fixed watts let heart rate drift with
@@ -8555,7 +8570,7 @@ function _rideGoalHtml(d,hr){
     const st=!hr?'waiting for heart rate':hr>g.hi?'↓ ease off':hr<g.lo?'↑ push a bit':'✓ in the zone';
     const ok=hr&&hr>=g.lo&&hr<=g.hi;
     return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">❤️ Keep ${g.lo}–${g.hi} bpm</b><span style="font-size:13px;font-weight:700;color:${ok?'var(--grn)':'var(--amb)'}">${st}</span></div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`:'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?(Ride.wuW&&Ride.state!=='idle'&&Ride.elapsed-(Ride.goalAt||0)<300?`🌱 Warm-up: easing in gently · ${_mmss(300-(Ride.elapsed-(Ride.goalAt||0)))} left (now ${Ride.targetW} W).`:`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`):'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
   }
   return'';
 }
