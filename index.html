@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.75';
+const APP_VERSION='3.76';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.76',d:'Learns your zones from free rides',det:'Ride with a heart-rate strap and set the resistance yourself (the knob, or − / + without auto) and the app learns your watts for Easy, Zone 2 and Brisk: it uses the parts of the ride after the first 5 minutes where your heart rate had settled, pairing it with your power over the minute before (heart rate lags effort). Spend 5+ minutes in a zone and it shows what it learned at the end of the ride. Heart-rate auto resistance then starts from those numbers. Rides where auto resistance was setting the bike don\'t count. Heart-rate zones now use the threshold heart rate intervals.icu has for your rides, when it has one.'},
   {v:'3.75',d:'Heart-rate rides match YOUR Zone 2',det:'Your rides show your comfortable steady riding is about 100 W at 130–137 bpm, but the app\'s Zone 2 was 135–149 and aimed for 142, which took 150–165 W. Zone 2 now uses the common definition, 75–85% of your threshold heart rate (about 126–143 for you), with Easy and Brisk below and above it, and the Steady Ride workout uses the same band. The watts a heart-rate ride warms up to now come from your own rides: the typical power of your recent rides at that heart rate (about 100 W for you), shown on the goal card. The 165 W the app learned while it was over-pushing you is dropped.'},
   {v:'3.74',d:'A gentle warm-up at the start of heart-rate rides',det:'Heart-rate rides now start with a 5-minute warm-up: the resistance begins at about 70% of what normally keeps you in your zone and rises smoothly to just under it, never above, whatever your heart rate is doing. It only eases off if your heart rate goes over the zone, and the knob and − / + still make it easier or harder. After 5 minutes auto resistance takes over as usual.'},
   {v:'3.73',d:'The bike\'s knob works with heart-rate auto resistance',det:'Turn the knob right for harder, left for easier: each click is 5 W, straight away. Auto resistance then gives you a minute to settle before steering back towards your heart-rate zone, which stays the one you picked. − / + do the same in 10 W steps.'},
@@ -2622,6 +2623,7 @@ function _icuToActivity(a){
     // _annotateRideLoad to leave it alone).
     ...(a.icu_training_load!=null?{_tss:Math.round(a.icu_training_load),_tssFromIcu:true,_tssEst:false}:{}),
     ...(ifv!=null?{_if:+ifv.toFixed(2)}:{}),
+    ...(a.lthr>100&&a.lthr<220?{_lthr:Math.round(a.lthr)}:{}), // v3.76: your threshold heart rate as intervals.icu has it
   };
 }
 
@@ -7872,7 +7874,7 @@ function _rideTick(){
     Ride.dist+=spd;                    // metres this second
     Ride.kj+=(d?d.pw:0)/1000;
     const kc=_rideKcalPerSec(d?d.pw:0,_rideHr(d));Ride.kcal+=kc.v;Ride.kcalSrc=kc.src;
-    Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist)]);
+    Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist),Ride.erg?1:0]); // [6]: app was setting the resistance
     _rideAutoTick(d);
     if(Ride.erg&&d)_rideErg(d);
     else if(Ride.deposit&&Ride.lastTq!=null&&Bike.status==='on')_bikeSend(0,0x44,[Math.round(Ride.lastTq*2)]); // v3.68: manual − / + held every second too
@@ -7995,7 +7997,7 @@ function rideStart(){
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
     Ride.progAt=0;Ride.goalAt=0;Ride.goalKcal=0;Ride.name0=Ride.name;Ride.changeOpen=false;
-    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.z2Sum=0;Ride.z2N=0; // v3.71: the last ride's target used to carry over
+    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.learned=null;Ride.z2Sum=0;Ride.z2N=0; // v3.71: the last ride's target used to carry over
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     _bikeSend(0,0x40,[0,2]);
@@ -8078,7 +8080,7 @@ async function rideFinish(){
     rideDiscard();return;
   }
   Ride.state='done';Ride.changeOpen=false;
-  if(Ride.z2N>=300&&Ride.z2Key){const m=DB.get('bike_zone_watts2',{})||{};m[Ride.z2Key]=Math.round(Ride.z2Sum/Ride.z2N);DB.set('bike_zone_watts2',m);} // 5+ min in the zone
+  try{Ride.learned=_rideLearnZones();}catch(e){console.warn('[zone learn]',e);}
   try{Ride.levelNote=_bikeAfterRide();}catch(e){console.warn('[bike level]',e);}
   _bikeSend(0,0x40,[0,5]);
   if(Ride.deposit)rideKnob();
@@ -8228,10 +8230,13 @@ function _rideStepNow(){
 function _rideLthr(){
   const day=fd(new Date());
   if(Ride._lthrDay===day)return Ride._lthr;
-  let mx=0;const since=fd(addDays(new Date(),-365));
-  for(const a of DB.get('strava_activities',[])||[])
+  let mx=0,icu=null;const since=fd(addDays(new Date(),-365)),acts=DB.get('strava_activities',[])||[];
+  // v3.76: intervals.icu's threshold heart rate for your rides (newest) comes first — 90% of
+  // one year's highest reading moves with a single spike.
+  for(const a of acts)if(a&&a._lthr&&(!icu||(a.start_date_local||'')>icu.d))icu={d:a.start_date_local||'',v:a._lthr};
+  for(const a of acts)
     if((a.start_date_local||'').slice(0,10)>=since&&a.max_heartrate>mx&&a.max_heartrate<230)mx=a.max_heartrate;
-  Ride._lthrDay=day;Ride._lthr=mx>=135?Math.round(mx*0.9):0;
+  Ride._lthrDay=day;Ride._lthr=icu?icu.v:mx>=135?Math.round(mx*0.9):0;
   return Ride._lthr;
 }
 function _rideStepTargets(x){
@@ -8386,7 +8391,6 @@ function _rideAutoTick(d){
     if(Ride.goal&&Ride.goal.type==='hr'){Ride.wuW=_rideZoneW(zone);Ride.wuAdj=0;Ride.targetW=Math.max(40,Math.round(Ride.wuW*0.7/5)*5);}
     else Ride.targetW=_rideZoneStartW(zone);
   }
-  if(Math.abs(hr-mid)<=4&&pw>20){Ride.z2Sum=(Ride.z2Sum||0)+pw;Ride.z2N=(Ride.z2N||0)+1;Ride.z2Key=zone.lo+'-'+zone.hi;}
   if(now-(Ride.hrAdjAt||0)<10000)return;
   Ride.hrAdjAt=now;
   const old=Ride.hrHist.find(x=>now-x[0]<=32000&&now-x[0]>=25000);
@@ -8434,6 +8438,47 @@ function _rideZoneStartW(zone){return Math.max(40,Math.round(_rideZoneW(zone)*0.
 function _rideZoneW(zone){
   const info=_rideZoneInfo(zone);Ride.zoneInfo=info;return info.w;
 }
+// v3.76: learn your watts for Easy / Zone 2 / Brisk from the parts of a ride where YOU
+// set the resistance (the knob or manual − / +, not auto) and your heart rate had
+// settled: after the first 5 minutes, heart rate within 4 bpm of 30 s earlier. Each
+// second pairs heart rate with your average power over the minute before (heart rate
+// lags effort). 5+ minutes in a zone → that zone's watts, blended 50/50 with what it
+// knew. Needs a heart-rate strap; auto-resistance rides teach it nothing.
+function _rideZoneBands(){
+  const L=_rideLthr();if(!L)return[];
+  return[['Easy',.68,.75],['Zone 2',.75,.85],['Brisk',.85,.92]].map(([n,a,b])=>({n,lo:Math.round(L*a),hi:Math.round(L*b)}));
+}
+function _rideLearnZones(){
+  const x=Ride.samples,bands=_rideZoneBands();if(!bands.length||x.length<600)return null;
+  const acc=bands.map(()=>({s:0,n:0}));
+  let run=0;const win=[];
+  for(let i=0;i<x.length;i++){
+    win.push(x[i][1]);run+=x[i][1];if(win.length>60)run-=win.shift();
+    if(i<300||win.length<60)continue;
+    const hr=x[i][4],hr30=x[i-30][4],pw=run/60;
+    if(!hr||!hr30||Math.abs(hr-hr30)>4||pw<20)continue;
+    let manual=true;for(let j=i-59;j<=i;j++)if(x[j][6]){manual=false;break;}
+    if(!manual)continue;
+    const b=bands.findIndex(z=>hr>=z.lo&&hr<=z.hi);if(b<0)continue;
+    acc[b].s+=pw;acc[b].n++;
+  }
+  const m=DB.get('bike_zone_watts2',{})||{},out=[];
+  bands.forEach((z,i)=>{
+    if(acc[i].n<300)return;
+    const w=Math.round(acc[i].s/acc[i].n),k=z.lo+'-'+z.hi,old=_rideLearnedFor(m,z);
+    m[k]=old?Math.round((old+w)/2):w;
+    out.push({zone:z.n,w,mins:Math.round(acc[i].n/60),now:m[k]});
+  });
+  if(!out.length)return null;
+  DB.set('bike_zone_watts2',m);
+  return out;
+}
+// learned watts for a zone; your threshold heart rate drifts, so match within 4 bpm
+function _rideLearnedFor(m,z){
+  let best=null,bd=99;
+  for(const k of Object.keys(m||{})){const[lo,hi]=k.split('-').map(Number),dd=Math.max(Math.abs(lo-z.lo),Math.abs(hi-z.hi));if(dd<=4&&dd<bd){bd=dd;best=m[k];}}
+  return best;
+}
 function _rideZoneInfo(zone){
   const since=fd(addDays(new Date(),-120)),mid=(zone.lo+zone.hi)/2;
   const pool=(DB.get('strava_activities',[])||[]).filter(a=>a&&!_isRunAct(a)&&a.average_watts>20&&a.average_heartrate&&(a.moving_time||0)>=900&&(a.start_date_local||'').slice(0,10)>=since);
@@ -8445,8 +8490,9 @@ function _rideZoneInfo(zone){
     // a ride a few beats off the middle says a little about the watts AT the middle
     .map(a=>a.average_watts*(1+(mid-a.average_heartrate)*0.012));
   const med=hist.length?[...hist].sort((a,b)=>a-b)[Math.floor(hist.length/2)]:0;
-  const m=DB.get('bike_zone_watts2',{})||{},lr=m[zone.lo+'-'+zone.hi];
-  let w=med&&lr?(med+lr)/2:med||lr||0,src=hist.length>1?`your last ${hist.length} rides`:hist.length?'your last ride':lr?'your last ride here':'';
+  const lr=_rideLearnedFor(DB.get('bike_zone_watts2',{})||{},zone);
+  // what your free rides taught it counts most; ride averages fill in
+  let w=med&&lr?lr*0.7+med*0.3:med||lr||0,src=lr?'learned from your free rides':hist.length>1?`your last ${hist.length} rides`:hist.length?'your last ride':'';
   if(!w){const pr=DB.get('user_profile',{})||{};let kg=parseFloat(pr.weight)||0;if(pr.weightUnit==='lbs'||pr.weightUnit==='lb')kg*=0.4536;w=kg>35&&kg<200?kg*1.2:80;src='a guess from your weight';}
   return{w:Math.round(w),n:hist.length,src};
 }
@@ -8653,7 +8699,10 @@ function _rideDraw(){
     ${(Ride.state==='riding'||Ride.state==='paused')&&!Ride.changeOpen?`<button class="btn btn-s" style="margin-top:8px" onclick="rideChangeOpen()">🔀 Change workout</button>`:''}
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
-  const gp=Ride.gymPrompt,ln=Ride.levelNote,tr=Ride.testResult;
+  const gp=Ride.gymPrompt,ln=Ride.levelNote,tr=Ride.testResult,lz=Ride.state==='done'&&Ride.learned;
+  const lzHtml=lz?`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:11px 12px;margin-bottom:10px;font-size:12px;line-height:1.55">
+    <div style="font-size:13px;font-weight:700;margin-bottom:2px">❤️ Learned from this ride</div>
+    ${lz.map(z=>`${z.zone}: about <b>${z.w} W</b> (${z.mins} min)${z.now!==z.w?` · now using ${z.now} W`:''}`).join('<br>')}</div>`:'';
   const lostHtml=Ride.ctlLost&&Ride.state==='riding'?`<div style="background:rgba(245,158,11,.12);border:1px solid var(--amb);border-radius:14px;padding:11px 12px;margin-bottom:10px;font-size:12px;line-height:1.5">
     <b>The bike isn't taking the app's resistance.</b> It's staying at the knob's setting, so auto resistance can't work right now. Open <b>Connection details</b> below, tap <b>Show &amp; copy details</b>, and paste it to Claude.
     <button class="btn btn-s" style="margin:8px 0 0;width:100%;font-size:12px;padding:8px" onclick="Ride.ctlTries=0;Ride.ctlLost=false;Ride.deposit=false;_rideTakeControl();Ride.lastTq=null;_rideDraw()">Try taking control again</button></div>`:'';
@@ -8669,7 +8718,7 @@ function _rideDraw(){
     <div style="font-size:12px;color:var(--t2);margin:2px 0 8px">${_esc(ln.why)}.${ln.feel==null?' How did it feel?':' Thanks — noted for next time.'}</div>
     ${ln.feel==null?`<div style="display:flex;gap:6px">${[[0.5,'😴 Too easy'],[0,'👌 About right'],[-1,'🥵 Too hard']].map(([n,t])=>`<button class="btn btn-s" style="flex:1;margin:0;font-size:12px;padding:8px 4px" onclick="rideFeel(${n})">${t}</button>`).join('')}</div>`:''}
   </div>`:'';
-  put('rd-after',lostHtml+trHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+  put('rd-after',lostHtml+trHtml+lzHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
     <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
