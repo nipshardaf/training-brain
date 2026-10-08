@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.74';
+const APP_VERSION='3.75';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.75',d:'Heart-rate rides match YOUR Zone 2',det:'Your rides show your comfortable steady riding is about 100 W at 130–137 bpm, but the app\'s Zone 2 was 135–149 and aimed for 142, which took 150–165 W. Zone 2 now uses the common definition, 75–85% of your threshold heart rate (about 126–143 for you), with Easy and Brisk below and above it, and the Steady Ride workout uses the same band. The watts a heart-rate ride warms up to now come from your own rides: the typical power of your recent rides at that heart rate (about 100 W for you), shown on the goal card. The 165 W the app learned while it was over-pushing you is dropped.'},
   {v:'3.74',d:'A gentle warm-up at the start of heart-rate rides',det:'Heart-rate rides now start with a 5-minute warm-up: the resistance begins at about 70% of what normally keeps you in your zone and rises smoothly to just under it, never above, whatever your heart rate is doing. It only eases off if your heart rate goes over the zone, and the knob and − / + still make it easier or harder. After 5 minutes auto resistance takes over as usual.'},
   {v:'3.73',d:'The bike\'s knob works with heart-rate auto resistance',det:'Turn the knob right for harder, left for easier: each click is 5 W, straight away. Auto resistance then gives you a minute to settle before steering back towards your heart-rate zone, which stays the one you picked. − / + do the same in 10 W steps.'},
   {v:'3.72',d:'Heart-rate auto resistance keeps YOUR zone',det:'In a heart-rate ride, each tap of + (or click of the bike\'s knob) quietly moved the zone up 5 bpm, so the screen said keep 135–149 while the bike aimed for 150–164 and kept adding resistance at 148. Now − / + make it easier or harder straight away, give you a minute to settle, then auto resistance carries on towards the zone you picked, which never moves. The bike\'s knob is ignored while heart-rate auto resistance is on.'},
@@ -2595,7 +2596,8 @@ function _icuToActivity(a){
   if(!a||!a.start_date_local)return null;
   const dur=a.moving_time||a.elapsed_time;
   if(!dur)return null;
-  const avgW=a.average_watts!=null?Math.round(a.average_watts):null;
+  // v3.75: intervals.icu sends icu_average_watts; average_watts was always empty, so its rides had no watts.
+  const aw=a.average_watts!=null?a.average_watts:a.icu_average_watts,avgW=aw!=null?Math.round(aw):null;
   // icu_intensity is a percentage (e.g. 75 => IF 0.75); older rows may already be a ratio.
   let ifv=a.icu_intensity!=null?(a.icu_intensity>3?a.icu_intensity/100:a.icu_intensity):null;
   return{
@@ -4518,7 +4520,7 @@ function getRideWeek(mon){
 const BIKE_CATS={
   recovery:{name:'Easy Spin',short:'Very easy — helps you recover',feel:'chatting freely',lo:.45,hi:.55,z:[0,.8],hard:false,gloss:'zone2',
     why:'Deliberately easy: gets the blood moving so you recover. Going hard here only makes the next hard day worse.'},
-  endurance:{name:'Steady Ride',short:'Comfortable pace you could keep up for hours — builds stamina, burns calories',feel:'talking in full sentences',lo:.6,hi:.72,z:[.81,.89],hard:false,gloss:'zone2',
+  endurance:{name:'Steady Ride',short:'Comfortable pace you could keep up for hours — builds stamina, burns calories',feel:'talking in full sentences',lo:.6,hi:.72,z:[.75,.85],hard:false,gloss:'zone2',
     why:'The core of riding for 2–3 hours: a comfortable pace you could hold all day. This is where your stamina and most of your calories come from. Higher levels add a few brisker blocks.'},
   tempo:{name:'Brisk Ride',short:'A bit harder than comfortable, held for 10–20 minutes',feel:'talking in short sentences',lo:.76,hi:.87,z:[.88,.93],hard:false,gloss:'zone2',
     why:'A brisk pace held for a while: makes your comfortable pace faster and long rides easier.'},
@@ -8076,7 +8078,7 @@ async function rideFinish(){
     rideDiscard();return;
   }
   Ride.state='done';Ride.changeOpen=false;
-  if(Ride.z2N>=300&&Ride.z2Key){const m=DB.get('bike_zone_watts',{})||{};m[Ride.z2Key]=Math.round(Ride.z2Sum/Ride.z2N);DB.set('bike_zone_watts',m);} // 5+ min in the zone
+  if(Ride.z2N>=300&&Ride.z2Key){const m=DB.get('bike_zone_watts2',{})||{};m[Ride.z2Key]=Math.round(Ride.z2Sum/Ride.z2N);DB.set('bike_zone_watts2',m);} // 5+ min in the zone
   try{Ride.levelNote=_bikeAfterRide();}catch(e){console.warn('[bike level]',e);}
   _bikeSend(0,0x40,[0,5]);
   if(Ride.deposit)rideKnob();
@@ -8163,7 +8165,7 @@ function rideDiscard(){
   _rideDraw();
 }
 function rideDiag(){
-  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\ncontrol: ${Ride.deposit?'app':'knob'} · auto ${Ride.auto} · erg ${Ride.erg} · target ${Ride.targetW} W · asked torque ${Ride.lastTq} · bike torque ${Bike.live?Bike.live.torque:'-'} · retakes ${Ride.ctlTries||0}${Ride.ctlLost?' (gave up)':''}\nheart rate: ${_rideHr(Bike.live)||'-'} · trend ${Ride.hrSlope||0} bpm/min · zone ${JSON.stringify(_rideHrZone(_rideStepNow()))} · learned ${JSON.stringify(DB.get('bike_zone_watts',{}))}\nwrites: ${Bike.wmode||'-'} (bike allows ${Bike.props||'?'}) · sent ${Bike.nSent||0} · failed ${Bike.nFail||0}${Ride.modeSwapped?' · swapped mode':''}\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n— sent —\n${(Bike.sent||[]).join('\n')}\n— recent —\n${Bike.trace.join('\n')}`;
+  const t=`Training Brain ${APP_VERSION} · bike ${Bike.status} (${Bike.name}) · hr ${Bike.hrStatus} (${Bike.hrName})\ncontrol: ${Ride.deposit?'app':'knob'} · auto ${Ride.auto} · erg ${Ride.erg} · target ${Ride.targetW} W · asked torque ${Ride.lastTq} · bike torque ${Bike.live?Bike.live.torque:'-'} · retakes ${Ride.ctlTries||0}${Ride.ctlLost?' (gave up)':''}\nheart rate: ${_rideHr(Bike.live)||'-'} · trend ${Ride.hrSlope||0} bpm/min · zone ${JSON.stringify(_rideHrZone(_rideStepNow()))} · zone watts ${JSON.stringify(Ride.zoneInfo||null)} · learned ${JSON.stringify(DB.get('bike_zone_watts2',{}))}\nwrites: ${Bike.wmode||'-'} (bike allows ${Bike.props||'?'}) · sent ${Bike.nSent||0} · failed ${Bike.nFail||0}${Ride.modeSwapped?' · swapped mode':''}\nerr: ${Bike.err||'-'} · bad CRC: ${Bike.badCrc}\nmessages: ${JSON.stringify(Bike.seen)}\nlive: ${JSON.stringify(Bike.live)}\n— sent —\n${(Bike.sent||[]).join('\n')}\n— recent —\n${Bike.trace.join('\n')}`;
   if(navigator.clipboard)navigator.clipboard.writeText(t).then(()=>showToast('Copied — paste it to Claude','var(--grn)')).catch(()=>{});
   const el=document.getElementById('rd-diag');if(el)el.textContent=t;
 }
@@ -8267,7 +8269,7 @@ function _rideSwitch(kind,arg){
   const was=Ride.prog,wasFree=!was,now=Ride.elapsed;
   if(kind==='free'){
     // From a workout with no goal picked, keep auto resistance on at Zone 2.
-    if(!arg&&!wasFree&&Ride.auto){const L=_rideLthr();arg=L?{type:'hr',lo:Math.round(L*.81),hi:Math.round(L*.89)}:{type:'hr',lo:120,hi:140};}
+    if(!arg&&!wasFree&&Ride.auto){const L=_rideLthr();arg=L?{type:'hr',lo:Math.round(L*.75),hi:Math.round(L*.85)}:{type:'hr',lo:120,hi:138};}
     Ride.prog=null;Ride.goal=arg||null;Ride.goalAt=now;Ride.goalKcal=Ride.kcal;
     Ride.auto=!!(arg&&arg.type==='hr');
     if(!wasFree)Ride.name=(Ride.name0||Ride.name)+' → Free ride';
@@ -8424,12 +8426,29 @@ function _rideAutoTick(d){
 function _rideZoneStartW(zone){return Math.max(40,Math.round(_rideZoneW(zone)*0.8/5)*5);}
 // The watts that kept you in this zone last time (learned at the end of every ride),
 // else 1 W/kg, else 70 W.
+// v3.75: YOUR watts for a heart-rate zone, from your own rides: the median average power
+// of your last 8 rides (15+ min, last 4 months) whose average heart rate sat in or near
+// the zone, blended with what Ride mode measured while you were in it. (v3.71 learned
+// only from Ride mode, and learned 165 W while auto resistance was over-pushing; that
+// value is dropped.) Falls back to 1 W/kg.
 function _rideZoneW(zone){
-  const m=DB.get('bike_zone_watts',{})||{},k=zone.lo+'-'+zone.hi;
-  let w=m[k];
-  if(!w){const near=Object.keys(m).map(x=>[Math.abs(+x.split('-')[0]-zone.lo),m[x]]).sort((a,b)=>a[0]-b[0])[0];if(near&&near[0]<=8)w=near[1];}
-  if(!w){const pr=DB.get('user_profile',{})||{};let kg=parseFloat(pr.weight)||0;if(pr.weightUnit==='lbs'||pr.weightUnit==='lb')kg*=0.4536;w=kg>35&&kg<200?kg:70;}
-  return w;
+  const info=_rideZoneInfo(zone);Ride.zoneInfo=info;return info.w;
+}
+function _rideZoneInfo(zone){
+  const since=fd(addDays(new Date(),-120)),mid=(zone.lo+zone.hi)/2;
+  const pool=(DB.get('strava_activities',[])||[]).filter(a=>a&&!_isRunAct(a)&&a.average_watts>20&&a.average_heartrate&&(a.moving_time||0)>=900&&(a.start_date_local||'').slice(0,10)>=since);
+  // rides in or near the zone; with none, any ride within 20 bpm (scaled to the zone)
+  let near=pool.filter(a=>a.average_heartrate>=zone.lo-4&&a.average_heartrate<=zone.hi+2);
+  if(!near.length)near=pool.filter(a=>Math.abs(a.average_heartrate-mid)<=20);
+  const hist=near
+    .sort((a,b)=>(b.start_date_local||'').localeCompare(a.start_date_local||'')).slice(0,8)
+    // a ride a few beats off the middle says a little about the watts AT the middle
+    .map(a=>a.average_watts*(1+(mid-a.average_heartrate)*0.012));
+  const med=hist.length?[...hist].sort((a,b)=>a-b)[Math.floor(hist.length/2)]:0;
+  const m=DB.get('bike_zone_watts2',{})||{},lr=m[zone.lo+'-'+zone.hi];
+  let w=med&&lr?(med+lr)/2:med||lr||0,src=hist.length>1?`your last ${hist.length} rides`:hist.length?'your last ride':lr?'your last ride here':'';
+  if(!w){const pr=DB.get('user_profile',{})||{};let kg=parseFloat(pr.weight)||0;if(pr.weightUnit==='lbs'||pr.weightUnit==='lb')kg*=0.4536;w=kg>35&&kg<200?kg*1.2:80;src='a guess from your weight';}
+  return{w:Math.round(w),n:hist.length,src};
 }
 // v3.71: an easy steady step (warm-up, Zone 2, cool-down) follows your heart rate when a
 // strap is connected, even with an FTP: holding fixed watts let heart rate drift with
@@ -8505,7 +8524,7 @@ function _rideGoalHtml(d,hr){
     const mins=Ride.prog?Math.round(Ride.prog.steps.reduce((a,x)=>a+x.sec,0)/60):0;
     const noFtp=!_rideFtp(),old=(DB.get('user_profile',{})||{}).ftp_tested,stale=!noFtp&&old&&(Date.now()-new Date(old+'T12:00:00'))/864e5>56;
     const chg=Ride.changeOpen&&Ride.state!=='idle'&&Ride.state!=='done';
-    const ez=(L=>L?{lo:Math.round(L*.68),hi:Math.round(L*.81)}:{lo:110,hi:130})(_rideLthr());
+    const ez=(L=>L?{lo:Math.round(L*.68),hi:Math.round(L*.75)}:{lo:105,hi:120})(_rideLthr());
     return box(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${chg?'Change to…':'What are you riding?'}</div>${chg?`<button onclick="rideChangeOpen(false)" style="background:none;border:none;color:var(--al);font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px">Done</button>`:''}</div>
       ${chg?`<button onclick="ridePick('free',{type:'hr',lo:${ez.lo},hi:${ez.hi}});rideChangeOpen(false)" style="width:100%;text-align:left;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.45);border-radius:11px;color:var(--txt);padding:9px 11px;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:700">😌 Make it easy</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Free ride · auto resistance keeps your heart rate ${ez.lo}–${ez.hi}, so you can focus on something else</div></button>
       <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
@@ -8516,7 +8535,7 @@ function _rideGoalHtml(d,hr){
       ${free?`<div style="font-size:11px;color:var(--t2);margin:2px 0 6px">Goal (optional)</div>
         ${chip(!g,'None',"ridePick('free',null)")}${[20,30,45,60].map(m=>chip(g&&g.type==='time'&&g.val===m*60,`${m} min`,`ridePick('free',{type:'time',val:${m*60}})`)).join('')}
         ${[200,300,500].map(k=>chip(g&&g.type==='kcal'&&g.val===k,`${k} kcal`,`ridePick('free',{type:'kcal',val:${k}})`)).join('')}
-        ${(L=>L?[[Math.round(L*.68),Math.round(L*.81),'Easy'],[Math.round(L*.81),Math.round(L*.89),'Zone 2'],[Math.round(L*.89),Math.round(L*.94),'Brisk']]:[[110,130,'Easy'],[120,140,'Zone 2'],[140,155,'Brisk']])(_rideLthr()).map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
+        ${(L=>L?[[Math.round(L*.68),Math.round(L*.75),'Easy'],[Math.round(L*.75),Math.round(L*.85),'Zone 2'],[Math.round(L*.85),Math.round(L*.92),'Brisk']]:[[105,120,'Easy'],[120,138,'Zone 2'],[138,152,'Brisk']])(_rideLthr()).map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
       <details style="margin-top:2px"><summary style="cursor:pointer;font-size:12px;color:var(--al);font-weight:700;padding:3px 0">Pick a different workout</summary>
         <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">${progs.map(c=>{const on=Ride.prog&&Ride.prog.cat===c&&(!Ride.plan||Ride.prog.name!==Ride.plan.name),k=BIKE_CATS[c];
           return`<button onclick="ridePick('prog','${c}')" style="text-align:left;background:${on?'rgba(124,58,237,.14)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:11px;color:var(--txt);padding:8px 10px;cursor:pointer">
@@ -8570,7 +8589,7 @@ function _rideGoalHtml(d,hr){
     const st=!hr?'waiting for heart rate':hr>g.hi?'↓ ease off':hr<g.lo?'↑ push a bit':'✓ in the zone';
     const ok=hr&&hr>=g.lo&&hr<=g.hi;
     return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">❤️ Keep ${g.lo}–${g.hi} bpm</b><span style="font-size:13px;font-weight:700;color:${ok?'var(--grn)':'var(--amb)'}">${st}</span></div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?(Ride.wuW&&Ride.state!=='idle'&&Ride.elapsed-(Ride.goalAt||0)<300?`🌱 Warm-up: easing in gently · ${_mmss(300-(Ride.elapsed-(Ride.goalAt||0)))} left (now ${Ride.targetW} W).`:`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`):'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?(Ride.wuW&&Ride.state!=='idle'&&Ride.elapsed-(Ride.goalAt||0)<300?`🌱 Warm-up: easing in gently · ${_mmss(300-(Ride.elapsed-(Ride.goalAt||0)))} left (now ${Ride.targetW} W).`:`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`)+(Ride.zoneInfo&&Ride.zoneInfo.src?` Your usual watts here: about ${Ride.zoneInfo.w} W (${Ride.zoneInfo.src}).`:''):'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
   }
   return'';
 }
