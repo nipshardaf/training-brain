@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.76';
+const APP_VERSION='3.77';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.77',d:'About 870 exercises, filters, and a muscle map',det:'Swapping an exercise now searches the whole free exercise library the demo photos come from (about 870 exercises), not just the 119 the planner uses. Filter by muscle (chest, back, shoulders, arms, legs, core) and equipment (what your gym has, or a specific one). New: an "Add an exercise" button under a gym day\'s exercises. Every exercise card shows a front/back muscle map, main muscles bright and helpers lighter. Library exercises you use sync to your other devices; the planner still builds sessions from the hand-picked list.'},
   {v:'3.76',d:'Learns your zones from free rides',det:'Ride with a heart-rate strap and set the resistance yourself (the knob, or − / + without auto) and the app learns your watts for Easy, Zone 2 and Brisk: it uses the parts of the ride after the first 5 minutes where your heart rate had settled, pairing it with your power over the minute before (heart rate lags effort). Spend 5+ minutes in a zone and it shows what it learned at the end of the ride. Heart-rate auto resistance then starts from those numbers. Rides where auto resistance was setting the bike don\'t count. Heart-rate zones now use the threshold heart rate intervals.icu has for your rides, when it has one.'},
   {v:'3.75',d:'Heart-rate rides match YOUR Zone 2',det:'Your rides show your comfortable steady riding is about 100 W at 130–137 bpm, but the app\'s Zone 2 was 135–149 and aimed for 142, which took 150–165 W. Zone 2 now uses the common definition, 75–85% of your threshold heart rate (about 126–143 for you), with Easy and Brisk below and above it, and the Steady Ride workout uses the same band. The watts a heart-rate ride warms up to now come from your own rides: the typical power of your recent rides at that heart rate (about 100 W for you), shown on the goal card. The 165 W the app learned while it was over-pushing you is dropped.'},
   {v:'3.74',d:'A gentle warm-up at the start of heart-rate rides',det:'Heart-rate rides now start with a 5-minute warm-up: the resistance begins at about 70% of what normally keeps you in your zone and rises smoothly to just under it, never above, whatever your heart rate is doing. It only eases off if your heart rate goes over the zone, and the knob and − / + still make it easier or harder. After 5 minutes auto resistance takes over as usual.'},
@@ -4987,7 +4988,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -6117,6 +6118,107 @@ const G_PH={
   core:    {bg:'linear-gradient(135deg,#b45309,#f59e0b)',i:'💪'},
   foot:    {bg:'linear-gradient(135deg,#92400e,#d97706)',i:'🦶'},
 };
+
+// ── v3.77 EXERCISE LIBRARY ──
+// The whole free-exercise-db (about 870 exercises — the same source as the demo photos)
+// for search, swaps and adding exercises. Loaded from the CDN on first use and kept as a
+// slim copy on the device. The planner still builds sessions from the hand-picked EX
+// list; an exercise from the library joins EX (and syncs as 'ex_extra') once you use it.
+const LIB_URL='https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/dist/exercises.json';
+const LIB_G={abdominals:'core',abductors:'glute',adductors:'quad',biceps:'bi',calves:'calf',chest:'chest',forearms:'bi',glutes:'glute',hamstrings:'ham',lats:'vback','lower back':'core','middle back':'hback',neck:'shoulder',quadriceps:'quad',shoulders:'shoulder',traps:'hback',triceps:'tri'};
+const LIB_EQ={barbell:['barbell'],dumbbell:['dumbbell'],cable:['cable'],machine:['machine'],kettlebells:['kettlebell'],'e-z curl bar':['ez_bar'],'body only':['bodyweight']};
+let _lib=null,_libP=null;
+function _libLoad(){
+  if(_lib)return Promise.resolve(_lib);
+  if(_libP)return _libP;
+  try{const c=JSON.parse(localStorage.getItem('exlib_v1')||'null');if(Array.isArray(c)&&c.length>500){_lib=c;return Promise.resolve(c);}}catch(_){}
+  _libP=fetch(LIB_URL).then(r=>{if(!r.ok)throw new Error('library '+r.status);return r.json();}).then(a=>{
+    _lib=a.filter(x=>x&&x.id&&x.name).map(x=>({i:x.id,n:x.name,p:x.primaryMuscles||[],s:x.secondaryMuscles||[],e:x.equipment||'',c:x.category||'',m:x.mechanic||''}));
+    try{localStorage.setItem('exlib_v1',JSON.stringify(_lib));}catch(_){}
+    return _lib;
+  }).catch(e=>{_libP=null;throw e;});
+  return _libP;
+}
+const _libId=x=>'x_'+String(x.i).toLowerCase().replace(/[^a-z0-9]+/g,'_');
+function _libCurated(){ // free-exercise-db folder → hand-picked EX id
+  const m={};for(const[id,e]of Object.entries(EX))if(typeof e.p==='string'&&!e.x)m[e.p]=id;return m;
+}
+function _libEntry(x){
+  const cap=t=>t.replace(/\b\w/g,c=>c.toUpperCase()),st=x.c==='stretching';
+  return{n:x.n,g:LIB_G[x.p[0]]||'core',t:x.m==='compound'?'C':'I',sets:st?2:3,reps:st?'30–60 s':x.m==='compound'?'8–12':'10–15',rpe:st?'—':'7',
+    m:[...x.p,...x.s].slice(0,3).map(cap).join(' · ')||'Full body',p:x.i,x:1,mu:{p:x.p,s:x.s},bw:x.e==='body only'};
+}
+// Bring a library exercise into EX so every screen can show and log it.
+function _exAdopt(id){
+  if(EX[id])return id;
+  const x=(_lib||[]).find(y=>_libId(y)===id);if(!x)return null;
+  const e=_libEntry(x),eq=LIB_EQ[x.e]||[];
+  const all=DB.get('ex_extra',{})||{};all[id]={...e,eq};DB.set('ex_extra',all);
+  _exExtraMerge();
+  return id;
+}
+function _exExtraMerge(){
+  const all=DB.get('ex_extra',{})||{};
+  for(const[id,e]of Object.entries(all)){
+    if(EX[id]||!e||!e.n)continue;
+    const{eq,...ex}=e;EX[id]=ex;EX_EQUIP[id]=eq||[];
+    if(typeof EX_EN_NAMES!=='undefined')EX_EN_NAMES[id]=ex.n;
+    if(ex.p&&S.gifCache)S.gifCache[id]={f0:GIF_BASE+ex.p+'/0.jpg',f1:GIF_BASE+ex.p+'/1.jpg'};
+  }
+}
+// The hand-picked exercises get their exact muscles from the library once it has loaded.
+function _libAttachMuscles(){
+  if(!_lib)return;const by={};for(const x of _lib)by[x.i]=x;
+  for(const e of Object.values(EX))if(typeof e.p==='string'&&!e.mu&&by[e.p])e.mu={p:by[e.p].p,s:by[e.p].s};
+}
+
+// ── v3.77 MUSCLE MAP ──
+// Which muscles an exercise works: the library's lists, else read from its label.
+const _MU_WORDS=[['lower back','lower back'],['upper chest','chest'],['rear delt','shoulders'],['side delt','shoulders'],['delt','shoulders'],['shoulder','shoulders'],['chest','chest'],['pec','chest'],
+  ['tricep','triceps'],['bicep','biceps'],['brachial','biceps'],['forearm','forearms'],['grip','forearms'],['quad','quadriceps'],['glute','glutes'],['hamstring','hamstrings'],['ham','hamstrings'],
+  ['calf','calves'],['calves','calves'],['lat','lats'],['trap','traps'],['upper back','middle back'],['back','middle back'],['rhomb','middle back'],['core','abdominals'],['ab','abdominals'],['oblique','abdominals'],
+  ['adductor','adductors'],['inner thigh','adductors'],['abductor','abductors'],['hip','glutes'],['neck','neck'],['foot','calves'],['arch','calves']];
+const _G_MU={chest:'chest',bi:'biceps',tri:'triceps',quad:'quadriceps',ham:'hamstrings',glute:'glutes',calf:'calves',core:'abdominals',vback:'lats',hback:'middle back',shoulder:'shoulders',rdelt:'shoulders',sdelt:'shoulders',foot:'calves'};
+function _exMuscles(id){
+  const e=EX[id];if(!e)return null;
+  if(e.mu&&(e.mu.p||[]).length)return e.mu;
+  const parts=String(e.m||'').toLowerCase().split(/·|,|\/|&/).map(t=>t.trim()).filter(Boolean),found=[];
+  for(const t of parts){const w=_MU_WORDS.find(([k])=>t.includes(k));if(w&&!found.includes(w[1]))found.push(w[1]);}
+  const g=_G_MU[e.g];
+  if(!found.length&&g)found.push(g);
+  if(g&&found[0]!==g&&found.includes(g)){found.splice(found.indexOf(g),1);found.unshift(g);}
+  return found.length?{p:[found[0]],s:found.slice(1)}:null;
+}
+// A front and back figure, main muscles bright, helpers lighter.
+function _muscleMapSvg(mu,back,h){
+  const P=new Set(mu.p||[]),Sx=new Set(mu.s||[]);
+  const col=k=>P.has(k)?'var(--acc)':Sx.has(k)?'rgba(139,92,246,.42)':null;
+  const sh=(k,shape)=>{const c=col(k);return c?shape.replace('/>',` fill="${c}"/>`):''};
+  const pair=(k,cx,cy,rx,ry)=>sh(k,`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"/>`)+sh(k,`<ellipse cx="${100-cx}" cy="${cy}" rx="${rx}" ry="${ry}"/>`);
+  const base=`<g fill="rgba(128,128,160,.16)" stroke="rgba(128,128,160,.55)" stroke-width="1.4"><circle cx="50" cy="14" r="10"/><rect x="45" y="22" width="10" height="9" rx="3"/>
+    <path d="M30 32 Q50 26 70 32 L73 62 Q70 90 64 108 L36 108 Q30 90 27 62 Z"/>
+    <rect x="17" y="33" width="11" height="40" rx="5.5"/><rect x="72" y="33" width="11" height="40" rx="5.5"/>
+    <rect x="13" y="71" width="11" height="38" rx="5.5"/><rect x="76" y="71" width="11" height="38" rx="5.5"/>
+    <rect x="36" y="104" width="14" height="56" rx="7"/><rect x="50" y="104" width="14" height="56" rx="7"/>
+    <rect x="37.5" y="158" width="11" height="44" rx="5.5"/><rect x="51.5" y="158" width="11" height="44" rx="5.5"/></g>`;
+  const front=sh('neck','<rect x="45" y="22" width="10" height="9" rx="3"/>')+pair('shoulders',27,38,7,6)+pair('chest',41,47,9.5,7)+pair('biceps',22.5,54,4.5,11)
+    +pair('forearms',18.5,88,4.2,13)+sh('abdominals','<rect x="42" y="57" width="16" height="40" rx="5"/>')+pair('abductors',37.5,113,3,8)
+    +pair('quadriceps',43.5,131,6.2,21)+pair('adductors',48.3,122,2.4,12)+pair('calves',43,180,4.3,15);
+  const rear=sh('neck','<rect x="45" y="22" width="10" height="9" rx="3"/>')+sh('traps','<path d="M38 31 L62 31 L56 50 L44 50 Z"/>')+pair('shoulders',27,38,7,6)+pair('triceps',22.5,54,4.5,11)
+    +pair('forearms',18.5,88,4.2,13)+pair('lats',36.5,64,5.5,15)+sh('middle back','<rect x="43" y="49" width="14" height="22" rx="4"/>')+sh('lower back','<rect x="43" y="74" width="14" height="18" rx="4"/>')
+    +pair('glutes',43.5,113,7.2,8)+pair('hamstrings',43.5,140,6,17)+pair('calves',43.5,178,5,14);
+  return`<svg viewBox="0 0 100 206" height="${h||92}" aria-label="${back?'back':'front'}">${base}${back?rear:front}</svg>`;
+}
+function _mmHtml(id){
+  const mu=_exMuscles(id);if(!mu)return'';
+  const cap=t=>t.replace(/\b\w/g,c=>c.toUpperCase());
+  const backOnly=new Set(['triceps','lats','middle back','lower back','glutes','hamstrings','traps']),frontOnly=new Set(['chest','biceps','abdominals','quadriceps','adductors','abductors']);
+  const all=[...(mu.p||[]),...(mu.s||[])],showF=all.some(m=>!backOnly.has(m)),showB=all.some(m=>!frontOnly.has(m));
+  return`<div style="display:flex;align-items:center;gap:10px;margin-top:9px;padding:7px 10px;background:var(--s2);border-radius:10px">
+    <div style="display:flex;gap:2px;flex-shrink:0">${showF?_muscleMapSvg(mu,false,104):''}${showB?_muscleMapSvg(mu,true,104):''}</div>
+    <div style="font-size:11px;line-height:1.6;min-width:0"><div><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:var(--acc);margin-right:5px"></span><b>${(mu.p||[]).map(cap).join(', ')}</b></div>
+    ${(mu.s||[]).length?`<div style="color:var(--t2)"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:rgba(139,92,246,.42);margin-right:5px"></span>${mu.s.map(cap).join(', ')}</div>`:''}</div></div>`;
+}
 
 function loadGifDb(){
   // p can be:
@@ -7584,6 +7686,7 @@ function openDay(dateStr){
 // from persisted state (a corrupt plan entry, malformed cloud data), reloading
 // didn't recover either. Catch, log, and show a recovery screen instead. v2.92.
 function render(){
+  try{_exExtraMerge();}catch(_){}
   try{_renderInner();}
   catch(e){
     console.error('[render failed]',S.screen,e);
@@ -9077,6 +9180,7 @@ function rExList(dp,log,opts){
     ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
   </div>
+  ${_mmHtml(id)}
   ${EX_CUES[id]?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:7px;padding:7px 10px;background:var(--s2);border-radius:9px;border-left:2px solid var(--acc)">💡 ${EX_CUES[id]}</div>`:''}
   <div style="display:flex;gap:7px;margin-top:9px">
     <button class="ex-busy-btn" style="margin-top:0;flex:1" onclick="event.stopPropagation();openExSwap('${id}',${i},'${dp.date}','${dp.type}')">🔄 ${_T('busy')}</button>
@@ -9085,7 +9189,7 @@ function rExList(dp,log,opts){
   </div>
 </div>
 </div>`;
-  }).join('')}</div>`;
+  }).join('')}</div>${opts?.regen?`<button class="ex-busy-btn" style="width:100%;margin-top:2px;text-align:center" onclick="openExAdd('${dp.date}','${dp.type}')">＋ Add an exercise</button>`:''}`;
 }
 
 // Logged Strava ride detail card — distance, time, HR, power, elevation, cadence,
@@ -14121,6 +14225,7 @@ function getAlternatives(exId,type){
 }
 
 function openExSwap(exId,exIdx,ds,type){
+  S.swapCtx={exId,exIdx,ds,type,add:false};S.swapF={g:'',eq:'gym'};
   const {slotAlts,sameGroup,broader}=getAlternatives(exId,type);
   const ex=EX[exId];
   function altBtn(id){const e=EX[id];if(!e)return'';
@@ -14139,6 +14244,7 @@ function openExSwap(exId,exIdx,ds,type){
   <div class="swap-title">Swap: ${ex?.n||exId}</div>
   <input id="swap-search" type="text" placeholder="🔍  Search all exercises…" oninput="filterSwap('${exId}',${exIdx},'${ds}','${type}',this.value)"
     style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:15px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:4px;-webkit-appearance:none">
+  <div id="swap-filters">${_swapFiltersHtml()}</div>
   <div id="swap-results">${suggestions}</div>
   <button class="swap-cancel" onclick="closeExSwap()">Cancel</button>
 </div>`;
@@ -14149,6 +14255,7 @@ function openExSwap(exId,exIdx,ds,type){
 function filterSwap(exId,exIdx,ds,type,query){
   const q=query.trim().toLowerCase();
   const results=document.getElementById('swap-results');if(!results)return;
+  if(!q&&(S.swapF?.g||S.swapF?.eq!=='gym'||S.swapCtx?.add)){_swapResults('');return;}
   if(!q){
     // restore suggestions
     const {slotAlts,sameGroup,broader}=getAlternatives(exId,type);
@@ -14158,12 +14265,91 @@ function filterSwap(exId,exIdx,ds,type,query){
     results.innerHTML=section('Same movement slot',slotAlts)+section('Same muscle group',sameGroup.slice(0,4))+section('Related muscles',broader);
     return;
   }
-  const matches=Object.entries(EX).filter(([id,e])=>id!==exId&&(e.n.toLowerCase().includes(q)||e.m.toLowerCase().includes(q)||e.g.toLowerCase().includes(q)));
-  if(!matches.length){results.innerHTML='<p style="color:var(--t2);font-size:13px;padding:10px 0">No exercises found.</p>';return;}
+  _swapResults(q);return;
+  const matches=[];
   results.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">Search results</div>`+
     matches.map(([id,e])=>`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps · RPE ${e.rpe}</span></button>`).join('');
 }
 
+// v3.77: muscle and equipment filters, and results from the whole library.
+const SWAP_G=[['','All'],['chest','Chest'],['back','Back'],['shoulder','Shoulders'],['arms','Arms'],['legs','Legs'],['core','Core']];
+const SWAP_GSET={chest:['chest'],back:['vback','hback'],shoulder:['shoulder','rdelt','sdelt'],arms:['bi','tri'],legs:['quad','ham','glute','calf','foot'],core:['core']};
+const SWAP_EQ=[['gym','My gym'],['any','Any equipment'],['bodyweight','Bodyweight'],['dumbbell','Dumbbells'],['barbell','Barbell'],['cable','Cable'],['machine','Machine'],['kettlebell','Kettlebell']];
+function _swapFiltersHtml(){
+  const f=S.swapF||{g:'',eq:'gym'};
+  const chip=(on,l,a)=>`<button onclick="${a}" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:999px;color:${on?'#fff':'var(--txt)'};font-size:12px;font-weight:700;padding:5px 10px;cursor:pointer;flex-shrink:0">${l}</button>`;
+  return`<div style="display:flex;gap:6px;overflow-x:auto;padding:6px 0 4px;-webkit-overflow-scrolling:touch">${SWAP_G.map(([k,l])=>chip(f.g===k,l,`_swapSetF('g','${k}')`)).join('')}</div>
+    <select onchange="_swapSetF('eq',this.value)" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;padding:8px 10px;margin:2px 0 4px;font-family:inherit">${SWAP_EQ.map(([k,l])=>`<option value="${k}"${f.eq===k?' selected':''}>${l}</option>`).join('')}</select>`;
+}
+function _swapSetF(k,v){
+  S.swapF={...(S.swapF||{g:'',eq:'gym'}),[k]:v};
+  const el=document.getElementById('swap-filters');if(el)el.innerHTML=_swapFiltersHtml();
+  const c=S.swapCtx||{},q=document.getElementById('swap-search')?.value||'';
+  filterSwap(c.exId,c.exIdx,c.ds,c.type,q);
+}
+function _swapEqOk(eqList){
+  const f=(S.swapF||{}).eq||'gym';
+  if(f==='any')return true;
+  if(f==='gym'){const have=getActiveEquip();return(eqList||[]).every(e=>have.has(e));}
+  if(f==='bodyweight')return!(eqList||[]).length||(eqList||[]).every(e=>e==='bodyweight');
+  return(eqList||[]).includes(f);
+}
+function _swapResults(q){
+  const res=document.getElementById('swap-results');if(!res)return;
+  const c=S.swapCtx||{},f=S.swapF||{g:'',eq:'gym'},gs=f.g?SWAP_GSET[f.g]:null;
+  const words=q.toLowerCase().split(/\s+/).filter(Boolean).map(w=>w.replace(/^dumbbells?$/,'db'));
+  const hit=(n,m,g)=>{const t=(n+' '+m+' '+g).toLowerCase().replace(/\bdumbbells?\b/g,'db');return words.every(w=>t.includes(w));};
+  const cur=Object.entries(EX).filter(([id,e])=>id!==c.exId&&(!gs||gs.includes(e.g))&&_swapEqOk(EX_EQUIP[id])&&hit(e.n,e.m||'',e.g));
+  const btn=(id,e,tag)=>`<button class="swap-opt" onclick="_swapPick('${id}')">${_esc(e.n)}${tag?` <span style="font-size:10px;color:var(--al);font-weight:700">${tag}</span>`:''}<span>${_esc(e.m||'')} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps</span></button>`;
+  const hdr=t=>`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">${t}</div>`;
+  let html=cur.length?hdr('Your exercises')+cur.slice(0,25).map(([id,e])=>btn(id,e)).join(''):'';
+  if(!_lib){
+    res.innerHTML=html+`<p style="color:var(--t2);font-size:12px;padding:8px 0">Loading the full library (about 870 exercises)…</p>`;
+    _libLoad().then(()=>{_libAttachMuscles();if(document.getElementById('swap-results'))_swapResults(document.getElementById('swap-search')?.value.trim()||'');})
+      .catch(()=>{const r=document.getElementById('swap-results');if(r&&!_lib)r.innerHTML=html+`<p style="color:var(--t2);font-size:12px;padding:8px 0">Couldn't load the full library — check your connection.</p>`;});
+    return;
+  }
+  const curP=_libCurated(),lib=_lib.filter(x=>!curP[x.i]&&!EX[_libId(x)]).map(x=>[_libId(x),_libEntry(x),LIB_EQ[x.e]||[]])
+    .filter(([id,e,eq])=>(!gs||gs.includes(e.g))&&_swapEqOk(eq)&&hit(e.n,e.m,e.g));
+  if(lib.length)html+=hdr(`More from the library · ${lib.length}`)+lib.slice(0,60).map(([id,e])=>btn(id,e,'NEW')).join('')
+    +(lib.length>60?`<p style="color:var(--t2);font-size:12px;padding:6px 0">Showing 60 — search or filter to narrow it down.</p>`:'');
+  res.innerHTML=html||'<p style="color:var(--t2);font-size:13px;padding:10px 0">No exercises found.</p>';
+}
+function _swapPick(id){
+  const c=S.swapCtx||{};
+  if(!EX[id]&&!_exAdopt(id)){showToast('Couldn\'t add that exercise','var(--red)');return;}
+  if(c.add)doExAdd(c.ds,id);else doExSwap(c.exId,c.exIdx,c.ds,c.type,id);
+}
+// v3.77: add an exercise to a gym day (from your list or the library).
+function openExAdd(ds,type){
+  S.swapCtx={add:true,ds,type};
+  const groups=new Set((SLOTS[type]||[]).flat().map(id=>EX[id]?.g).filter(Boolean));
+  const g=Object.entries(SWAP_GSET).find(([,v])=>v.some(x=>groups.has(x)));
+  S.swapF={g:'',eq:'gym'};
+  const modal=document.createElement('div');modal.className='swap-modal';modal.id='ex-swap-modal';
+  modal.innerHTML=`<div class="swap-ov" onclick="closeExSwap()"></div>
+<div class="swap-sheet">
+  <div class="swap-title">Add an exercise</div>
+  <input id="swap-search" type="text" placeholder="🔍  Search all exercises…" oninput="filterSwap(null,0,'${ds}','${type}',this.value)"
+    style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:15px;padding:11px 14px;outline:none;font-family:inherit;margin-bottom:4px">
+  <div id="swap-filters">${_swapFiltersHtml()}</div>
+  <div id="swap-results"></div>
+  <button class="swap-cancel" onclick="closeExSwap()">Cancel</button>
+</div>`;
+  document.body.appendChild(modal);
+  requestAnimationFrame(()=>modal.classList.add('on'));
+  _swapResults('');
+}
+function doExAdd(ds,id){
+  const pk=DB.pk(getMon(new Date(ds+'T12:00:00'))),plan=DB.get(pk,null);
+  const d=plan&&plan.find(x=>x.date===ds);
+  if(d){d.exercises=[...(d.exercises||[]),id];DB.set(pk,plan);}
+  const key=DB.lk(new Date(ds+'T12:00:00'));
+  if(S.activeLog&&S.activeLog.date===ds&&(S.activeLogKey||key)===key&&!S.activeLog.exercises.some(e=>e.id===id)){
+    S.activeLog.exercises.push({id,sets:makeSets(id,S.energy||'okay',getLastLog(id))});_saveLog();
+  }
+  closeExSwap();showToast(`➕ ${EX[id].n} added`,'var(--grn)');debouncedSync();render();
+}
 function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.remove();}
 
 /* ── PER-EXERCISE LOG MODAL ── */
@@ -14810,7 +14996,7 @@ function _setDayExercisesCore(ds,names,style){
 function _dayExerciseMenu(dp,ds){
   const groups=new Set((SLOTS[dp.type]||[]).flat().map(id=>EX[id]?.g).filter(Boolean));
   const byG={};
-  Object.keys(EX).filter(id=>groups.has(EX[id].g)&&exAvail(id)).forEach(id=>{(byG[EX[id].g]=byG[EX[id].g]||[]).push(id);});
+  Object.keys(EX).filter(id=>!EX[id].x&&groups.has(EX[id].g)&&exAvail(id)).forEach(id=>{(byG[EX[id].g]=byG[EX[id].g]||[]).push(id);});
   const txt=Object.entries(byG).map(([g,ids])=>`  ${g}: `+ids.map(id=>`${EX[id].n} (${(EX_EQUIP[id]||[]).join('+')||'bodyweight'}${EX[id].t==='C'?', compound':''})`).join('; ')).join('\n');
   return txt+(DB.get('home_day_'+ds,false)?'\n  Home day is ON: favour bodyweight exercises.':'');
 }
@@ -14868,6 +15054,7 @@ function init(){
   }
   render();
   loadGifDb();
+  setTimeout(()=>{_libLoad().then(()=>{_libAttachMuscles();if(S.screen==='day')render();}).catch(()=>{});},6000); // v3.77
   // Backfill IF/TSS + fitness curve for existing rides. Also auto-estimate FTP if not
   // set yet — handles users upgrading from older versions who don't trigger a fresh sync.
   {
