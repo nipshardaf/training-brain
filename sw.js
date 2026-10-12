@@ -30,6 +30,9 @@ self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
   if (url.hostname.includes('firebase') || url.hostname.includes('googleapis') ||
       url.hostname.includes('strava') || url.hostname.includes('workers.dev')) return;
+  // Demo videos: leave to the browser. iPhone Safari fetches video in byte ranges and
+  // won't play a whole cached copy handed back by a service worker.
+  if (url.pathname.endsWith('.mp4')) return;
 
   // Exercise GIFs/images from the free-exercise-db CDN are immutable — cache them permanently.
   const isExerciseImg = url.hostname === 'yuhonas.github.io';

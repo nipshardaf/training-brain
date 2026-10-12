@@ -169,6 +169,7 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .ex-gif-wrap{position:relative;height:200px;background:var(--s2);overflow:hidden}
 .ex-gif{width:100%;height:100%;object-fit:cover;display:block;opacity:0;transition:opacity .4s;position:absolute;inset:0}
 .ex-gif.on{opacity:1}
+.ex-vid{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#fff;display:block}
 .gif-ph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;transition:opacity .3s}
 .gif-ph.off{opacity:0;pointer-events:none}
 .gif-sh{position:absolute;inset:0;background:linear-gradient(90deg,var(--s2) 0%,var(--s3) 50%,var(--s2) 100%);background-size:200% 100%;animation:sh 1.6s infinite ease-in-out}
@@ -621,6 +622,13 @@ const EX_EQUIP={
   russian_twist:['bodyweight'],decline_crunch:['bodyweight'],
 };
 
+/* ── OWN 3D DEMO VIDEOS ── rendered in Blender from an MPFB (CC0) figure, see
+   Downloads\Claude\exercise-test on the PC. Silent looping clips (900×500) that replace the
+   photo on the exercise card. Add an exercise only after the user approves its video. */
+const EX_DEMO={
+  bb_squat:'assets/demo/bb_squat.mp4',
+};
+
 /* ── COACHING CUES ── */
 const EX_CUES={
   bb_bench:'Retract shoulder blades, feet flat. Press in a slight arc — elbows at ~75°, not flared.',
@@ -1032,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.78';
+const APP_VERSION='3.79';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.79',d:'A 3D demo video for the barbell squat',det:'The Barbell Squat card now plays a short looping 3D video of the lift instead of the two photos: our own figure and render, so no borrowed images. It shows the full back squat with the bar on the upper back, hands gripping it the way you approved in the close-ups, and the working muscles coloured (quads, glutes and hamstrings strong; calves and lower back lighter). It\'s silent and plays inline. More exercises will get their own videos once you\'ve approved each one.'},
   {v:'3.78',d:'Muscle recovery map',det:'Under this week\'s plan, a front and back body map shows how worked each muscle is: red for worked hard, amber for recovering, green for ready. It comes from the sets you logged in the last few days (an exercise\'s main muscles count fully, its helper muscles half), fading over 2–3 days, and your rides count towards your legs.'},
   {v:'3.77',d:'About 870 exercises, filters, and a muscle map',det:'Swapping an exercise now searches the whole free exercise library the demo photos come from (about 870 exercises), not just the 119 the planner uses. Filter by muscle (chest, back, shoulders, arms, legs, core) and equipment (what your gym has, or a specific one). New: an "Add an exercise" button under a gym day\'s exercises. Every exercise card shows a front/back muscle map, main muscles bright and helpers lighter. Library exercises you use sync to your other devices; the planner still builds sessions from the hand-picked list.'},
   {v:'3.76',d:'Learns your zones from free rides',det:'Ride with a heart-rate strap and set the resistance yourself (the knob, or − / + without auto) and the app learns your watts for Easy, Zone 2 and Brisk: it uses the parts of the ride after the first 5 minutes where your heart rate had settled, pairing it with your power over the minute before (heart rate lags effort). Spend 5+ minutes in a zone and it shows what it learned at the end of the ride. Heart-rate auto resistance then starts from those numbers. Rides where auto resistance was setting the bike don\'t count. Heart-rate zones now use the threshold heart rate intervals.icu has for your rides, when it has one.'},
@@ -9215,14 +9224,15 @@ function rExList(dp,log,opts){
     }
     return`<div class="ex-card">
 <div class="ex-gif-wrap">
-  <div class="gif-ph" id="ph${i}"><div class="gif-sh"></div><div class="gif-ph-txt">${ex.n}</div></div>
-  <img class="ex-gif" id="gif${i}" data-xid="${id}" alt="${ex.n}">
+  ${EX_DEMO[id]?`<video class="ex-vid" src="${EX_DEMO[id]}" autoplay muted loop playsinline preload="auto" oncanplay="this.play().catch(()=>{})" aria-label="${ex.n} demo"></video>`
+  :`<div class="gif-ph" id="ph${i}"><div class="gif-sh"></div><div class="gif-ph-txt">${ex.n}</div></div>
+  <img class="ex-gif" id="gif${i}" data-xid="${id}" alt="${ex.n}">`}
   <div class="ex-banner" onclick="event.stopPropagation();toggleExCollapse(${i},${isDone})">
     <span class="ex-num-i">${i+1}</span>
     <span class="ex-num-n">${ex.n}</span>
     <span class="ex-banner-chev" style="background:rgba(0,0,0,.4);border-radius:100px;padding:2px 7px;font-size:11px">▾ ${_T('collapse')}</span>
   </div>
-  <button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ ${_T('animate')}</button>
+  ${EX_DEMO[id]?'':`<button class="ex-play" id="playbtn${i}" onclick="event.stopPropagation();toggleAnim('${id}',this)">▶ ${_T('animate')}</button>`}
   <button class="ex-play" style="left:auto;right:10px;background:rgba(220,38,38,.75)" onclick="event.stopPropagation();openVid('${id}')">📺 ${_T('tutorial')}</button>
 </div>
 <div class="ex-body">
