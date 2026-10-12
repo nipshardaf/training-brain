@@ -1032,10 +1032,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.77';
+const APP_VERSION='3.78';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.78',d:'Muscle recovery map',det:'Under this week\'s plan, a front and back body map shows how worked each muscle is: red for worked hard, amber for recovering, green for ready. It comes from the sets you logged in the last few days (an exercise\'s main muscles count fully, its helper muscles half), fading over 2–3 days, and your rides count towards your legs.'},
   {v:'3.77',d:'About 870 exercises, filters, and a muscle map',det:'Swapping an exercise now searches the whole free exercise library the demo photos come from (about 870 exercises), not just the 119 the planner uses. Filter by muscle (chest, back, shoulders, arms, legs, core) and equipment (what your gym has, or a specific one). New: an "Add an exercise" button under a gym day\'s exercises. Every exercise card shows a front/back muscle map, main muscles bright and helpers lighter. Library exercises you use sync to your other devices; the planner still builds sessions from the hand-picked list.'},
   {v:'3.76',d:'Learns your zones from free rides',det:'Ride with a heart-rate strap and set the resistance yourself (the knob, or − / + without auto) and the app learns your watts for Easy, Zone 2 and Brisk: it uses the parts of the ride after the first 5 minutes where your heart rate had settled, pairing it with your power over the minute before (heart rate lags effort). Spend 5+ minutes in a zone and it shows what it learned at the end of the ride. Heart-rate auto resistance then starts from those numbers. Rides where auto resistance was setting the bike don\'t count. Heart-rate zones now use the threshold heart rate intervals.icu has for your rides, when it has one.'},
   {v:'3.75',d:'Heart-rate rides match YOUR Zone 2',det:'Your rides show your comfortable steady riding is about 100 W at 130–137 bpm, but the app\'s Zone 2 was 135–149 and aimed for 142, which took 150–165 W. Zone 2 now uses the common definition, 75–85% of your threshold heart rate (about 126–143 for you), with Easy and Brisk below and above it, and the Steady Ride workout uses the same band. The watts a heart-rate ride warms up to now come from your own rides: the typical power of your recent rides at that heart rate (about 100 W for you), shown on the goal card. The 165 W the app learned while it was over-pushing you is dropped.'},
@@ -6190,9 +6191,9 @@ function _exMuscles(id){
   return found.length?{p:[found[0]],s:found.slice(1)}:null;
 }
 // A front and back figure, main muscles bright, helpers lighter.
-function _muscleMapSvg(mu,back,h){
+function _muscleMapSvg(mu,back,h,colFn){
   const P=new Set(mu.p||[]),Sx=new Set(mu.s||[]);
-  const col=k=>P.has(k)?'var(--acc)':Sx.has(k)?'rgba(139,92,246,.42)':null;
+  const col=colFn||(k=>P.has(k)?'var(--acc)':Sx.has(k)?'rgba(139,92,246,.42)':null);
   const sh=(k,shape)=>{const c=col(k);return c?shape.replace('/>',` fill="${c}"/>`):''};
   const pair=(k,cx,cy,rx,ry)=>sh(k,`<ellipse cx="${cx}" cy="${cy}" rx="${rx}" ry="${ry}"/>`)+sh(k,`<ellipse cx="${100-cx}" cy="${cy}" rx="${rx}" ry="${ry}"/>`);
   const base=`<g fill="rgba(128,128,160,.16)" stroke="rgba(128,128,160,.55)" stroke-width="1.4"><circle cx="50" cy="14" r="10"/><rect x="45" y="22" width="10" height="9" rx="3"/>
@@ -6208,6 +6209,56 @@ function _muscleMapSvg(mu,back,h){
     +pair('forearms',18.5,88,4.2,13)+pair('lats',36.5,64,5.5,15)+sh('middle back','<rect x="43" y="49" width="14" height="22" rx="4"/>')+sh('lower back','<rect x="43" y="74" width="14" height="18" rx="4"/>')
     +pair('glutes',43.5,113,7.2,8)+pair('hamstrings',43.5,140,6,17)+pair('calves',43.5,178,5,14);
   return`<svg viewBox="0 0 100 206" height="${h||92}" aria-label="${back?'back':'front'}">${base}${back?rear:front}</svg>`;
+}
+// v3.78 RECOVERY MAP: how worked each muscle is, from the last 4 days of logged sets
+// (main muscle 1 per set, helpers ½) fading out over 72 h (48 h for arms, shoulders,
+// calves and core), plus rides for the legs (training load ÷ 25, quads most). Logs carry
+// a date, not a time, so a session counts as 6 pm that day.
+const _MU_ALL=['chest','shoulders','biceps','triceps','forearms','abdominals','lats','middle back','lower back','traps','neck','quadriceps','hamstrings','glutes','calves','adductors','abductors'];
+const _MU_FAST=new Set(['biceps','triceps','forearms','shoulders','calves','abdominals','neck']);
+function _muscleLoad(){
+  const now=Date.now(),load={},last={};
+  const add=(m,v,t)=>{const h=(now-t)/36e5,win=_MU_FAST.has(m)?48:72;if(h<0||h>win)return;load[m]=(load[m]||0)+v*(1-h/win);if(!last[m]||t>last[m])last[m]=t;};
+  for(let i=0;i<=4;i++){
+    const d=addDays(new Date(),-i),t=new Date(fd(d)+'T18:00:00').getTime();
+    for(const key of [DB.lk(d),'extralog_'+fd(d)]){
+      const log=DB.get(key,null);if(!log||!log.exercises)continue;
+      for(const e of log.exercises){
+        const n=(e.sets||[]).filter(x=>x.done).length;if(!n)continue;
+        const mu=_exMuscles(e.id);if(!mu)continue;
+        (mu.p||[]).forEach(m=>add(m,n,t));(mu.s||[]).forEach(m=>add(m,n*0.5,t));
+      }
+    }
+  }
+  const since=fd(addDays(new Date(),-3));
+  for(const a of DB.get('strava_activities',[])||[]){
+    if(!a||_isRunAct(a)||(a.start_date_local||'').slice(0,10)<since)continue;
+    const t=Date.parse(a.start_date_local)+(a.moving_time||0)*1000,u=(a._tss||Math.round((a.moving_time||0)/60))/25;
+    add('quadriceps',u,t);add('glutes',u*0.6,t);add('hamstrings',u*0.4,t);add('calves',u*0.4,t);
+  }
+  return load;
+}
+function _muscleState(v){return v>=5?'worked':v>=1.5?'recovering':'ready';}
+function rRecoveryMap(){
+  if(S.guest||+S.weekStart!==+getMon(new Date()))return'';
+  let load;try{load=_muscleLoad();}catch(e){return'';}
+  const C={worked:'#ef4444',recovering:'#f59e0b',ready:'#10b981'};
+  const colFn=k=>_MU_ALL.includes(k)?C[_muscleState(load[k]||0)]+(_muscleState(load[k]||0)==='ready'?'99':''):null;
+  const cap=t=>t.replace(/\b\w/g,c=>c.toUpperCase());
+  const group=st=>_MU_ALL.filter(m=>m!=='neck'&&_muscleState(load[m]||0)===st).map(cap);
+  const w=group('worked'),r=group('recovering');
+  const all={p:_MU_ALL,s:[]};
+  const line=(st,lbl,list)=>list.length?`<div><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${C[st]};margin-right:5px"></span><b>${lbl}:</b> ${list.join(', ')}</div>`:'';
+  return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px;margin:12px 0">
+  <div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px;margin-bottom:6px">💪 Muscle recovery</div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <div style="display:flex;gap:2px;flex-shrink:0">${_muscleMapSvg(all,false,116,colFn)}${_muscleMapSvg(all,true,116,colFn)}</div>
+    <div style="font-size:12px;line-height:1.7;min-width:0">
+      ${line('worked','Worked hard',w)}${line('recovering','Recovering',r)}
+      ${!w.length&&!r.length?'<div>Everything is fresh — nothing trained hard in the last few days.</div>':`<div style="color:var(--t2)"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:${C.ready};margin-right:5px"></span>Everything else is ready</div>`}
+      <div style="font-size:10px;color:var(--t2);margin-top:3px">From your logged sets and rides over the last few days.</div>
+    </div>
+  </div></div>`;
 }
 function _mmHtml(id){
   const mu=_exMuscles(id);if(!mu)return'';
@@ -8869,6 +8920,7 @@ ${rCatchUpBanner()}
 <div class="day-list">
   ${[...plan].sort((a,b)=>a.date.localeCompare(b.date)).filter((d,i,arr)=>arr.findIndex(x=>x.date===d.date)===i).map(d=>rDayRow(d,today)).join('')}
 </div>
+${rRecoveryMap()}
 `:(()=>{
   const _np=DB.get('user_profile',null);
   const _hasProfile=_np&&(_np.activities||[]).length>0;
