@@ -22,7 +22,13 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
-### App — v3.78 (`index.html`)
+### App — v3.79 (`index.html`)
+- **v3.79 own 3D demo videos.** `EX_DEMO` (id → `assets/demo/<id>.mp4`, 900×500, silent loop) replaces the
+  photo + "Animate" button on the exercise card (`rExList`) with `<video class="ex-vid" autoplay muted loop
+  playsinline>`. First: `bb_squat`. Made in Blender from an MPFB (CC0) figure on the PC — scripts, hand-off and
+  approvals in `C:\Users\htse\Downloads\Claude\exercise-test` (HANDOFF.md; render with
+  `RES=900x500 LENS=34`). Only add an exercise after the user approves its video. sw.js skips `.mp4` (iOS
+  Safari needs byte-range responses). Muted autoplay pauses while off screen (Chrome) — expected.
 - Hosting: GitHub Pages from `main` only (auto on push). Since 2026-10-06 (user only uses GitHub)
   https://training-631c1.web.app is just a redirect page to GitHub Pages, plus a sw.js that
   clears old caches. Do NOT disable Firebase Hosting: authDomain training-631c1.firebaseapp.com
