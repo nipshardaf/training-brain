@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.81';
+const APP_VERSION='3.82';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.82',d:'Both phones plan the same workouts',det:'Your gym (and so which exercises its equipment allows), your home equipment, a short-week setting and the "at home today" switch were kept on each phone separately, but the planner uses them. Two phones that differed picked different exercises, and even different days. They now sync, and the first phone to open this version shares its settings with the other.'},
   {v:'3.81',d:'Ride screen fixes found while checking 3.80',det:'Opening the ride screen could briefly crash and redraw itself (picking today\'s workout and drawing the screen kept triggering each other); it now draws once. And in a planned workout, a "heart rate high, eased off" note from the warm-up could stay on screen after the steady part started following your heart rate, right next to "on target"; it now clears.'},
   {v:'3.80',d:'Heart-rate auto resistance holds your zone instead of chasing its middle',det:'On your 15 Oct ride you were in Zone 2 at 80–90 W, but auto resistance kept easing off because your heart rate sat a few beats above the middle of the zone. It cut you to 50 W and never came back up. Now anywhere inside the zone counts as fine (it acts only when your heart rate heads out of it), it adds and eases in the same small 5 W steps (10 W when you are well outside), at most every 45 seconds, and the watts stay between 80% and 130% of your usual watts for that zone unless your heart rate is clearly too high or too low. The warm-up now finishes at your full usual watts. Turning the knob or − / + moves those limits with you.'},
   {v:'3.79',d:'A 3D demo video for the barbell squat',det:'The Barbell Squat card now plays a short looping 3D video of the lift instead of the two photos: our own figure and render, so no borrowed images. It shows the full back squat with the bar on the upper back, hands gripping it the way you approved in the close-ups, and the working muscles coloured (quads, glutes and hamstrings strong; calves and lower back lighter). It\'s silent and plays inline. More exercises will get their own videos once you\'ve approved each one.'},
@@ -5000,11 +5001,11 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
-function _isSyncKey(k){return k.startsWith('gym_days_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
+function _isSyncKey(k){return k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
 // v3.33: the dirty set is persisted (_sync_dirty). It used to live only in memory,
 // so sets logged with no signal were forgotten when the app closed — and the next
 // open's pull (cloud wins) replaced them with the cloud's older copy of that day.
@@ -7425,6 +7426,20 @@ async function loadFromCloud(manual=false){
       const wk=_baseWeek(getMon(new Date()));
       if(Array.isArray(wk)&&wk.some(d=>d&&d.chosen)){wk.forEach(d=>{if(d)delete d.chosen;});_setFreshWeek(DB.pk(getMon(new Date())),wk);}
       DB.set('chosen_reset_v360',true);
+    }
+    // v3.82: your gym, home equipment, short-week and home-day settings now sync. They
+    // only uploaded when changed, so once: send this phone's ones the cloud doesn't have
+    // yet (the first phone on 3.82 sets them; the other then takes them).
+    if(!DB.get('settings_sync_v382',false)){
+      let up=0;
+      try{
+        for(let i=0;i<localStorage.length;i++){
+          const k=localStorage.key(i);
+          if((k==='gym_profile'||k==='home_equip'||k.startsWith('week_capacity_')||k.startsWith('home_day_'))&&!(k in data)){_dirtyKeys.add(k);up++;}
+        }
+      }catch(_){}
+      if(up){_persistDirty();debouncedSync();}
+      DB.set('settings_sync_v382',true);
     }
     if(keptLocal)debouncedSync();
     setTimeout(()=>{_autoBuildWeek();_watchPushSoon();},0); // v3.44; v3.58: pulled logs can change the week
