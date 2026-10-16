@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.80';
+const APP_VERSION='3.81';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.81',d:'Ride screen fixes found while checking 3.80',det:'Opening the ride screen could briefly crash and redraw itself (picking today\'s workout and drawing the screen kept triggering each other); it now draws once. And in a planned workout, a "heart rate high, eased off" note from the warm-up could stay on screen after the steady part started following your heart rate, right next to "on target"; it now clears.'},
   {v:'3.80',d:'Heart-rate auto resistance holds your zone instead of chasing its middle',det:'On your 15 Oct ride you were in Zone 2 at 80–90 W, but auto resistance kept easing off because your heart rate sat a few beats above the middle of the zone. It cut you to 50 W and never came back up. Now anywhere inside the zone counts as fine (it acts only when your heart rate heads out of it), it adds and eases in the same small 5 W steps (10 W when you are well outside), at most every 45 seconds, and the watts stay between 80% and 130% of your usual watts for that zone unless your heart rate is clearly too high or too low. The warm-up now finishes at your full usual watts. Turning the knob or − / + moves those limits with you.'},
   {v:'3.79',d:'A 3D demo video for the barbell squat',det:'The Barbell Squat card now plays a short looping 3D video of the lift instead of the two photos: our own figure and render, so no borrowed images. It shows the full back squat with the bar on the upper back, hands gripping it the way you approved in the close-ups, and the working muscles coloured (quads, glutes and hamstrings strong; calves and lower back lighter). It\'s silent and plays inline. More exercises will get their own videos once you\'ve approved each one.'},
   {v:'3.78',d:'Muscle recovery map',det:'Under this week\'s plan, a front and back body map shows how worked each muscle is: red for worked hard, amber for recovering, green for ready. It comes from the sets you logged in the last few days (an exercise\'s main muscles count fully, its helper muscles half), fading over 2–3 days, and your rides count towards your legs.'},
@@ -8428,7 +8429,7 @@ function ridePick(kind,arg,auto){
   if(!auto)Ride.picked=true;
   Ride.stepIdx=-1;Ride.bias=0;
   const e=document.getElementById('rd-goal');if(e)e._h='';
-  _rideDraw();
+  if(!auto)_rideDraw();   // v3.80: an automatic pick happens while the screen is being drawn — drawing again looped
 }
 // v3.70: change what you're riding without stopping. It stays one ride (time,
 // distance, calories and heart rate carry on, saved as "Steady Push → Free ride");
@@ -8541,14 +8542,11 @@ function _rideAutoTick(d){
   Ride.erg=true;
   const zone=_rideHrZone(sn);
   if(!zone)return;
+  if(sn&&sn.step&&_rideHrLed(sn,d))Ride.hrCut=0;   // v3.80: a watt step's "eased off" doesn't carry into a heart-rate step
   const hr=_rideHr(d),now=Date.now();
   if(!hr)return;
-  const mid=zone.lo?(zone.lo+zone.hi)/2:zone.hi-8,pw=d&&d.pw||0;
-  // v3.71: heart rate lags effort by a minute or two. Adding watts every 15 s until it
-  // reached the zone overshot (a hard start), and nothing happened within ±4 bpm of the
-  // middle, so once in the zone it never adjusted. Now: start gently from what this zone
-  // took you last time, look at where heart rate is HEADING (its trend over 30 s,
-  // projected a minute on), and nudge every 10 s in proportion to how far off that is.
+  // Heart rate lags effort by a minute or two, so this looks at where it is HEADING (its
+  // trend over the last 30 s) and changes the resistance rarely and in small steps.
   (Ride.hrHist=Ride.hrHist||[]).push([now,hr]);
   while(Ride.hrHist.length&&now-Ride.hrHist[0][0]>45000)Ride.hrHist.shift();
   if(!Ride.targetW){
@@ -8818,7 +8816,10 @@ function _rideGoalHtml(d,hr){
 function _rideDraw(){
   if(S.screen!=='ride')return;
   const $=id=>document.getElementById(id);
-  if(!$('rd-pw')){render();return;}
+  if(!$('rd-pw')){                          // the screen isn't there yet: draw it, never from inside a draw
+    if(!_rideDraw.busy){_rideDraw.busy=true;try{render();}finally{_rideDraw.busy=false;}}
+    return;
+  }
   const now=Date.now(),d=Bike.live&&now-Bike.liveAt<4000?Bike.live:null,hr=_rideHr(d),st=_rideStats();
   const set=(id,v)=>{const e=$(id);if(e&&e.textContent!==String(v))e.textContent=v;};
   set('rd-title','🚲 '+Ride.name);
