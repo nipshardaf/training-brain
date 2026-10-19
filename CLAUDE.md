@@ -29,6 +29,12 @@ Rules for both: `git pull --rebase` before editing; after shipping, update this 
   CI: `.github/workflows/iphone.yml` (simulator build + screenshot → `iphone-shots` branch). Bridge tested in the
   sandbox against the real Ride code with a fake native side.
 
+
+Also under `H:\AI`: the Garmin watch project is `H:\AI\watch` (no space: monkeyc and PowerShell
+quoting), ComfyUI is `H:\AI\ComfyUI`, the retired Firebase redirect is
+`H:\AI\Training Brain\firebase-hosting`, the Bluetooth adapter switch is `H:\AI\Training Brain\tools\bt-switch.ps1`.
+`H:\AI\Training Brain\comfyui` and `watch` are junctions to those two, for browsing only.
+
 ### App — v3.82 (`index.html`)
 - **v3.79 own 3D demo videos.** `EX_DEMO` (id → `assets/demo/<id>.mp4`, 900×500, silent loop) replaces the
   photo + "Animate" button on the exercise card (`rExList`) with `<video class="ex-vid" autoplay muted loop
