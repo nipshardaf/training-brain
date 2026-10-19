@@ -1,5 +1,12 @@
 # Training Brain — Working Notes for Claude
 
+### Where the files live (2026-10-19)
+Everything was moved under `H:\AI`: the repo is `H:\AI\Training Brain\app`, the Blender
+pipeline is `H:\AI\Training Brain\animation\blender`, approved demo videos are copied to
+`H:\AI\Training Brain\demos`, and ComfyUI plus clipmaker live in `H:\AI\ComfyUI` (no space in that
+path: a space breaks ComfyUI custom nodes). Copy at `H:\AI\Training Brain\docs\TRAINING_BRAIN_HANDOFF.md`.
+
+
 ## Current state — READ FIRST (updated 2026-10-02)
 
 Two Claude chats work on this repo, and this section is how they stay in sync:
