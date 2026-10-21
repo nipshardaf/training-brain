@@ -1,3 +1,5 @@
+// v15 — Accepts the DeepSeek secret as DEEPSEEK_KEY or Deepseek_KEY. Every AI reply carries
+//       X-TB-AI: <provider>. A signed-in request with X-TB-Try: deepseek skips Gemini (for testing).
 // v14 — DeepSeek joins the AI fallback chain, straight after Gemini (secret DEEPSEEK_KEY;
 //       OpenAI-compatible API, model deepseek-chat). Fallback providers now honour the
 //       app's generationConfig.maxOutputTokens (1500–8000) so whole-week plans aren't cut off.
@@ -235,7 +237,9 @@ export default {
     }
 
     // 1️⃣ Try Gemini
-    if (env.GEMINI_KEY) {
+    const tryOnly = (request.headers.get('X-TB-Try') || '').toLowerCase();
+    const dsKey = env.DEEPSEEK_KEY || env.Deepseek_KEY;
+    if (env.GEMINI_KEY && !tryOnly) {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_KEY}`,
         { method: 'POST', headers: { 'Content-Type': 'application/json' }, body }
@@ -244,7 +248,7 @@ export default {
       if (r.status !== 429 && r.status !== 401 && r.status !== 403 && r.status !== 503) {
         return new Response(await r.text(), {
           status: r.status,
-          headers: { 'Content-Type': 'application/json', ...cors },
+          headers: { 'Content-Type': 'application/json', 'X-TB-AI': 'gemini', ...cors },
         });
       }
       // 429/401/403 — fall through to next provider
@@ -258,11 +262,11 @@ export default {
     } catch {}
 
     // 2️⃣ Try DeepSeek (v14)
-    if (env.DEEPSEEK_KEY && prompt) {
+    if (dsKey && prompt) {
       try {
         const r = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.DEEPSEEK_KEY}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${dsKey}` },
           body: JSON.stringify({
             model: 'deepseek-chat',
             messages: [{ role: 'user', content: prompt }],
@@ -275,7 +279,7 @@ export default {
           const text = data.choices?.[0]?.message?.content || '';
           if (text) return new Response(toGeminiFormat(text), {
             status: 200,
-            headers: { 'Content-Type': 'application/json', ...cors },
+            headers: { 'Content-Type': 'application/json', 'X-TB-AI': 'deepseek', ...cors },
           });
         }
       } catch {}
@@ -301,7 +305,7 @@ export default {
           const text = data.choices?.[0]?.message?.content || '';
           if (text) return new Response(toGeminiFormat(text), {
             status: 200,
-            headers: { 'Content-Type': 'application/json', ...cors },
+            headers: { 'Content-Type': 'application/json', 'X-TB-AI': 'perplexity', ...cors },
           });
         }
       } catch {}
@@ -327,7 +331,7 @@ export default {
           const text = data.choices?.[0]?.message?.content || '';
           if (text) return new Response(toGeminiFormat(text), {
             status: 200,
-            headers: { 'Content-Type': 'application/json', ...cors },
+            headers: { 'Content-Type': 'application/json', 'X-TB-AI': 'openai', ...cors },
           });
         }
       } catch {}
@@ -498,9 +502,9 @@ function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TB-Try',
+    'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker, X-TB-AI',
     'X-TB-Auth': '1',
-    'X-TB-Worker': '14',
+    'X-TB-Worker': '15',
   };
 }
