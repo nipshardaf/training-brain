@@ -1,3 +1,4 @@
+// v16 — When every provider fails, the 429 reply says why in X-TB-AI-Err (e.g. deepseek:401).
 // v15 — Accepts the DeepSeek secret as DEEPSEEK_KEY or Deepseek_KEY. Every AI reply carries
 //       X-TB-AI: <provider>. A signed-in request with X-TB-Try: deepseek skips Gemini (for testing).
 // v14 — DeepSeek joins the AI fallback chain, straight after Gemini (secret DEEPSEEK_KEY;
@@ -239,6 +240,7 @@ export default {
     // 1️⃣ Try Gemini
     const tryOnly = (request.headers.get('X-TB-Try') || '').toLowerCase();
     const dsKey = env.DEEPSEEK_KEY || env.Deepseek_KEY;
+    const errs = [];
     if (env.GEMINI_KEY && !tryOnly) {
       const r = await fetch(
         `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${env.GEMINI_KEY}`,
@@ -281,9 +283,10 @@ export default {
             status: 200,
             headers: { 'Content-Type': 'application/json', 'X-TB-AI': 'deepseek', ...cors },
           });
-        }
-      } catch {}
-    }
+          errs.push('deepseek:empty');
+        } else errs.push('deepseek:' + r.status);
+      } catch (e) { errs.push('deepseek:fetch'); }
+    } else if (!dsKey) errs.push('deepseek:nokey');
 
     // 3️⃣ Try Perplexity
     if (env.PERPLEXITY_KEY && prompt) {
@@ -340,7 +343,7 @@ export default {
     // All providers exhausted
     return new Response(JSON.stringify({ error: 'All AI providers quota exceeded or unavailable.' }), {
       status: 429,
-      headers: { 'Content-Type': 'application/json', ...cors },
+      headers: { 'Content-Type': 'application/json', 'X-TB-AI-Err': errs.join(' '), ...cors },
     });
   },
 
@@ -503,8 +506,8 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Origin': origin || '*',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TB-Try',
-    'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker, X-TB-AI',
+    'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker, X-TB-AI, X-TB-AI-Err',
     'X-TB-Auth': '1',
-    'X-TB-Worker': '15',
+    'X-TB-Worker': '16',
   };
 }
