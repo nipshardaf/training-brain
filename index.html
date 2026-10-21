@@ -531,9 +531,9 @@ function applyExLang(){
 const SLOTS = {
   // PUSH — Chest / Shoulders / Triceps
   PUSH:[
-    ['bb_bench','db_bench','pushup'],                                    // 1. Chest compound — flat press, heaviest first
-    ['ohp','db_spress','arnold','pike_pu'],                              // 2. Shoulder compound — OHP before chest accessories
-    ['incline_bb','incline_db','cable_fly','pec_deck','decline_pu'],     // 3. Upper chest / chest accessory
+    ['bb_bench','incline_bb','db_bench','incline_db','pushup'],          // 1. Chest press A (v3.83: flat or incline)
+    ['ohp','db_spress','arnold','pike_pu'],                              // 2. Shoulder compound (ordered after the chest work)
+    ['incline_db','db_bench','incline_bb','bb_bench','cable_fly','pec_deck','decline_pu'], // 3. Chest press B: the other angle / equipment
     ['lat_raise','cable_lat'],                                           // 4. Lateral delt isolation
     ['tri_push','skull','tri_oh','dips','assisted_dip','diamond_pu'],    // 5. Tricep isolation — arm finisher
   ],
@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.82';
+const APP_VERSION='3.83';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.83',d:'Workouts go big muscles to small, and push days pair chest presses properly',det:'Your push day put barbell bench, then the overhead press, then incline barbell: chest, shoulders, chest again, with two barbell presses of the same kind. Now every session goes compounds first and big muscle groups before small ones (legs, back and chest, then shoulders, then arms, calves and core), so both chest presses come before the overhead press. A push day pairs one flat and one incline press, never two barbell ones (flat barbell + incline dumbbell, or incline barbell + flat dumbbell). And flat and incline take turns going first: whichever led your last logged chest session, the other leads next. Research on exercise order (Nunes et al. 2021) found the first lift of a session gains the most strength, while muscle growth is about the same either way, so taking turns gives both angles that boost. The AI that picks your exercises follows the same rules.'},
   {v:'3.82',d:'Both phones plan the same workouts',det:'Your gym (and so which exercises its equipment allows), your home equipment, a short-week setting and the "at home today" switch were kept on each phone separately, but the planner uses them. Two phones that differed picked different exercises, and even different days. They now sync, and the first phone to open this version shares its settings with the other.'},
   {v:'3.81',d:'Ride screen fixes found while checking 3.80',det:'Opening the ride screen could briefly crash and redraw itself (picking today\'s workout and drawing the screen kept triggering each other); it now draws once. And in a planned workout, a "heart rate high, eased off" note from the warm-up could stay on screen after the steady part started following your heart rate, right next to "on target"; it now clears.'},
   {v:'3.80',d:'Heart-rate auto resistance holds your zone instead of chasing its middle',det:'On your 15 Oct ride you were in Zone 2 at 80–90 W, but auto resistance kept easing off because your heart rate sat a few beats above the middle of the zone. It cut you to 50 W and never came back up. Now anywhere inside the zone counts as fine (it acts only when your heart rate heads out of it), it adds and eases in the same small 5 W steps (10 W when you are well outside), at most every 45 seconds, and the watts stay between 80% and 130% of your usual watts for that zone unless your heart rate is clearly too high or too low. The warm-up now finishes at your full usual watts. Turning the knob or − / + moves those limits with you.'},
@@ -5966,7 +5967,7 @@ function genSession(type,energy='okay',bwOnly=false,seed=''){
     });
     picked.push(sorted[0]);
   }
-  return _orderByTier(picked); // v3.29: compounds, then isolation, then core
+  return _orderByTier(_pairChest(picked,id=>exAvail(id)&&(!bwOnly||EX[id]?.bw),type==='PUSH'&&energy!=='tired'&&energy!=='sore')); // v3.83: chest pair rule, then big → small
 }
 
 /* ── AI-ASSISTED EXERCISE SELECTION (v3.26) ──
@@ -6007,9 +6008,10 @@ For each day below, pick exactly ONE exercise id per slot, choosing only from th
 
 Then list each day's picks in the order they should be performed. The order does NOT have to follow the slot numbers. Order them the way an evidence-based coach would:
 1. Multi-joint (compound) lifts before single-joint (isolation) exercises.
-2. Among the compounds, put first the lift that matters most for this user's goals — the first exercise of a session gets the most strength progress. Otherwise go bigger muscle groups before smaller ones.
+2. Big muscle groups before small ones: legs, then back and chest, then shoulders, then arms, calves and core. Keep exercises for the same muscle together (both chest presses before the overhead press, never chest, shoulders, chest).
 3. Never isolate a muscle before a compound that relies on it (no triceps work before presses, no biceps work before rows or pulldowns).
 4. Small-muscle isolation (delts, arms, calves) near the end, core last.
+5. When a day has two chest presses, make them one flat and one incline, never two barbell presses (e.g. flat barbell + incline dumbbell, or incline barbell + flat dumbbell). This time lead chest with the ${_chestLead()} press (it alternates with the last session).
 
 ${dayTxt}
 
@@ -6037,9 +6039,63 @@ function _matchSlots(ids,cands){
 // Ordering tiers every plan respects, whoever picked the exercises: multi-joint
 // first, single-joint after, core last. Stable within a tier, so the AI's (or the
 // slot template's) priority order inside a tier stands.
-function _exTier(id){const e=EX[id];return !e?1:e.g==='core'?2:e.t==='C'?0:1;}
+// v3.83: a "compound" aimed at a small muscle (dips, diamond push-ups → triceps) is
+// accessory work, so it sorts with the isolation exercises by muscle size.
+function _exTier(id){const e=EX[id];return !e?1:e.g==='core'?2:e.t==='C'&&(_G_RANK[e.g]||5)<=3?0:1;}
+// v3.83: within compounds and within isolation, bigger muscle groups go first (legs, then
+// back and chest, then shoulders, then arms, calves, core); the same muscle stays together.
+// Before, slot order decided, so a push day went chest, shoulders, chest again.
+const _G_RANK={quad:1,glute:1,ham:1,vback:2,hback:2,hback_h:2,chest:2,shoulder:3,rdelt:4,sdelt:4,tri:5,bi:5,calf:6,foot:7,core:8};
+// chest presses by angle and equipment
+const CHEST_PRESS={bb_bench:['flat','bb'],db_bench:['flat','db'],pushup:['flat','bw'],incline_bb:['incline','bb'],incline_db:['incline','db'],decline_pu:['decline','bw']};
+// Which chest angle leads today: the opposite of what led your last logged session with a
+// chest press, so flat and incline take turns getting the first-exercise strength boost
+// (Nunes et al. 2021). Logs sync, so every device agrees. No history yet: flat.
+function _chestLead(){
+  for(let i=0;i<35;i++){
+    const lg=DB.get('log_'+fd(addDays(new Date(),-i)),null);
+    const ex=lg&&(lg.exercises||[]).find(e=>CHEST_PRESS[e.id]&&(e.sets||[]).some(x=>x.done));
+    if(ex)return CHEST_PRESS[ex.id][0]==='incline'?'flat':'incline';
+  }
+  return'flat';
+}
 function _orderByTier(ids){
-  return ids.map((id,i)=>[id,i]).sort((a,b)=>_exTier(a[0])-_exTier(b[0])||a[1]-b[1]).map(x=>x[0]);
+  const lead=ids.some(id=>CHEST_PRESS[id])?_chestLead():'flat';
+  const sub=id=>CHEST_PRESS[id]?(CHEST_PRESS[id][0]===lead?0:1):0;
+  // same-size muscles stay grouped (curls together, not curl, dips, curl)
+  const firstOf=g=>ids.findIndex(x=>EX[x]?.g===g);
+  return ids.map((id,i)=>[id,i]).sort((a,b)=>_exTier(a[0])-_exTier(b[0])
+    ||(_G_RANK[EX[a[0]]?.g]||5)-(_G_RANK[EX[b[0]]?.g]||5)
+    ||firstOf(EX[a[0]]?.g)-firstOf(EX[b[0]]?.g)||sub(a[0])-sub(b[0])||a[1]-b[1]).map(x=>x[0]);
+}
+// v3.83: two chest presses in one session = one flat and one incline, never two barbell
+// ones. If they clash, the second becomes the other angle, on the other equipment
+// (barbell → dumbbell, dumbbell or bodyweight → barbell when it's there).
+// With complete=true (a normal push day) a chest fly in place of the second press becomes
+// that complementary press too, so flat and incline both get trained; on tired or sore
+// days the fly stays.
+function _chestComplement(id,ids,ok){
+  const a=CHEST_PRESS[id],ang=a[0]==='incline'?'flat':'incline';
+  for(const im of a[1]==='bb'?['db','bw','bb']:['bb','db','bw']){
+    const k=Object.keys(CHEST_PRESS).find(x=>CHEST_PRESS[x][0]===ang&&CHEST_PRESS[x][1]===im);
+    if(k&&!ids.includes(k)&&ok(k))return k;
+  }
+  return null;
+}
+function _pairChest(ids,ok,complete){
+  const at=ids.map((id,i)=>CHEST_PRESS[id]?i:-1).filter(i=>i>=0);
+  if(at.length===1&&complete){
+    const fly=ids.findIndex(id=>EX[id]?.g==='chest'&&EX[id]?.t==='I');
+    const k=fly>=0&&_chestComplement(ids[at[0]],ids,ok);
+    if(k){const out=[...ids];out[fly]=k;return out;}
+    return ids;
+  }
+  if(at.length<2)return ids;
+  const [i,j]=at,a=CHEST_PRESS[ids[i]],b=CHEST_PRESS[ids[j]];
+  if(a[0]!==b[0]&&!(a[1]==='bb'&&b[1]==='bb'))return ids;
+  const k=_chestComplement(ids[i],ids,ok);
+  if(k){const out=[...ids];out[j]=k;return out;}
+  return ids;
 }
 
 function _parseExerciseGenResponse(text,freshDays,candidatesByDate){
@@ -6060,7 +6116,7 @@ function _parseExerciseGenResponse(text,freshDays,candidatesByDate){
     // rule (compounds, then isolation, then core) without undoing the AI's
     // priority choices inside each tier.
     if(!_matchSlots(ids,cands))continue;
-    picks[date]=_orderByTier(ids);
+    picks[date]=_orderByTier(_pairChest(ids,id=>exAvail(id)));
   }
   return picks;
 }
