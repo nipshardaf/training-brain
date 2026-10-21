@@ -1,3 +1,7 @@
+// v14 — DeepSeek joins the AI fallback chain, straight after Gemini (secret DEEPSEEK_KEY;
+//       OpenAI-compatible API, model deepseek-chat). Fallback providers now honour the
+//       app's generationConfig.maxOutputTokens (1500–8000) so whole-week plans aren't cut off.
+//       Order: Gemini → DeepSeek → Perplexity → OpenAI.
 // v13 — Rides on a timer. Every 10 minutes (Cron Trigger) the worker fetches the last
 //       few days of rides from intervals.icu for each user who registered, and writes
 //       each one to users/<uid>/rides/<start minute> in Firebase, where every device
@@ -247,20 +251,23 @@ export default {
     }
 
     const prompt = extractPrompt(body);
+    let maxOut = 1500;
+    try {
+      const g = JSON.parse(body)?.generationConfig?.maxOutputTokens;
+      if (g) maxOut = Math.min(8000, Math.max(1500, +g || 1500));
+    } catch {}
 
-    // 2️⃣ Try Perplexity
-    if (env.PERPLEXITY_KEY && prompt) {
+    // 2️⃣ Try DeepSeek (v14)
+    if (env.DEEPSEEK_KEY && prompt) {
       try {
-        const r = await fetch('https://api.perplexity.ai/chat/completions', {
+        const r = await fetch('https://api.deepseek.com/chat/completions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.PERPLEXITY_KEY}` },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.DEEPSEEK_KEY}` },
           body: JSON.stringify({
-            model: 'sonar',
+            model: 'deepseek-chat',
             messages: [{ role: 'user', content: prompt }],
-            // 1500 covers the app's largest expected response (coach-with-tools
-            // asks Gemini for up to 1400 output tokens); 500 truncated weekly
-            // reviews (5 labelled sections) and tool-call JSON on fallback. v10.
-            max_tokens: 1500,
+            max_tokens: maxOut,
+            temperature: 0.6,
           }),
         });
         if (r.ok) {
@@ -274,7 +281,33 @@ export default {
       } catch {}
     }
 
-    // 3️⃣ Try OpenAI
+    // 3️⃣ Try Perplexity
+    if (env.PERPLEXITY_KEY && prompt) {
+      try {
+        const r = await fetch('https://api.perplexity.ai/chat/completions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${env.PERPLEXITY_KEY}` },
+          body: JSON.stringify({
+            model: 'sonar',
+            messages: [{ role: 'user', content: prompt }],
+            // 1500 covers the app's largest expected response (coach-with-tools
+            // asks Gemini for up to 1400 output tokens); 500 truncated weekly
+            // reviews (5 labelled sections) and tool-call JSON on fallback. v10.
+            max_tokens: maxOut,
+          }),
+        });
+        if (r.ok) {
+          const data = await r.json();
+          const text = data.choices?.[0]?.message?.content || '';
+          if (text) return new Response(toGeminiFormat(text), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json', ...cors },
+          });
+        }
+      } catch {}
+    }
+
+    // 4️⃣ Try OpenAI
     if (env.OPENAI_KEY && prompt) {
       try {
         const r = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -286,7 +319,7 @@ export default {
             // 1500 covers the app's largest expected response (coach-with-tools
             // asks Gemini for up to 1400 output tokens); 500 truncated weekly
             // reviews (5 labelled sections) and tool-call JSON on fallback. v10.
-            max_tokens: 1500,
+            max_tokens: maxOut,
           }),
         });
         if (r.ok) {
@@ -468,6 +501,6 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker',
     'X-TB-Auth': '1',
-    'X-TB-Worker': '13',
+    'X-TB-Worker': '14',
   };
 }

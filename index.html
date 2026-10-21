@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.83';
+const APP_VERSION='3.84';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.84',d:'The AI Coach plans your week from your own progress',det:'A new AI Coach card on the week screen reviews your last 8 weeks: your best set on every exercise and whether it is progressing, stalled or dropping, your sets per muscle group each week, what is still recovering, your riding and bodyweight, against your goals. It then builds the week\'s gym sessions from that: which exercises, in what order, sets, reps and a target weight for each, shown on every exercise card, plus what is going well, what has stalled and specific suggestions. New weeks are planned this way automatically; tap "Re-plan with the latest data" any time. The app only checks the answer (real exercises your gym has, no duplicates, compounds before isolation); if the AI cannot be reached, the standard picks stay.'},
   {v:'3.83',d:'Workouts go big muscles to small, and push days pair chest presses properly',det:'Your push day put barbell bench, then the overhead press, then incline barbell: chest, shoulders, chest again, with two barbell presses of the same kind. Now every session goes compounds first and big muscle groups before small ones (legs, back and chest, then shoulders, then arms, calves and core), so both chest presses come before the overhead press. A push day pairs one flat and one incline press, never two barbell ones (flat barbell + incline dumbbell, or incline barbell + flat dumbbell). And flat and incline take turns going first: whichever led your last logged chest session, the other leads next. Research on exercise order (Nunes et al. 2021) found the first lift of a session gains the most strength, while muscle growth is about the same either way, so taking turns gives both angles that boost. The AI that picks your exercises follows the same rules.'},
   {v:'3.82',d:'Both phones plan the same workouts',det:'Your gym (and so which exercises its equipment allows), your home equipment, a short-week setting and the "at home today" switch were kept on each phone separately, but the planner uses them. Two phones that differed picked different exercises, and even different days. They now sync, and the first phone to open this version shares its settings with the other.'},
   {v:'3.81',d:'Ride screen fixes found while checking 3.80',det:'Opening the ride screen could briefly crash and redraw itself (picking today\'s workout and drawing the screen kept triggering each other); it now draws once. And in a planned workout, a "heart rate high, eased off" note from the warm-up could stay on screen after the steady part started following your heart rate, right next to "on target"; it now clears.'},
@@ -5006,7 +5007,7 @@ const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emai
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
-function _isSyncKey(k){return k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||SYNC_KEYS.includes(k);}
+function _isSyncKey(k){return k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||k.startsWith('coachweek_')||SYNC_KEYS.includes(k);}
 // v3.33: the dirty set is persisted (_sync_dirty). It used to live only in memory,
 // so sets logged with no signal were forgotten when the app closed — and the next
 // open's pull (cloud wins) replaced them with the cloud's older copy of that day.
@@ -6133,6 +6134,7 @@ async function upgradeWeekExercisesWithAI(pk){
   if(plan.some(d=>d._freshGen))DB.set(pk,plan.map(({_freshGen,...d})=>d));
   if(!freshDays.length)return;
   if(_aiQuotaHit)return; // known exhausted today — don't waste a call, keep rules picks
+  if(await aiCoachWeek(pk,{dates:freshDays.map(d=>d.date)}))return; // v3.84: the coach plans from your data
   const candidatesByDate={};
   freshDays.forEach(d=>{candidatesByDate[d.date]=_slotCandidates(d.type);});
   const prompt=_buildExerciseGenPrompt(freshDays,candidatesByDate);
@@ -6161,6 +6163,165 @@ async function upgradeWeekExercisesWithAI(pk){
     console.warn('AI exercise generation failed — kept rules-based picks:',e);
     if(isQuotaErr(e.message))_aiQuotaHit=true;
   }
+}
+
+/* ── AI COACH (v3.84) ──
+   The AI builds the week's gym sessions from the athlete's own data: each exercise's
+   best set per session over 8 weeks (with its trend), hard sets per muscle group per
+   week, recovery right now, cycling load and bodyweight, plus the goals. It picks the
+   exercises, sets, reps, target weights and order, and writes a progress review with
+   suggestions (stored in synced coachweek_<monday>). The app only checks the answer:
+   ids must be real and possible at your gym, no duplicates, 3-8 per session, and the
+   order is nudged only where an isolation exercise came before the compound lifts.
+   If every AI provider fails, the rules-based picks (v3.83) stay. */
+function _coachUnit(){return unit()==='kg'?'kg':'lb';}
+function _coachData(){
+  const today=new Date(),byEx={},vol={};
+  for(let i=0;i<56;i++){
+    const d=addDays(today,-i),ds=fd(d),wk=fd(getMon(d));
+    for(const key of ['log_'+ds,'extralog_'+ds]){
+      const lg=DB.get(key,null);if(!lg||!lg.exercises)continue;
+      for(const e of lg.exercises){
+        const done=(e.sets||[]).filter(x=>x.done&&parseInt(x.r)>0);
+        if(!done.length||!EX[e.id])continue;
+        let best=null;
+        for(const x of done){const w=_wToCurrentUnit(x.w,x.u)||0,r=parseInt(x.r)||0,e1=w>0?_e1rm(w,r):r;if(!best||e1>best.e1)best={w,r,e1};}
+        (byEx[e.id]=byEx[e.id]||[]).push({ds,best,n:done.length});
+        const mu=_exMuscles(e.id);
+        if(mu){const v=vol[wk]=vol[wk]||{};(mu.p||[]).forEach(m=>v[m]=(v[m]||0)+done.length);(mu.s||[]).forEach(m=>v[m]=(v[m]||0)+done.length*0.5);}
+      }
+    }
+  }
+  const U=_coachUnit();
+  const exLines=Object.entries(byEx).sort((a,b)=>b[1][0].ds.localeCompare(a[1][0].ds)).slice(0,24).map(([id,ss])=>{
+    const s=[...ss].reverse(),first=s[0].best.e1,last=s[s.length-1].best.e1;
+    const tr=s.length<2?'new':last>first*1.03?'progressing':last<first*0.97?'dropping':'stalled';
+    return`- ${EX[id].n} (${id}): `+s.slice(-6).map(x=>`${x.ds.slice(5)} ${x.best.w>0?x.best.w+U+'x':''}${x.best.r} (${x.n} sets)`).join(', ')+` -> ${tr}`;
+  });
+  const mons=[3,2,1,0].map(k=>fd(addDays(getMon(today),-7*k)));
+  const muscles=[...new Set(mons.flatMap(m=>Object.keys(vol[m]||{})))].sort();
+  const volLines=muscles.map(m=>`- ${m}: `+mons.map(mo=>Math.round((vol[mo]||{})[m]||0)).join(', '));
+  let rec='';try{const L=_muscleLoad();rec=Object.entries(L).filter(([,v])=>v>=1.5).map(([m,v])=>`${m} ${_muscleState(v)}`).join(', ');}catch(_){}
+  const rides=mons.map(mo=>{const end=fd(addDays(new Date(mo+'T12:00:00'),7));let h=0,t=0;
+    for(const a of DB.get('strava_activities',[])||[]){const ds=(a.start_date_local||'').slice(0,10);if(ds>=mo&&ds<end&&!_isRunAct(a)){h+=(a.moving_time||0)/3600;t+=a._tss||0;}}
+    return`${mo.slice(5)}: ${h.toFixed(1)} h${t?`, load ${Math.round(t)}`:''}`;}).join(' | ');
+  const wl=DB.get('weight_log',{})||{},wd=Object.keys(wl).sort().slice(-8);
+  const bw=wd.length?wd.map(d=>`${d.slice(5)} ${wl[d]}`).join(', '):'';
+  return{exLines,volLines,rec,rides,bw,mons};
+}
+function _coachPrompt(days,avail){
+  const p=DB.get('user_profile',{})||{},U=_coachUnit(),D=_coachData();
+  const goals=(p.goals||(p.goal?[p.goal]:[])).filter(Boolean).join(', ')||'general fitness';
+  const exList=avail.map(id=>`${id} | ${EX[id].n} | ${EX[id].g} | ${EX[id].t==='C'?'compound':'isolation'}`).join('\n');
+  const dayList=days.map(d=>`- ${d.date} ${d.type} (${(_MUSC[d.type]||[]).join(', ')})${DB.get('home_day_'+d.date,false)?' AT HOME: bodyweight/dumbbell only':''}`).join('\n');
+  return`You are an evidence-based strength coach. Plan this athlete's gym sessions for the days listed and review their progress honestly.
+
+ATHLETE: goals: ${goals}; level: ${p.level||'intermediate'}${p.gender?'; '+p.gender:''}${p.age?'; age '+p.age:''}; weights in ${U}.
+${D.bw?`Bodyweight (date weight): ${D.bw}\n`:''}They also ride a bike. Weekly riding (last 4 weeks, hours and training load): ${D.rides}
+
+PROGRESS - best set per session, last 8 weeks (date weight x reps):
+${D.exLines.join('\n')||'(no logged sessions yet)'}
+
+HARD SETS PER MUSCLE PER WEEK (last 4 weeks, oldest to this week; this week is in progress):
+${D.volLines.join('\n')||'(none)'}
+
+RECOVERY NOW (still worked or recovering): ${D.rec||'everything fresh'}
+
+DAYS TO PLAN (session type and the muscles it covers):
+${dayList}
+
+AVAILABLE EXERCISES at their gym (id | name | muscle | type). Use ONLY these ids:
+${exList}
+
+HOW TO PLAN EACH DAY:
+- 4 to 7 exercises that cover that day's muscles, chosen for the goals and the data above.
+- Order them the way a good coach would: big multi-joint lifts first, larger muscles before smaller ones, exercises for the same muscle together, isolation after the compound lifts that need those muscles, core last. No two exercises with the same movement pattern and equipment (e.g. not two barbell flat presses).
+- Use the progress data: keep pushing lifts that are progressing (give the next target), change the rep range or swap the variation for lifts that stalled or dropped, and add sets for muscles that are under-trained for the goals (about 10 to 20 hard sets a week for muscles that matter). Mind recovery and hard rides before leg days.
+- For every exercise give sets, reps (like "6-8") and a short note with a concrete target in ${U} when the history supports it (like "65 ${U} x 8, then add 2.5").
+
+THEN REVIEW: what is progressing, what has stalled or dropped (with numbers), which muscle groups are under- or over-trained for the goals, and 3 to 5 specific, practical suggestions. Plain words, no jargon.
+
+Return ONLY this JSON, nothing else:
+{"review":{"summary":"2-3 sentences","progressing":["lift: numbers"],"stalled":["lift: numbers and why"],"volume":"1-2 sentences","suggestions":["..."]},"days":[{"date":"YYYY-MM-DD","exercises":[{"id":"bb_bench","sets":4,"reps":"6-8","note":"..."}]}]}`;
+}
+function _coachParse(text){
+  let t=String(text||'').trim().replace(/^```(?:json)?/i,'').replace(/```\s*$/,'').trim();
+  const a=t.indexOf('{'),b=t.lastIndexOf('}');if(a<0||b<a)return null;
+  try{return JSON.parse(t.slice(a,b+1));}catch(_){return null;}
+}
+// Only an isolation exercise placed before the session's compound lifts is moved; the
+// AI's order otherwise stands.
+function _coachOrder(ids){
+  return ids.map((id,i)=>[id,i]).sort((x,y)=>_exTier(x[0])-_exTier(y[0])||x[1]-y[1]).map(z=>z[0]);
+}
+async function aiCoachWeek(pk,opts={}){
+  if(S.guest||S._coachBusy)return false;
+  const mon=pk.slice(5),todayStr=fd(new Date());
+  const plan=DB.get(pk,null);if(!Array.isArray(plan))return false;
+  const days=plan.filter(d=>d&&SLOTS[d.type]&&!_dayWasDone(d)&&!d.locked&&d.date>=todayStr&&(opts.dates?opts.dates.includes(d.date):true));
+  if(!days.length)return false;
+  const avail=Object.keys(EX).filter(id=>!EX[id].x&&exAvail(id));
+  S._coachBusy=true;if(opts.ui){S._coachErr=null;render();}
+  try{
+    const r=await _proxyFetch({method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:_coachPrompt(days,avail)}]}],generationConfig:{maxOutputTokens:4000,temperature:0.5,responseMimeType:'application/json',thinkingConfig:{thinkingBudget:0}}})});
+    trackAICall('coach_week',r.ok);
+    if(!r.ok)throw new Error('API '+r.status);
+    const json=await r.json();
+    const out=_coachParse(json.candidates?.[0]?.content?.parts?.[0]?.text);
+    if(!out||!Array.isArray(out.days))throw new Error('unreadable answer');
+    const ok=new Set(avail),want=new Set(days.map(d=>d.date)),byDate={};
+    for(const d of out.days){
+      if(!d||!want.has(d.date)||!Array.isArray(d.exercises))continue;
+      const seen=new Set(),list=[];
+      for(const x of d.exercises){
+        if(!x||!ok.has(x.id)||seen.has(x.id))continue;
+        if(DB.get('home_day_'+d.date,false)&&!EX[x.id].bw&&!(EX_EQUIP[x.id]||[]).every(e=>e==='dumbbell'||e==='bodyweight'))continue;
+        seen.add(x.id);list.push(x);
+      }
+      if(list.length<3)continue;
+      const ids=_coachOrder(list.slice(0,8).map(x=>x.id)),info={};
+      list.forEach(x=>{info[x.id]={sets:Math.max(1,Math.min(8,parseInt(x.sets)||EX[x.id].sets||3)),reps:String(x.reps||EX[x.id].reps||'8-12').slice(0,12),note:String(x.note||'').slice(0,160)};});
+      byDate[d.date]={ids,info};
+    }
+    if(!Object.keys(byDate).length)throw new Error('no usable sessions');
+    const latest=DB.get(pk,null);if(!Array.isArray(latest))return false;
+    DB.set(pk,latest.map(d=>byDate[d.date]&&!_dayWasDone(d)?{...d,exercises:byDate[d.date].ids,exPlan:byDate[d.date].info,_aiGen:true}:d));
+    const rv=out.review||{};
+    DB.set('coachweek_'+mon,{generated:new Date().toISOString(),days:Object.keys(byDate),
+      review:{summary:String(rv.summary||''),progressing:(rv.progressing||[]).slice(0,6).map(String),stalled:(rv.stalled||[]).slice(0,6).map(String),
+        volume:String(rv.volume||''),suggestions:(rv.suggestions||[]).slice(0,6).map(String)}});
+    if(opts.ui)showToast('🧠 Coach planned '+Object.keys(byDate).length+' session'+(Object.keys(byDate).length>1?'s':''),'var(--grn)');
+    return true;
+  }catch(e){
+    console.warn('[coach]',e);
+    if(opts.ui)S._coachErr=String(e.message||e);
+    if(isQuotaErr(String(e.message||'')))_aiQuotaHit=true;
+    return false;
+  }finally{S._coachBusy=false;if(pk===DB.pk(S.weekStart))render();}
+}
+function rCoachCard(){
+  if(S.guest)return'';
+  const mk=fd(S.weekStart),cw=DB.get('coachweek_'+mk,null),cur=mk===fd(getMon(new Date()));
+  const plan=DB.get(DB.pk(S.weekStart),null);
+  const open=(plan||[]).some(d=>d&&SLOTS[d.type]&&!_dayWasDone(d)&&d.date>=fd(new Date()));
+  if(!cw&&!(cur&&open))return'';
+  const btn=(t)=>`<button onclick="aiCoachWeek('${DB.pk(S.weekStart)}',{ui:true})" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;margin-top:10px">${t}</button>`;
+  const head=`<div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">🧠 AI Coach</div>`;
+  if(S._coachBusy)return`<div class="card">${head}<div style="display:flex;align-items:center;gap:8px;color:var(--t2);font-size:12px"><div class="sync-dot"></div>Reviewing your progress and planning the week…</div></div>`;
+  const err=S._coachErr?`<div style="font-size:12px;color:var(--amb);margin-top:6px">Couldn't reach the coach (${_esc(S._coachErr)}). Your sessions keep the standard picks.</div>`:'';
+  if(!cw)return`<div class="card">${head}<div style="font-size:12px;color:var(--t2);line-height:1.6">Let the coach review your last 8 weeks (weights, sets per muscle, recovery, riding) and build this week's sessions from it.</div>${err}${open?btn('Plan my week'):''}</div>`;
+  const r=cw.review||{},li=(a,c)=>a&&a.length?`<ul style="margin:4px 0 0;padding-left:18px;font-size:12px;line-height:1.6;color:${c||'var(--txt)'}">${a.map(x=>`<li>${_esc(x)}</li>`).join('')}</ul>`:'';
+  const sec=(t,body)=>body?`<div style="margin-top:10px"><div style="font-size:11px;font-weight:700;color:var(--t2)">${t}</div>${body}</div>`:'';
+  const ago=Math.round((Date.now()-Date.parse(cw.generated))/36e5);
+  return`<div class="card">${head}
+  ${r.summary?`<div style="font-size:13px;line-height:1.6">${_esc(r.summary)}</div>`:''}
+  ${sec('📈 Progressing',li(r.progressing,'var(--grn)'))}
+  ${sec('⏸️ Stalled or dropping',li(r.stalled,'var(--amb)'))}
+  ${sec('💪 Sets per muscle',r.volume?`<div style="font-size:12px;line-height:1.6;margin-top:4px">${_esc(r.volume)}</div>`:'')}
+  ${sec('🎯 Suggestions',li(r.suggestions))}
+  <div style="font-size:10px;color:var(--t2);margin-top:10px">Planned ${(cw.days||[]).length} session${(cw.days||[]).length===1?'':'s'} · ${ago<1?'just now':ago<48?ago+'h ago':Math.round(ago/24)+' days ago'}</div>${err}
+  ${open?btn('Re-plan with the latest data'):''}</div>`;
 }
 
 /* ── EXERCISE IMAGES ── */
@@ -7499,6 +7660,9 @@ async function loadFromCloud(manual=false){
     }
     if(keptLocal)debouncedSync();
     setTimeout(()=>{_autoBuildWeek();_watchPushSoon();},0); // v3.44; v3.58: pulled logs can change the week
+    // v3.84: once a week per device, the coach plans this week's remaining gym days if it hasn't yet
+    setTimeout(()=>{const mk=fd(getMon(new Date()));if(DB.get('coachweek_'+mk,null)||localStorage.getItem('coach_auto_'+mk))return;
+      try{localStorage.setItem('coach_auto_'+mk,'1');}catch(_){}aiCoachWeek(DB.pk(getMon(new Date())),{ui:S.screen==='week'});},5000);
     DB.set('fb_last_pull',new Date().toISOString());
     DB.set('fb_last_pull_remote_ts',remoteUpdated||'');
     DB.set('fb_last_pull_err',null);
@@ -9006,6 +9170,7 @@ ${rAskCoach()}
 ${rRideOnGymDayBanner()}
 ${rComebackBanner()}
 ${rReviewCard()}
+${rCoachCard()}
 ${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');
 return plan?`
@@ -9326,6 +9491,7 @@ function rExList(dp,log,opts){
     ${tgt.sugW?`<span class="bdg" style="background:rgba(167,139,250,.15);color:var(--al)">~${tgt.sugW}${unit()}</span>`:''}
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
   </div>
+  ${dp.exPlan&&dp.exPlan[id]?`<div style="font-size:12px;line-height:1.5;margin-top:7px;padding:7px 10px;background:rgba(124,58,237,.1);border-radius:9px;border-left:2px solid var(--acc)">🧠 <b>${dp.exPlan[id].sets} × ${_esc(dp.exPlan[id].reps)}</b>${dp.exPlan[id].note?' · '+_esc(dp.exPlan[id].note):''}</div>`:''}
   ${_mmHtml(id)}
   ${EX_CUES[id]?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:7px;padding:7px 10px;background:var(--s2);border-radius:9px;border-left:2px solid var(--acc)">💡 ${EX_CUES[id]}</div>`:''}
   <div style="display:flex;gap:7px;margin-top:9px">
@@ -9669,6 +9835,7 @@ SWAPS: [{"current":"Exact Exercise Name","suggested":"Exact Alternative Name","r
 
 function rWeeklyAdvisor(){
   if(S.guest)return'';
+  if(DB.get('coachweek_'+fd(S.weekStart),null))return''; // v3.84: the AI Coach card covers this
   const cacheKey='weekly_advisor_'+fd(S.weekStart);
   const data=DB.get(cacheKey,null);
   const loading=!!S._advisorLoading;
