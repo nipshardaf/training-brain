@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.85';
+const APP_VERSION='3.86';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.86',d:'Turning auto resistance on mid-ride starts from what you are riding',det:'If you start a heart-rate ride on the knob and switch auto resistance on later, it now starts from the watts you were riding over the last 30 seconds and steers your heart rate from there. Before, it started from scratch at 70% of your usual Zone 2 watts. Each ride also keeps a short once-a-minute note of what auto resistance did (target watts, the resistance asked for and what the bike reported, heart rate), so a ride that felt wrong can be checked afterwards.'},
   {v:'3.85',d:'Rides count fully toward your training load, and Zone 2 learns from your rides',det:'intervals.icu had your FTP at 250 while the app has 145, and the app took its load figures as they were, so every ride counted about a third: your 45-minute Zone 2 ride today counted 13 instead of about 39. Rides are now worked out with the FTP in the app, which fixes your fitness and fatigue numbers and what the AI Coach sees. Zone 2 watts now learn from rides where you picked the watts with − / +, and from stretches where auto resistance has held steady for 2 minutes or more (before, any ride where the app held the resistance taught it nothing, so it never learned). And auto resistance eases 5 W a little earlier when your heart rate is slowly creeping toward the top of the zone, instead of waiting until it is almost over.'},
   {v:'3.84',d:'The AI Coach plans your week from your own progress',det:'A new AI Coach card on the week screen reviews your last 8 weeks: your best set on every exercise and whether it is progressing, stalled or dropping, your sets per muscle group each week, what is still recovering, your riding and bodyweight, against your goals. It then builds the week\'s gym sessions from that: which exercises, in what order, sets, reps and a target weight for each, shown on every exercise card, plus what is going well, what has stalled and specific suggestions. New weeks are planned this way automatically; tap "Re-plan with the latest data" any time. The app only checks the answer (real exercises your gym has, no duplicates, compounds before isolation); if the AI cannot be reached, the standard picks stay.'},
   {v:'3.83',d:'Workouts go big muscles to small, and push days pair chest presses properly',det:'Your push day put barbell bench, then the overhead press, then incline barbell: chest, shoulders, chest again, with two barbell presses of the same kind. Now every session goes compounds first and big muscle groups before small ones (legs, back and chest, then shoulders, then arms, calves and core), so both chest presses come before the overhead press. A push day pairs one flat and one incline press, never two barbell ones (flat barbell + incline dumbbell, or incline barbell + flat dumbbell). And flat and incline take turns going first: whichever led your last logged chest session, the other leads next. Research on exercise order (Nunes et al. 2021) found the first lift of a session gains the most strength, while muscle growth is about the same either way, so taking turns gives both angles that boost. The AI that picks your exercises follows the same rules.'},
@@ -5013,7 +5014,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -8288,6 +8289,10 @@ function _rideTick(){
       // [7] v3.85: 1 = auto was still finding your watts. Watts you picked (− / + in ERG)
       // and auto holding steady for 2+ minutes in a heart-rate zone are 0: both teach Zone 2.
       Ride.auto&&!(Ride.steadyFrom&&now-Ride.steadyFrom>=120000)?1:0]); // [6]: app was setting the resistance
+    // v3.86: once a minute, what auto resistance was doing — kept with the ride (and synced)
+    // so a ride that felt wrong can be looked at afterwards: minute, auto, target watts,
+    // the level asked for, the level the bike reports, heart rate, control lost / retries.
+    if(Ride.elapsed%60===0)(Ride.dbg=Ride.dbg||[]).push([Ride.elapsed/60,Ride.auto?1:0,Ride.targetW||0,Ride.lastTq??null,d&&d.torque!=null?d.torque:null,_rideHr(d)||0,Ride.ctlLost?1:0,Ride.ctlTries||0]);
     _rideAutoTick(d);
     if(Ride.erg&&d)_rideErg(d);
     else if(Ride.deposit&&Ride.lastTq!=null&&Bike.status==='on')_bikeSend(0,0x44,[Math.round(Ride.lastTq*2)]); // v3.68: manual − / + held every second too
@@ -8411,7 +8416,7 @@ function rideStart(){
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
     Ride.progAt=0;Ride.goalAt=0;Ride.goalKcal=0;Ride.name0=Ride.name;Ride.changeOpen=false;
-    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.learned=null;Ride.zW=0;Ride.zKey='';Ride.z2Sum=0;Ride.z2N=0;Ride.steadyFrom=0; // v3.71: the last ride's target used to carry over
+    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.learned=null;Ride.zW=0;Ride.zKey='';Ride.z2Sum=0;Ride.z2N=0;Ride.steadyFrom=0;Ride.dbg=[]; // v3.71: the last ride's target used to carry over
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     _bikeSend(0,0x40,[0,2]);
@@ -8499,6 +8504,7 @@ async function rideFinish(){
   _bikeSend(0,0x40,[0,5]);
   if(Ride.deposit)rideKnob();
   try{if(Ride.wake)Ride.wake.release();}catch(_){}
+  try{DB.set('ride_debug',{start:new Date(Ride.start).toISOString(),name:Ride.name,ver:APP_VERSION,bike:Bike.name||'',rows:Ride.dbg||[]});}catch(_){} // v3.86
   const job={tcx:_rideTcx(),name:Ride.name||'Ride',id:'tb-ride-'+Math.round(Ride.start/1000)};
   // v3.59: the ride itself, so your other devices see it the moment it's saved.
   {const st=_rideStats(),t=new Date(Ride.start),p=n=>String(n).padStart(2,'0');
@@ -8716,7 +8722,17 @@ function _rideSwitch(kind,arg){
 function rideAutoToggle(){
   if(!Ride.auto&&Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
   Ride.auto=!Ride.auto;Ride.erg=Ride.auto;Ride.steadyFrom=0;
-  if(Ride.auto){_rideTakeControl();Ride.retarget=true;}
+  if(Ride.auto){
+    // v3.86 (21 Oct: manual for the first minutes, then auto): switched on mid-ride, auto
+    // starts from the watts you're riding now (last 30 s) and steers from there. Before,
+    // it started from scratch at 70% of your usual Zone 2 watts, with no warm-up.
+    if(_rideHrMode()&&Ride.state==='riding'&&Ride.samples.length>=30){
+      const w=Ride.samples.slice(-30).reduce((a,x)=>a+(x[1]||0),0)/30;
+      if(w>=40){Ride.targetW=Math.round(w/5)*5;Ride.wuW=0;Ride.zKey='';Ride.lvlAt=Date.now();Ride.levelTq=null;Ride.lastTq=null;}
+    }
+    _rideTakeControl();Ride.retarget=true;
+  }
+  (Ride.dbg=Ride.dbg||[]).push([Math.round(Ride.elapsed/60),Ride.auto?'auto on':'auto off']);
   _rideDraw();
 }
 function _rideBeep(n=2){
