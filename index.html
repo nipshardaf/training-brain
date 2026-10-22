@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.84';
+const APP_VERSION='3.85';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.85',d:'Rides count fully toward your training load, and Zone 2 learns from your rides',det:'intervals.icu had your FTP at 250 while the app has 145, and the app took its load figures as they were, so every ride counted about a third: your 45-minute Zone 2 ride today counted 13 instead of about 39. Rides are now worked out with the FTP in the app, which fixes your fitness and fatigue numbers and what the AI Coach sees. Zone 2 watts now learn from rides where you picked the watts with − / +, and from stretches where auto resistance has held steady for 2 minutes or more (before, any ride where the app held the resistance taught it nothing, so it never learned). And auto resistance eases 5 W a little earlier when your heart rate is slowly creeping toward the top of the zone, instead of waiting until it is almost over.'},
   {v:'3.84',d:'The AI Coach plans your week from your own progress',det:'A new AI Coach card on the week screen reviews your last 8 weeks: your best set on every exercise and whether it is progressing, stalled or dropping, your sets per muscle group each week, what is still recovering, your riding and bodyweight, against your goals. It then builds the week\'s gym sessions from that: which exercises, in what order, sets, reps and a target weight for each, shown on every exercise card, plus what is going well, what has stalled and specific suggestions. New weeks are planned this way automatically; tap "Re-plan with the latest data" any time. The app only checks the answer (real exercises your gym has, no duplicates, compounds before isolation); if the AI cannot be reached, the standard picks stay.'},
   {v:'3.83',d:'Workouts go big muscles to small, and push days pair chest presses properly',det:'Your push day put barbell bench, then the overhead press, then incline barbell: chest, shoulders, chest again, with two barbell presses of the same kind. Now every session goes compounds first and big muscle groups before small ones (legs, back and chest, then shoulders, then arms, calves and core), so both chest presses come before the overhead press. A push day pairs one flat and one incline press, never two barbell ones (flat barbell + incline dumbbell, or incline barbell + flat dumbbell). And flat and incline take turns going first: whichever led your last logged chest session, the other leads next. Research on exercise order (Nunes et al. 2021) found the first lift of a session gains the most strength, while muscle growth is about the same either way, so taking turns gives both angles that boost. The AI that picks your exercises follows the same rules.'},
   {v:'3.82',d:'Both phones plan the same workouts',det:'Your gym (and so which exercises its equipment allows), your home equipment, a short-week setting and the "at home today" switch were kept on each phone separately, but the planner uses them. Two phones that differed picked different exercises, and even different days. They now sync, and the first phone to open this version shares its settings with the other.'},
@@ -2182,6 +2183,14 @@ function _annotateRideLoad(rides,ftp){
     if(!a.moving_time)continue;
     // intervals.icu already supplied training load from the full power stream —
     // more accurate than our NP-based estimate, so don't overwrite it. v3.04.
+    // v3.85: but intervals.icu uses ITS FTP. When yours in the app differs (it had 250
+    // against your 145, so every ride counted about a third), it's scaled to yours.
+    if(a._tssFromIcu&&a._icuTss!=null&&a._icuFtp&&a.average_watts){
+      const r=Math.abs(a._icuFtp-ftp)/ftp>0.03?a._icuFtp/ftp:1;
+      a._tss=Math.round(a._icuTss*r*r);
+      if(a._icuIf!=null)a._if=+(a._icuIf*r).toFixed(2);
+      continue;
+    }
     if(a._tssFromIcu||a._tssExternal)continue;
     const np=a.weighted_average_watts||a.average_watts;
     if(np){
@@ -2637,8 +2646,9 @@ function _icuToActivity(a){
     // Training load straight from intervals.icu — computed from the whole power
     // stream, so prefer it over our own NP-based estimate (_tssFromIcu tells
     // _annotateRideLoad to leave it alone).
-    ...(a.icu_training_load!=null?{_tss:Math.round(a.icu_training_load),_tssFromIcu:true,_tssEst:false}:{}),
-    ...(ifv!=null?{_if:+ifv.toFixed(2)}:{}),
+    ...(a.icu_training_load!=null?{_tss:Math.round(a.icu_training_load),_tssFromIcu:true,_tssEst:false,_icuTss:a.icu_training_load}:{}),
+    ...(ifv!=null?{_if:+ifv.toFixed(2),_icuIf:ifv}:{}),
+    ...(a.icu_ftp>0?{_icuFtp:Math.round(a.icu_ftp)}:{}), // v3.85: the FTP intervals.icu worked the load out with
     ...(a.lthr>100&&a.lthr<220?{_lthr:Math.round(a.lthr)}:{}), // v3.76: your threshold heart rate as intervals.icu has it
   };
 }
@@ -8274,7 +8284,10 @@ function _rideTick(){
     Ride.dist+=spd;                    // metres this second
     Ride.kj+=(d?d.pw:0)/1000;
     const kc=_rideKcalPerSec(d?d.pw:0,_rideHr(d));Ride.kcal+=kc.v;Ride.kcalSrc=kc.src;
-    Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist),Ride.erg?1:0]); // [6]: app was setting the resistance
+    Ride.samples.push([Math.round(now/1000),d?Math.round(d.pw):0,d?d.cad:0,+spd.toFixed(2),_rideHr(d),Math.round(Ride.dist),Ride.erg?1:0,
+      // [7] v3.85: 1 = auto was still finding your watts. Watts you picked (− / + in ERG)
+      // and auto holding steady for 2+ minutes in a heart-rate zone are 0: both teach Zone 2.
+      Ride.auto&&!(Ride.steadyFrom&&now-Ride.steadyFrom>=120000)?1:0]); // [6]: app was setting the resistance
     _rideAutoTick(d);
     if(Ride.erg&&d)_rideErg(d);
     else if(Ride.deposit&&Ride.lastTq!=null&&Bike.status==='on')_bikeSend(0,0x44,[Math.round(Ride.lastTq*2)]); // v3.68: manual − / + held every second too
@@ -8361,7 +8374,7 @@ function _rideHrMode(){return!!(Ride.goal&&Ride.goal.type==='hr')||!!(Ride.prog&
 // back towards your zone, which never moves.
 function _rideHrNudge(dw){
   const now=Date.now();
-  Ride.targetW=Math.max(40,Math.min(400,(Ride.targetW||100)+dw));
+  Ride.targetW=Math.max(40,Math.min(400,(Ride.targetW||100)+dw));Ride.steadyFrom=0;
   if(Ride.wuW&&Ride.elapsed-(Ride.goalAt||0)<300)Ride.wuAdj=(Ride.wuAdj||0)+dw; // the warm-up keeps your change
   if(Ride.zW)Ride.zW=Math.max(40,Ride.zW+dw);   // v3.80: floor/ceiling follow your choice
   Ride.hrAdjAt=now+50000;Ride.lvlAt=now;Ride.lvlDir=0;Ride.adjDir=dw>0?1:-1;Ride.adjAt=now;
@@ -8398,7 +8411,7 @@ function rideStart(){
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
     Ride.progAt=0;Ride.goalAt=0;Ride.goalKcal=0;Ride.name0=Ride.name;Ride.changeOpen=false;
-    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.learned=null;Ride.zW=0;Ride.zKey='';Ride.z2Sum=0;Ride.z2N=0; // v3.71: the last ride's target used to carry over
+    Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.learned=null;Ride.zW=0;Ride.zKey='';Ride.z2Sum=0;Ride.z2N=0;Ride.steadyFrom=0; // v3.71: the last ride's target used to carry over
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
     _bikeSend(0,0x40,[0,2]);
@@ -8692,7 +8705,7 @@ function _rideSwitch(kind,arg){
     Ride.name=w.name===Ride.name0?w.name:(Ride.name0||Ride.name)+' → '+w.name;
   }
   Ride.progAt=now;Ride.stepIdx=-1;Ride.ergStep=null;Ride.sprintSent=false;Ride.retarget=true;
-  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.levelTq=null;Ride.wuW=0;
+  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.levelTq=null;Ride.wuW=0;Ride.steadyFrom=0;
   if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
   else if(!Ride.auto)Ride.erg=false; // free ride without a heart-rate goal: − / + set the resistance yourself
   if(kind!=='free')Ride.changeOpen=false;
@@ -8702,7 +8715,7 @@ function _rideSwitch(kind,arg){
 }
 function rideAutoToggle(){
   if(!Ride.auto&&Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
-  Ride.auto=!Ride.auto;Ride.erg=Ride.auto;
+  Ride.auto=!Ride.auto;Ride.erg=Ride.auto;Ride.steadyFrom=0;
   if(Ride.auto){_rideTakeControl();Ride.retarget=true;}
   _rideDraw();
 }
@@ -8776,14 +8789,14 @@ function _rideAutoTick(d){
   if(!Ride.auto||Bike.status!=='on')return;
   Ride.erg=true;
   const zone=_rideHrZone(sn);
-  if(!zone)return;
+  if(!zone){Ride.steadyFrom=0;return;}
   if(sn&&sn.step&&_rideHrLed(sn,d))Ride.hrCut=0;   // v3.80: a watt step's "eased off" doesn't carry into a heart-rate step
   const hr=_rideHr(d),now=Date.now();
   if(!hr)return;
   // Heart rate lags effort by a minute or two, so this looks at where it is HEADING (its
   // trend over the last 30 s) and changes the resistance rarely and in small steps.
   (Ride.hrHist=Ride.hrHist||[]).push([now,hr]);
-  while(Ride.hrHist.length&&now-Ride.hrHist[0][0]>45000)Ride.hrHist.shift();
+  while(Ride.hrHist.length&&now-Ride.hrHist[0][0]>150000)Ride.hrHist.shift(); // v3.85: 2.5 min, for the drift check
   if(!Ride.targetW){
     // v3.74: a heart-rate ride starts with a 5-minute warm-up from 70% of your usual zone watts.
     if(Ride.goal&&Ride.goal.type==='hr'){Ride.wuW=_rideZoneW(zone);Ride.wuAdj=0;Ride.targetW=Math.max(40,Math.round(Ride.wuW*0.7/5)*5);}
@@ -8808,10 +8821,18 @@ function _rideAutoTick(d){
     // warm-up: 70% → 100% of your usual zone watts over 5 minutes; only heart rate over
     // the zone brings it down. The knob and − / + still shift it.
     if(hr>zone.hi&&since>=30000){Ride.wuAdj=(Ride.wuAdj||0)-10;Ride.lvlAt=now;}
-    Ride.targetW=Math.max(40,Math.round((Ride.wuW*(0.7+0.3*wuT/300)+(Ride.wuAdj||0))/5)*5);
+    Ride.targetW=Math.max(40,Math.round((Ride.wuW*(0.7+0.3*wuT/300)+(Ride.wuAdj||0))/5)*5);Ride.steadyFrom=0; // v3.85: still finding your watts
   }else if(since>=45000){
     let dw=0;
+    // v3.85 (21 Oct ride: heart rate crept 135 → 145 over 5 minutes at the same watts
+    // and sat over the zone for 3): a slow climb near the top of the zone that would
+    // cross the top within 3 minutes (judged on the 2-minute trend, so one noisy beat
+    // doesn't count) eases 5 W from 4 bpm under the top, before it gets there.
+    const old2=Ride.hrHist.find(x=>now-x[0]<=130000&&now-x[0]>=110000);
+    const slope2=old2?(hr-old2[1])/((now-old2[0])/60000):0;
+    const drift=slope2>=1&&hr>=zone.hi-4&&hr+Math.min(8,slope2*3)>zone.hi;
     if(pred>hi2)dw=hr>zone.hi+5?-10:-5;
+    else if(drift)dw=-5;
     else if(pred<lo2&&slope<8)dw=hr<lo2-8?10:5;                    // unless already climbing fast
     if(dw&&Ride.zW){
       // Limits only stop a change, they never move you by themselves: easing stops at
@@ -8821,7 +8842,8 @@ function _rideAutoTick(d){
       if(dw<0)dw=Math.min(0,Math.max(dw,floor-Ride.targetW));
       else dw=Math.max(0,Math.min(dw,ceil-Ride.targetW));
     }
-    if(dw){Ride.targetW+=dw;Ride.lvlAt=now;Ride.lvlDir=Math.sign(dw);}
+    if(dw){Ride.targetW+=dw;Ride.lvlAt=now;Ride.lvlDir=Math.sign(dw);Ride.steadyFrom=now;}
+    else if(!Ride.steadyFrom)Ride.steadyFrom=now;
   }
   // v3.67: never more than 30 W above what the bike is giving (it used to climb to
   // 400 W while the bike, not following, gave 115 W), and never past the bike's ceiling.
@@ -8847,7 +8869,8 @@ function _rideZoneW(zone){
   const info=_rideZoneInfo(zone);Ride.zoneInfo=info;return info.w;
 }
 // v3.76: learn your watts for Easy / Zone 2 / Brisk from the parts of a ride where YOU
-// set the resistance (the knob or manual − / +, not auto) and your heart rate had
+// set the resistance (the knob or manual − / +; v3.85: also auto once it has held steady
+// for 2+ minutes in a heart-rate zone) and your heart rate had
 // settled: after the first 5 minutes, heart rate within 4 bpm of 30 s earlier. Each
 // second pairs heart rate with your average power over the minute before (heart rate
 // lags effort). 5+ minutes in a zone → that zone's watts, blended 50/50 with what it
@@ -8865,7 +8888,9 @@ function _rideLearnZones(){
     if(i<300||win.length<60)continue;
     const hr=x[i][4],hr30=x[i-30][4],pw=run/60;
     if(!hr||!hr30||Math.abs(hr-hr30)>4||pw<20)continue;
-    let manual=true;for(let j=i-59;j<=i;j++)if(x[j][6]){manual=false;break;}
+    // v3.85: [7] when the ride recorded it (watts you picked and steady auto count),
+    // else [6] (any ride where the app held the resistance was skipped).
+    let manual=true;for(let j=i-59;j<=i;j++)if(x[j].length>7?x[j][7]:x[j][6]){manual=false;break;}
     if(!manual)continue;
     const b=bands.findIndex(z=>hr>=z.lo&&hr<=z.hi);if(b<0)continue;
     acc[b].s+=pw;acc[b].n++;
