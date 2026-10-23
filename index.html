@@ -1042,10 +1042,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.88';
+const APP_VERSION='3.89';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.89',d:'Name the machine you are on, and its numbers stay separate',det:'The same exercise on two machines can have very different weights (your Dual Pulley Pulldown versus another lat pulldown), and the app mixed them up, so the target said 130 lb while your last set was 100. On an exercise you can now tap Name this machine. From then on, last time, the target and the PR for that exercise come only from sets on that machine. Each gym keeps its own list of machines, and the app picks the one you used last there. Sets logged before this count as Other.'},
   {v:'3.88',d:'Typing in Log sets: the panel moves up above the keyboard',det:'On iPhone the keyboard covered the Log sets panel, so you could only see the first set while typing. The panel now sits just above the keyboard, and the box you tap scrolls into view. The weight and reps boxes also no longer offer to AutoFill a contact.'},
   {v:'3.87',d:'A re-planned day says why, and the coaches see your real week',det:'When a gym day goes by without a workout, the days left are re-planned, but the day just said Full Body with no reason. Now it says what happened, like: Wed’s Legs was missed, so this covers Pull + Legs (Push done already). A make-up Full Body now works what you still owe that week instead of repeating Tuesday’s chest and shoulders. The AI Coach also plans a re-planned day again; before, its picks were thrown away the moment a day was missed. The Ask Coach chat now sees the skipped days and why, your Full Body exercises, how long since your last gym session and the coach’s weekly review, so it stops guessing. It gives a real recommendation and makes the change for you to confirm.'},
   {v:'3.86',d:'Turning auto resistance on mid-ride starts from what you are riding',det:'If you start a heart-rate ride on the knob and switch auto resistance on later, it now starts from the watts you were riding over the last 30 seconds and steers your heart rate from there. Before, it started from scratch at 70% of your usual Zone 2 watts. Each ride also keeps a short once-a-minute note of what auto resistance did (target watts, the resistance asked for and what the bike reported, heart rate), so a ride that felt wrong can be checked afterwards.'},
@@ -5018,7 +5019,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -6808,12 +6809,13 @@ function _plateGroupTxt(plates){
   return parts.map(x=>x.n>1?`${x.n}×${x.p}`:String(x.p)).join(' + ');
 }
 // Last session's done sets for this exercise, before the log's own date.
-function _lastDoneSets(exId,ds){
+function _lastDoneSets(exId,ds,mach){
+  if(mach===undefined)mach=_machDefault(exId);
   const base=ds?new Date(ds+'T12:00:00'):new Date();
   for(let i=1;i<=60;i++){
     const d=fd(addDays(base,-i));
     for(const k of['log_'+d,'extralog_'+d]){
-      const e=DB.get(k,null)?.exercises?.find(x=>x.id===exId);
+      const e=DB.get(k,null)?.exercises?.find(x=>x.id===exId&&_sameMach(x,mach));
       const done=e?.sets?.filter(x=>x.done&&x.w!==''&&x.w!=null);
       if(done?.length)return done;
     }
@@ -6842,7 +6844,7 @@ function _setRowHtml(ei,si,set,last,ctx,act){
 function setBlockHtml(ei,le,ctx){
   const ex=EX[le.id]||{};
   const u=unit();
-  const last=_lastDoneSets(le.id,ctx.ds);
+  const last=_lastDoneSets(le.id,ctx.ds,_leMach(le));
   const act=_actSetIdx(ei,le);
   const panel=si=>`<div class="ld-panel" id="${ctx.pre}-ld${ei}">${_loadHelperInner(ei,si)}</div>`;
   const rows=le.sets.map((set,si)=>_setRowHtml(ei,si,set,last?.[si],ctx,si===act)+(si===act?panel(si):'')).join('');
@@ -6961,6 +6963,7 @@ function removePlate(ei,si,p){
 // "Why this weight" — the progression target and its reason, shared by the
 // Log workout screen and the per-exercise Log sets sheet.
 function _progTargetHtml(prog,allDone){
+  if(prog&&!allDone&&(prog.w===''||prog.w==null)&&prog.change==='first time')return`<div style="font-size:11px;color:var(--t2);margin:0 2px 8px">${_esc(prog.reason)}</div>`; // v3.89
   if(!prog||prog.w===''||prog.w==null||allDone)return'';
   const ch=prog.change;
   const badge=ch&&ch!=='hold'&&ch!=='match last'
@@ -11827,7 +11830,7 @@ function _saveLog(){
 //
 // Returns {w, r, change, reason} or null. `change` is a short pill label
 // ("↑ +2.5kg", "→ +1 rep", "hold"). `reason` is human-readable context.
-function computeProgressionTarget(exId,lastSets){
+function computeProgressionTarget(exId,lastSets,mach){
   const goalProfile=getActiveGoalProfile();
   if(!EX[exId])return null;
   const u=unit();
@@ -11837,7 +11840,9 @@ function computeProgressionTarget(exId,lastSets){
   // No usable history → use PR or empty starter
   const done=(lastSets||[]).filter(s=>s.done&&s.w&&s.r);
   if(!done.length){
-    const pr=(DB.get('prs',{})||{})[exId];
+    if(mach===undefined)mach=_machDefault(exId);
+    const pr=_machPR(exId,mach);
+    if(!pr&&mach)return{w:'',r:repLow,change:'first time',reason:`first time on the ${mach} — enter your starting weight`};
     if(pr)return{w:_wToCurrentUnit(pr.w,pr.u),r:Math.max(repLow,Math.min(repHigh,pr.r)),change:'starting at your PR',reason:'no recent session — use PR as anchor'};
     return{w:'',r:repLow,change:'first time',reason:'no history yet — enter your starting weight'};
   }
@@ -11880,13 +11885,13 @@ function computeProgressionTarget(exId,lastSets){
   return{w:lastW,r:lastR,change:'match last',reason:assist?'one more session at this assist level':'one more session at this load before bumping'};
 }
 
-function makeSets(exId,energy,last){
+function makeSets(exId,energy,last,mach){
   const ex=EX[exId];if(!ex)return[];
   const n=energyTargets(exId,energy).sets;
   // v2.66: Use progression target as primary prefill source (replaces the
   // previous "copy last session's values" behavior). AI suggestion still used
   // as a fallback when no last-session data exists.
-  const tgt=computeProgressionTarget(exId,last);
+  const tgt=computeProgressionTarget(exId,last,mach);
   const hasTgt=tgt&&tgt.w!==''&&tgt.w!=null;
   const hasLastData=last&&last.some(s=>s.w);
   const aiSugg=hasLastData?null:(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[exId]||null;
@@ -11903,12 +11908,54 @@ function makeSets(exId,energy,last){
   return Array.from({length:n},(_,si)=>({w:prefillW,r:prefillR,done:false,_edited:!!prefillW,_ai:isAi,_tgt:isTgt,u:unit()}));
 }
 
-function getLastLog(exId){
+// v3.89: named machines. The same exercise on two machines (e.g. GoodLife's Dual Pulley
+// Pulldown and another lat pulldown) has very different numbers, so a logged exercise
+// remembers its machine (le.mach) and "last time", targets and machine PRs only use that
+// machine's sets. Each gym has its own list (synced gym_machines), and the machine you
+// used last at that gym is the default (ex_mach_last). '' = no machine named (all old logs).
+function _machGym(){return DB.get('gym_profile',null)||'gym';}
+function _machList(exId){return((DB.get('gym_machines',{})||{})[_machGym()]||[]).filter(m=>m&&m.ex===exId).map(m=>m.n);}
+function _machDefault(exId){return((DB.get('ex_mach_last',{})||{})[_machGym()+'|'+exId])||'';}
+function _leMach(le){if(le&&le.mach===undefined)le.mach=_machDefault(le.id);return le&&le.mach||'';}
+function _sameMach(e,m){return(e.mach||'')===(m||'');}
+function _machPR(exId,m){return m?(DB.get('prs_mach',{})||{})[exId+'@'+m]:(DB.get('prs',{})||{})[exId];}
+function _machChipsHtml(ei,le,where){
+  const cur=_leMach(le),list=_machList(le.id);
+  if(cur&&!list.includes(cur))list.unshift(cur);
+  const b=(on)=>`border:1px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.18)':'var(--s2)'};color:${on?'var(--al)':'var(--t2)'};border-radius:8px;font-size:11px;font-weight:700;padding:5px 9px;cursor:pointer`;
+  const chip=(n,label)=>`<button onclick="pickMach(${ei},'${where}',${_esc(JSON.stringify(n))})" style="${b(n===cur)}">${_esc(label)}</button>`;
+  if(!list.length)return`<div style="text-align:center;margin:-2px 0 10px"><button onclick="pickMach(${ei},'${where}',null)" style="${b(false)}">🏋️ Name this machine</button></div>`;
+  return`<div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;align-items:center;margin:-2px 0 10px"><span style="font-size:11px;color:var(--t2)">Machine:</span>${list.map(n=>chip(n,n)).join('')}${chip('','Other')}<button onclick="pickMach(${ei},'${where}',null)" style="${b(false)}">＋</button></div>`;
+}
+function pickMach(ei,where,name){
+  const le=S.activeLog?.exercises?.[ei];if(!le)return;
+  if(name===null){
+    const n=(prompt('Name this machine (e.g. Dual Pulley Pulldown):','')||'').trim().slice(0,40);
+    if(!n)return;
+    const all=DB.get('gym_machines',{})||{},g=_machGym();all[g]=all[g]||[];
+    if(!all[g].some(m=>m.ex===le.id&&m.n.toLowerCase()===n.toLowerCase()))all[g].push({n,ex:le.id});
+    DB.set('gym_machines',all);
+    name=(all[g].find(m=>m.ex===le.id&&m.n.toLowerCase()===n.toLowerCase())||{n}).n;
+  }
+  le.mach=name;
+  const lm=DB.get('ex_mach_last',{})||{};lm[_machGym()+'|'+le.id]=name;DB.set('ex_mach_last',lm);
+  // sets not ticked yet start again from this machine's history
+  const fresh=makeSets(le.id,S.energy||'okay',getLastLog(le.id,name),name);
+  le.sets=le.sets.map((x,i)=>x.done?x:{...(fresh[i]||fresh[0]||{w:'',r:''}),done:false});
+  _saveLog();
+  if(where==='sheet'){
+    const md=document.getElementById('exlog-modal'),ds=md?.dataset.ds;
+    showExLogModal(le,ei,ds);document.getElementById('exlog-modal')?.classList.add('on');
+  }else render();
+  showToast(name?`🏋️ ${name}: targets from this machine`:'Targets from sets with no machine named','var(--acc)');
+}
+function getLastLog(exId,mach){
+  if(mach===undefined)mach=_machDefault(exId);
   for(let i=1;i<=45;i++){
     const d=addDays(new Date(),-i);
     const log=DB.get(DB.lk(d),null);
     if(!log)continue;
-    const ex=log.exercises?.find(e=>e.id===exId);
+    const ex=log.exercises?.find(e=>e.id===exId&&_sameMach(e,mach));
     if(ex&&ex.sets.some(s=>s.done))return ex.sets;
   }
   return null;
@@ -11980,7 +12027,8 @@ function findWeekTarget(exName,targets){
 
 function rLogEx(le,ei){
   const ex=EX[le.id];if(!ex)return'';
-  const pr=DB.get('prs',{})[le.id];
+  const _m=_leMach(le);
+  const pr=_machPR(le.id,_m);
   const tgt=energyTargets(le.id,S.energy||'okay');
   const allDone=le.sets.every(s=>s.done);
   const doneSets=le.sets.filter(s=>s.done).length;
@@ -11994,7 +12042,7 @@ function rLogEx(le,ei){
   // AI next-week weight suggestion
   const _aiSugg=(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[le.id]||null;
   // v2.66: progressive-overload target computed from last session + goal profile
-  const _prog=computeProgressionTarget(le.id,getLastLog(le.id));
+  const _prog=computeProgressionTarget(le.id,getLastLog(le.id,_m),_m);
   // compact summary for when collapsed and done
   const bestSet=allDone?le.sets.filter(s=>s.done&&s.w).sort((a,b)=>parseFloat(b.w)-parseFloat(a.w))[0]:null;
   const summary=bestSet?`<span id="sum${ei}" style="font-size:11px;color:var(--t2);margin-left:6px">${bestSet.w}${unit()} × ${bestSet.r}</span>`:`<span id="sum${ei}"></span>`;
@@ -12007,6 +12055,7 @@ function rLogEx(le,ei){
 </div>
 <div class="log-ex-body${isOpen?'':' collapsed'}" id="lbody${ei}">
   ${unitBar(ex)}
+  ${_machChipsHtml(ei,le,'log')}
   ${_progTargetHtml(_prog,allDone)}
   ${_aiSugg&&!_prog?.w&&!allDone?`<div style="font-size:11px;color:var(--al);font-weight:700;margin-bottom:8px;background:rgba(124,58,237,.07);border:1px solid rgba(124,58,237,.2);border-radius:8px;padding:5px 9px">✨ AI suggestion: ${_aiSugg.w}${unit()} × ${_aiSugg.r} reps</div>`:''}
   ${_wTgt?`<div style="font-size:11px;color:var(--grn);font-weight:700;margin-bottom:8px;background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:8px;padding:5px 9px">🎯 This week's target: ${_wTgt.w}${unit()} × ${_wTgt.r} reps</div>`:''}
@@ -12053,7 +12102,7 @@ function togSet(ei,si){
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
   _saveLog();
-  if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r));
+  if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r),_leMach(le));
   debouncedSync();
   // patch DOM
   const row=document.getElementById(`sr${ei}_${si}`);
@@ -12109,10 +12158,11 @@ function addSet(ei){
   _rerenderSets(ei);
 }
 
-function checkPR(id,weight,reps){
+function checkPR(id,weight,reps,mach){
   if(!weight||!reps)return;
-  const prs=DB.get('prs',{});
-  const cur=prs[id];
+  const store=mach?'prs_mach':'prs',key=mach?id+'@'+mach:id; // v3.89: a named machine keeps its own PR
+  const prs=DB.get(store,{})||{};
+  const cur=prs[key];
   // Assisted exercises (assisted pull-up/dip): the weight is ASSISTANCE, so
   // LESS weight = stronger. A PR is lower assist (at same/more reps) or same
   // assist with more reps. Inverted from normal exercises.
@@ -12123,9 +12173,9 @@ function checkPR(id,weight,reps){
       ?(weight<cur.w||(weight===cur.w&&reps>cur.r))
       :(weight>cur.w||(weight===cur.w&&reps>cur.r));
   if(isBetter){
-    prs[id]={w:weight,r:reps,date:fd(new Date()),u:unit()}; // v3.25
-    DB.set('prs',prs);
-    prToast(EX[id]?.n||id);
+    prs[key]={w:weight,r:reps,date:fd(new Date()),u:unit()}; // v3.25
+    DB.set(store,prs);
+    prToast((EX[id]?.n||id)+(mach?' · '+mach:''));
   }
 }
 
@@ -14829,16 +14879,18 @@ function openExLog(exId,exIdx,ds){
 function showExLogModal(le,ei,ds){
   document.getElementById('exlog-modal')?.remove();
   const ex=EX[le.id];if(!ex)return;
-  const pr=DB.get('prs',{})[le.id];
+  const _m=_leMach(le);
+  const pr=_machPR(le.id,_m);
   const modal=document.createElement('div');
   modal.className='swap-modal';modal.id='exlog-modal';
   modal.dataset.ei=String(ei);modal.dataset.ds=ds;
   modal.innerHTML=`<div class="swap-ov" onclick="closeExLog('${ds}')"></div>
 <div class="swap-sheet">
   <div class="swap-title">${ex.n}</div>
-  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR: ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}</span></div>`:''}
+  ${_machChipsHtml(ei,le,'sheet')}
+  ${pr?`<div style="text-align:center;margin-bottom:8px"><span class="pr-b">🏆 PR${_m?' on this machine':''}: ${_wToCurrentUnit(pr.w,pr.u)}${unit()}×${pr.r}</span></div>`:''}
   <div style="font-size:11px;color:var(--t2);text-align:center;margin-bottom:10px">${ex.m} · ${ex.sets} sets · ${ex.reps} reps · RPE ${ex.rpe}</div>
-  ${_progTargetHtml(computeProgressionTarget(le.id,getLastLog(le.id)),le.sets.every(x=>x.done))}
+  ${_progTargetHtml(computeProgressionTarget(le.id,getLastLog(le.id,_m),_m),le.sets.every(x=>x.done))}
   ${unitBar(ex)}
   <div id="exlog-rows">${setBlockHtml(ei,le,{pre:'elr',ck:'elk',tog:'exLogTog',wPh:'—',rPh:'—',ds})}</div>
   <button class="add-set" style="margin-top:6px" onclick="exLogAdd(${ei})">+ Add set</button>
@@ -14855,7 +14907,7 @@ function exLogTog(ei,si){
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
   _saveLog();
-  if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r));
+  if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r),_leMach(le));
   debouncedSync();
   const row=document.getElementById(`elr${ei}_${si}`);
   const ck=document.getElementById(`elk${ei}_${si}`);
