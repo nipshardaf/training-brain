@@ -1040,10 +1040,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.86';
+const APP_VERSION='3.87';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.87',d:'A re-planned day says why, and the coaches see your real week',det:'When a gym day goes by without a workout, the days left are re-planned, but the day just said Full Body with no reason. Now it says what happened, like: Wed’s Legs was missed, so this covers Pull + Legs (Push done already). A make-up Full Body now works what you still owe that week instead of repeating Tuesday’s chest and shoulders. The AI Coach also plans a re-planned day again; before, its picks were thrown away the moment a day was missed. The Ask Coach chat now sees the skipped days and why, your Full Body exercises, how long since your last gym session and the coach’s weekly review, so it stops guessing. It gives a real recommendation and makes the change for you to confirm.'},
   {v:'3.86',d:'Turning auto resistance on mid-ride starts from what you are riding',det:'If you start a heart-rate ride on the knob and switch auto resistance on later, it now starts from the watts you were riding over the last 30 seconds and steers your heart rate from there. Before, it started from scratch at 70% of your usual Zone 2 watts. Each ride also keeps a short once-a-minute note of what auto resistance did (target watts, the resistance asked for and what the bike reported, heart rate), so a ride that felt wrong can be checked afterwards.'},
   {v:'3.85',d:'Rides count fully toward your training load, and Zone 2 learns from your rides',det:'intervals.icu had your FTP at 250 while the app has 145, and the app took its load figures as they were, so every ride counted about a third: your 45-minute Zone 2 ride today counted 13 instead of about 39. Rides are now worked out with the FTP in the app, which fixes your fitness and fatigue numbers and what the AI Coach sees. Zone 2 watts now learn from rides where you picked the watts with − / +, and from stretches where auto resistance has held steady for 2 minutes or more (before, any ride where the app held the resistance taught it nothing, so it never learned). And auto resistance eases 5 W a little earlier when your heart rate is slowly creeping toward the top of the zone, instead of waiting until it is almost over.'},
   {v:'3.84',d:'The AI Coach plans your week from your own progress',det:'A new AI Coach card on the week screen reviews your last 8 weeks: your best set on every exercise and whether it is progressing, stalled or dropping, your sets per muscle group each week, what is still recovering, your riding and bodyweight, against your goals. It then builds the week\'s gym sessions from that: which exercises, in what order, sets, reps and a target weight for each, shown on every exercise card, plus what is going well, what has stalled and specific suggestions. New weeks are planned this way automatically; tap "Re-plan with the latest data" any time. The app only checks the answer (real exercises your gym has, no duplicates, compounds before isolation); if the AI cannot be reached, the standard picks stay.'},
@@ -5514,9 +5515,22 @@ function _resolveWeek(plan){
   const give=d=>{if(d.exercises?.length)(pool[d.type]=pool[d.type]||[]).push(d.exercises);};
   missed.forEach(give);drop.forEach(give);
   use.forEach((g,i)=>{if(types[i]&&types[i]!==g.type)give(g);});
+  // v3.87: say why a day changed (it just said "Full Body"), and a make-up Full Body
+  // focuses on what is still untrained this week instead of repeating it.
+  const trained=[...done,...kept].flatMap(t=>_MUSC[t]||[]);
+  const DN=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'],dn=ds=>DN[new Date(ds+'T12:00:00').getDay()];
+  const lbl=t=>typeof WI[t]?.l==='function'?WI[t].l():t;
+  const owed=missed.filter(d=>!done.includes(d.type)); // a missed Push made up later in the week isn't owed
+  const missTxt=owed.map(d=>dn(d.date)+'’s '+lbl(d.type)).join(' and ');
   use.forEach((g,i)=>{
     const t=types[i];
-    if(t&&t!==g.type)_setGymPart(g,{type:t,exercises:(pool[t]&&pool[t].shift())||_autoExercises(g.date,t)});
+    if(!t)return;
+    const focus=_fbFocus(t,trained);
+    // already a Full Body (saved earlier with the old picks): still explain it and focus it,
+    // unless the coach or you chose its exercises
+    if(t===g.type&&!(focus&&!g.why&&!g._aiGen))return;
+    const why=(missTxt?missTxt+(owed.length>1?' were':' was')+' missed':'Your week changed')+(focus?`, so this covers ${focus.map(lbl).join(' + ')} (${[...new Set(done.map(lbl))].join(', ')||'the rest'} done already).`:`, so ${lbl(t)} moved here.`);
+    _setGymPart(g,{type:t,exercises:(t!==g.type&&pool[t]&&pool[t].shift())||_autoExercises(g.date,t,trained),why});
   });
   drop.forEach(g=>_setGymPart(g,{type:'REST'}));
   missed.forEach(d=>_setGymPart(d,{type:'SKIPPED',skipped:d.type}));
@@ -5524,11 +5538,32 @@ function _resolveWeek(plan){
 }
 // Exercises for a session the week was re-planned into: picked once (seeded, so
 // every device picks alike) and kept, so the day doesn't change under you.
-function _autoExercises(ds,t){
-  const k='auto_ex_'+fd(getMon(new Date(ds+'T12:00:00'))),id=ds+'|'+t;
+// v3.87: a make-up Full Body when some of the week is already trained: the sessions still
+// owed (e.g. Push done -> Pull + Legs), null when it should be a normal Full Body.
+function _fbFocus(t,trained){
+  if(t!=='FULL_BODY'||!trained||!trained.length)return null;
+  const need=['PUSH','PULL','LEGS'].filter(s=>!_MUSC[s].every(m=>trained.includes(m)));
+  return need.length&&need.length<3?need:null;
+}
+function _autoExercises(ds,t,trained){
+  const focus=_fbFocus(t,trained);
+  const k='auto_ex_'+fd(getMon(new Date(ds+'T12:00:00'))),id=ds+'|'+t+(focus?'|'+focus.join('+'):'');
   const m=DB.get(k,{})||{};
   if(Array.isArray(m[id])&&m[id].length)return m[id];
-  m[id]=genSession(t,'okay',false,id);
+  if(focus){
+    // the owed sessions' main lifts (5 from one, 3 from each of two) + one core exercise
+    const per=focus.length===1?5:3,ids=[];
+    // different movements first (squat + hinge, not two squats; a row + a pulldown + a curl)
+    const grp=x=>({hback_h:'hback',glute:'ham'})[EX[x].g]||EX[x].g;
+    focus.forEach(s=>{
+      const all=genSession(s,'okay',false,id+s).filter(x=>EX[x]&&EX[x].g!=='core'&&!ids.includes(x)),mine=[],seen=new Set();
+      for(const x of all)if(mine.length<per&&!seen.has(grp(x))){seen.add(grp(x));mine.push(x);}
+      for(const x of all)if(mine.length<per&&!mine.includes(x))mine.push(x);
+      ids.push(...mine);
+    });
+    const core=genSession('FULL_BODY','okay',false,id).find(x=>EX[x]&&EX[x].g==='core');if(core)ids.push(core);
+    m[id]=_orderByTier(ids);
+  }else m[id]=genSession(t,'okay',false,id);
   DB.set(k,m);
   return m[id];
 }
@@ -6224,7 +6259,7 @@ function _coachPrompt(days,avail){
   const p=DB.get('user_profile',{})||{},U=_coachUnit(),D=_coachData();
   const goals=(p.goals||(p.goal?[p.goal]:[])).filter(Boolean).join(', ')||'general fitness';
   const exList=avail.map(id=>`${id} | ${EX[id].n} | ${EX[id].g} | ${EX[id].t==='C'?'compound':'isolation'}`).join('\n');
-  const dayList=days.map(d=>`- ${d.date} ${d.type} (${(_MUSC[d.type]||[]).join(', ')})${DB.get('home_day_'+d.date,false)?' AT HOME: bodyweight/dumbbell only':''}`).join('\n');
+  const dayList=days.map(d=>`- ${d.date} ${d.type} (${(_MUSC[d.type]||[]).join(', ')})${DB.get('home_day_'+d.date,false)?' AT HOME: bodyweight/dumbbell only':''}${d.why?' - RE-PLANNED: '+d.why+' Favour the muscles not trained yet this week.':''}`).join('\n');
   return`You are an evidence-based strength coach. Plan this athlete's gym sessions for the days listed and review their progress honestly.
 
 ATHLETE: goals: ${goals}; level: ${p.level||'intermediate'}${p.gender?'; '+p.gender:''}${p.age?'; age '+p.age:''}; weights in ${U}.
@@ -6299,7 +6334,9 @@ async function aiCoachWeek(pk,opts={}){
     const latest=DB.get(pk,null);if(!Array.isArray(latest))return false;
     DB.set(pk,latest.map(d=>byDate[d.date]&&!_dayWasDone(d)?{...d,exercises:byDate[d.date].ids,exPlan:byDate[d.date].info,_aiGen:true}:d));
     const rv=out.review||{};
-    DB.set('coachweek_'+mon,{generated:new Date().toISOString(),days:Object.keys(byDate),
+    const cw0=DB.get('coachweek_'+mon,null)||{};
+    const types={...(cw0.types||{}),...Object.fromEntries(days.map(d=>[d.date,d.type]))}; // v3.87: what each day was planned as
+    DB.set('coachweek_'+mon,{generated:new Date().toISOString(),days:Object.keys(byDate),types,
       review:{summary:String(rv.summary||''),progressing:(rv.progressing||[]).slice(0,6).map(String),stalled:(rv.stalled||[]).slice(0,6).map(String),
         volume:String(rv.volume||''),suggestions:(rv.suggestions||[]).slice(0,6).map(String)}});
     if(opts.ui)showToast('🧠 Coach planned '+Object.keys(byDate).length+' session'+(Object.keys(byDate).length>1?'s':''),'var(--grn)');
@@ -6311,7 +6348,21 @@ async function aiCoachWeek(pk,opts={}){
     return false;
   }finally{S._coachBusy=false;if(pk===DB.pk(S.weekStart))render();}
 }
+// v3.87: when the week re-plans a day (a missed session moves, or becomes a make-up Full
+// Body), the coach plans that day again. It used to keep the standard picks, so the
+// coach's work was lost the moment a day was missed. Once per change per device.
+function _coachReplanCheck(){
+  if(S.guest||S._coachBusy)return;
+  const mon=getMon(new Date()),mk=fd(mon),cw=DB.get('coachweek_'+mk,null);if(!cw)return;
+  const today=fd(new Date()),plan=DB.get(DB.pk(mon),null)||[],t=cw.types||{};
+  const ch=plan.filter(d=>d&&SLOTS[d.type]&&d.date>=today&&!_dayWasDone(d)&&!d.locked&&t[d.date]!==d.type);
+  if(!ch.length)return;
+  const flag='coach_rp_'+ch.map(d=>d.date+d.type).join(',');
+  try{if(localStorage.getItem(flag))return;localStorage.setItem(flag,'1');}catch(_){return;}
+  aiCoachWeek(DB.pk(mon),{dates:ch.map(d=>d.date),ui:S.screen==='week'});
+}
 function rCoachCard(){
+  if(!S._rpAt||Date.now()-S._rpAt>60000){S._rpAt=Date.now();setTimeout(_coachReplanCheck,2000);}
   if(S.guest)return'';
   const mk=fd(S.weekStart),cw=DB.get('coachweek_'+mk,null),cur=mk===fd(getMon(new Date()));
   const plan=DB.get(DB.pk(S.weekStart),null);
@@ -7672,7 +7723,7 @@ async function loadFromCloud(manual=false){
     if(keptLocal)debouncedSync();
     setTimeout(()=>{_autoBuildWeek();_watchPushSoon();},0); // v3.44; v3.58: pulled logs can change the week
     // v3.84: once a week per device, the coach plans this week's remaining gym days if it hasn't yet
-    setTimeout(()=>{const mk=fd(getMon(new Date()));if(DB.get('coachweek_'+mk,null)||localStorage.getItem('coach_auto_'+mk))return;
+    setTimeout(()=>{const mk=fd(getMon(new Date()));if(DB.get('coachweek_'+mk,null)){_coachReplanCheck();return;}if(localStorage.getItem('coach_auto_'+mk))return;
       try{localStorage.setItem('coach_auto_'+mk,'1');}catch(_){}aiCoachWeek(DB.pk(getMon(new Date())),{ui:S.screen==='week'});},5000);
     DB.set('fb_last_pull',new Date().toISOString());
     DB.set('fb_last_pull_remote_ts',remoteUpdated||'');
@@ -9324,7 +9375,7 @@ function rDayRow(day,today){
 <div class="dr-l">
   <div class="dr-day">${DNAMES[date.getDay()]} ${date.getDate()}</div>
   <div class="dr-type" style="color:${showStravaOverride?'#0891b2':wi.c}">${showStravaOverride?_icon('ride-day.png','🚴',16)+' '+(stravaRide.name||'Ride'):wi.i+' '+(typeof wi.l==='function'?wi.l(day.date):wi.l)}</div>
-  <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min':(typeof wi.d==='function'?wi.d(day.date):wi.d)}</div>
+  <div class="dr-desc">${showStravaOverride?(distStr?distStr+' km · ':'')+durStr+' min':day.why?_esc(day.why):(typeof wi.d==='function'?wi.d(day.date):wi.d)}</div>
   ${rideOnGymDay?`<div style="font-size:11px;color:#fc4c02;font-weight:600;margin-top:3px">+ 🚴 ${distStr?distStr+' km · ':''}${durStr} min logged</div>`:''}
 </div>
 <div class="dr-r">
@@ -9371,7 +9422,7 @@ function rDay(){
 </div>
 <div class="day-hero" style="border-color:${wi.c}33">
   <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${(typeof wi.l==='function'?wi.l():wi.l).toUpperCase()}</div>
-  <div class="hero-name">${typeof wi.d==='function'?wi.d():wi.d}</div>
+  <div class="hero-name">${dp&&dp.why?_esc(dp.why):typeof wi.d==='function'?wi.d():wi.d}</div>
   <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>
   ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
   ${DB.get('home_day_'+ds,false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 At home today</div>`:''}
@@ -10299,7 +10350,7 @@ function buildAskPrompt(question){
   // Full current week plan — important for "swap day X" type questions so AI sees
   // what's on each day. v2.73: gym days also list their exercises (with prescribed
   // sets×reps) so the AI can swap exercises and set targets by name.
-  const _gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
+  const _gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY']; // v3.87: Full Body days had no exercises listed
   const weekPlanLines=[];
   if(wPlan){
     for(const day of [...wPlan].sort((a,b)=>a.date.localeCompare(b.date))){
@@ -10308,7 +10359,9 @@ function buildAskPrompt(question){
       const status=dlog?.completed?' ✓done':dlog?.exercises?.some(e=>e.sets.some(s=>s.done))?' (partial)':dride?' ✓rode':'';
       const extra=day.extraGym?` + extra ${_typeLabel[day.extraGym.type]||day.extraGym.type}`:'';
       const lock=day.locked?' [locked]':'';
-      weekPlanLines.push(`  ${day.date} ${day.date===todayStr?'(TODAY)':''}: ${_typeLabel[day.type]||day.type}${extra}${lock}${status}`);
+      const _dnm=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(day.date+'T12:00:00').getDay()];
+      const _st=day.type==='SKIPPED'?`Skipped (planned ${_typeLabel[day.skipped]||day.skipped||'gym'}, not done)`:(_typeLabel[day.type]||day.type);
+      weekPlanLines.push(`  ${_dnm} ${day.date} ${day.date===todayStr?'(TODAY)':day.date===fd(addDays(new Date(),1))?'(TOMORROW)':''}: ${_st}${extra}${lock}${status}${day.why?' - why: '+day.why:''}`);
       // For gym days, list the exercises so the AI can reference/modify them by name
       if(_gymTypes.includes(day.type)&&day.exercises?.length){
         for(const exId of day.exercises){
@@ -10338,6 +10391,13 @@ function buildAskPrompt(question){
     runsOnDate(ds).forEach(r=>bits.push(`run ${+((r.distance||0)/1000).toFixed(1)}km/${Math.round((r.moving_time||0)/60)}min${_runPace(r)?' @'+_runPace(r):''}${r.average_heartrate?`,HR ${r.average_heartrate}`:''}`));
     if(bits.length)recent.push(`  ${ds}: ${bits.join(' + ')}`);
   }
+  // v3.87: how long since the last gym session (it called two weeks off "well-rested"),
+  // and the AI Coach's weekly review, so the chat and the coach card agree.
+  let lastGym=null;for(let i=0;i<60&&!lastGym;i++){const ds=fd(addDays(new Date(),-i));const lg=DB.get('log_'+ds,null);if(lg?.exercises?.some(e=>e.sets?.some(s=>s.done)))lastGym=ds;}
+  const gapTxt=lastGym?`Last gym session: ${lastGym} (${Math.round((Date.parse(todayStr)-Date.parse(lastGym))/864e5)} days ago)`:'No gym session in the last 60 days';
+  const _cw=DB.get('coachweek_'+fd(getMon(new Date())),null);
+  const coachTxt=_cw?.review?`${_cw.review.summary||''}\n  Suggestions: ${(_cw.review.suggestions||[]).join(' | ')}`:'(no review this week yet)';
+  recent.unshift('  '+gapTxt);
   const zh=DB.get('lang','en')==='zh';
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
   return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${_layoffNote()}${langNote}
@@ -10428,12 +10488,18 @@ ${fitTxt}
 ${wTxt}
 
 === LAST 7 DAYS TRAINING ===
-${recent.length?recent.join('\n'):'  No training logged in the last 7 days'}
+${recent.join('\n')}
+
+=== THIS WEEK'S AI COACH REVIEW ===
+  ${coachTxt}
+
+=== HOW THE PLANNER WORKS (explain it when asked why the week looks the way it does) ===
+  A gym day that passes without a workout is Skipped, and the gym days left this week are re-chosen to cover the muscles still untrained (the "why" on each day says what happened). Rides never count as a gym session. Only say what the plan above shows; never invent days or reasons.
 
 === USER'S QUESTION ===
 ${question}
 
-Now answer concisely. Open with the verdict (yes/no/it depends) then 1-2 sentences of reasoning citing their actual numbers. If they want a plan change, tell them which button to tap.`;
+Answer in plain words: the direct answer first, then the reasoning with their actual days and numbers (up to about 120 words). If they ask for advice or a change, give a concrete recommendation AND call the tool that makes it, in this same reply.`;
 }
 
 // Tool/function declarations the AI can call to actually modify the plan.
@@ -10455,12 +10521,12 @@ const COACH_TOOLS=[{
     },
     {
       name:'change_day_type',
-      description:"Change a single day's plan to a different workout type. Used to set a day to REST, or change PUSH→PULL, or convert a gym day to a ride day. Setting a gym day to REST auto-cascades the displaced gym work forward to later gym days. Valid types: PUSH, PULL, LEGS, UPPER_PUMP, SHOULDERS_ARMS, LONG_OUTDOOR, SHORT_OUTDOOR, LONG_INDOOR, SHORT_INDOOR, REST.",
+      description:"Change a single day's plan to a different workout type. Used to set a day to REST, or change PUSH→PULL, or convert a gym day to a ride day. Setting a gym day to REST auto-cascades the displaced gym work forward to later gym days. Valid types: PUSH, PULL, LEGS, UPPER_PUMP, SHOULDERS_ARMS, FULL_BODY, LONG_OUTDOOR, SHORT_OUTDOOR, LONG_INDOOR, SHORT_INDOOR, REST.",
       parameters:{
         type:'OBJECT',
         properties:{
           date:{type:'STRING',description:'Date in YYYY-MM-DD format'},
-          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
+          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
         },
         required:['date','new_type']
       }
@@ -10472,7 +10538,7 @@ const COACH_TOOLS=[{
         type:'OBJECT',
         properties:{
           date:{type:'STRING',description:'Ride day date in YYYY-MM-DD'},
-          gym_type:{type:'STRING',description:'Gym workout type to add',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS']}
+          gym_type:{type:'STRING',description:'Gym workout type to add',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY']}
         },
         required:['date','gym_type']
       }
@@ -11267,7 +11333,7 @@ async function sendAskCoach(){
         contents:_buildAskContents(conv),
         tools:COACH_TOOLS,
         toolConfig:{functionCallingConfig:{mode:'AUTO'}},
-        generationConfig:{maxOutputTokens:700,temperature:0.6,thinkingConfig:{thinkingBudget:0}}
+        generationConfig:{maxOutputTokens:1200,temperature:0.5,thinkingConfig:{thinkingBudget:0}}
       })});
     if(!r.ok){
       // Friendlier error messages for known status codes
