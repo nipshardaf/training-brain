@@ -277,6 +277,8 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .swap-ov{position:absolute;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px)}
 .swap-sheet{position:absolute;bottom:0;left:0;right:0;background:var(--s1);border-radius:26px 26px 0 0;padding:18px 16px calc(var(--sb) + 18px);transform:translateY(100%);transition:transform .3s ease;max-height:80vh;overflow-y:auto}
 .swap-modal.on .swap-sheet{transform:translateY(0)}
+/* v3.88: sits above the iPhone keyboard (--kb, --vvh set from visualViewport) */
+.swap-modal .swap-sheet{bottom:var(--kb,0px);max-height:min(80vh,calc(var(--vvh,100vh) - 24px));transition:transform .3s ease,bottom .15s ease}
 .swap-title{font-size:13px;font-weight:700;color:var(--t2);text-align:center;margin-bottom:14px;text-transform:uppercase;letter-spacing:.8px}
 .swap-opt{background:var(--s2);border:1px solid var(--bord);border-radius:13px;padding:13px 15px;width:100%;text-align:left;color:var(--txt);font-size:15px;font-weight:700;cursor:pointer;margin-bottom:7px;display:flex;flex-direction:column;gap:2px;-webkit-appearance:none}
 .swap-opt span{font-size:11px;font-weight:400;color:var(--t2)}
@@ -1040,10 +1042,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.87';
+const APP_VERSION='3.88';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.88',d:'Typing in Log sets: the panel moves up above the keyboard',det:'On iPhone the keyboard covered the Log sets panel, so you could only see the first set while typing. The panel now sits just above the keyboard, and the box you tap scrolls into view. The weight and reps boxes also no longer offer to AutoFill a contact.'},
   {v:'3.87',d:'A re-planned day says why, and the coaches see your real week',det:'When a gym day goes by without a workout, the days left are re-planned, but the day just said Full Body with no reason. Now it says what happened, like: Wed’s Legs was missed, so this covers Pull + Legs (Push done already). A make-up Full Body now works what you still owe that week instead of repeating Tuesday’s chest and shoulders. The AI Coach also plans a re-planned day again; before, its picks were thrown away the moment a day was missed. The Ask Coach chat now sees the skipped days and why, your Full Body exercises, how long since your last gym session and the coach’s weekly review, so it stops guessing. It gives a real recommendation and makes the change for you to confirm.'},
   {v:'3.86',d:'Turning auto resistance on mid-ride starts from what you are riding',det:'If you start a heart-rate ride on the knob and switch auto resistance on later, it now starts from the watts you were riding over the last 30 seconds and steers your heart rate from there. Before, it started from scratch at 70% of your usual Zone 2 watts. Each ride also keeps a short once-a-minute note of what auto resistance did (target watts, the resistance asked for and what the bike reported, heart rate), so a ride that felt wrong can be checked afterwards.'},
   {v:'3.85',d:'Rides count fully toward your training load, and Zone 2 learns from your rides',det:'intervals.icu had your FTP at 250 while the app has 145, and the app took its load figures as they were, so every ride counted about a third: your 45-minute Zone 2 ride today counted 13 instead of about 39. Rides are now worked out with the FTP in the app, which fixes your fitness and fatigue numbers and what the AI Coach sees. Zone 2 watts now learn from rides where you picked the watts with − / +, and from stretches where auto resistance has held steady for 2 minutes or more (before, any ride where the app held the resistance taught it nothing, so it never learned). And auto resistance eases 5 W a little earlier when your heart rate is slowly creeping toward the top of the zone, instead of waiting until it is almost over.'},
@@ -6831,8 +6834,8 @@ function _setRowHtml(ei,si,set,last,ctx,act){
   return`<div class="set-row v2${set.done?' s-done':''}${act?' act':''}" id="${ctx.pre}${ei}_${si}">
     <span class="set-n" onclick="focusSet(${ei},${si})">${setLabel(si,set)}</span>
     <span class="set-last">${lastTxt}</span>
-    <input class="set-inp w-inp${_isFollowing(set,'w')?' prefilled':''}" type="text" inputmode="decimal" placeholder="${ctx.wPh||'—'}" value="${set.w||''}" onfocus="focusSet(${ei},${si})" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
-    <input class="set-inp r-inp${_isFollowing(set,'r')?' prefilled':''}" type="text" inputmode="numeric" placeholder="${ctx.rPh||'—'}" value="${set.r||''}" onfocus="focusSet(${ei},${si})" oninput="this.classList.remove('prefilled')" onchange="updSet(${ei},${si},'r',this.value)">
+    <input class="set-inp w-inp${_isFollowing(set,'w')?' prefilled':''}" type="text" inputmode="decimal" autocomplete="off" autocorrect="off" placeholder="${ctx.wPh||'—'}" value="${set.w||''}" onfocus="focusSet(${ei},${si})" oninput="markEdited(${ei},${si},this)" onchange="updSet(${ei},${si},'w',this.value)">
+    <input class="set-inp r-inp${_isFollowing(set,'r')?' prefilled':''}" type="text" inputmode="numeric" autocomplete="off" autocorrect="off" placeholder="${ctx.rPh||'—'}" value="${set.r||''}" onfocus="focusSet(${ei},${si})" oninput="this.classList.remove('prefilled')" onchange="updSet(${ei},${si},'r',this.value)">
     <button class="set-ck${set.done?' on':''}" id="${ctx.ck}${ei}_${si}" onclick="${ctx.tog}(${ei},${si})">${set.done?(set._watch?'⌚':'✓'):'○'}</button>
   </div>`;
 }
@@ -14773,6 +14776,14 @@ function doExAdd(ds,id){
 function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.remove();}
 
 /* ── PER-EXERCISE LOG MODAL ── */
+// v3.88: on iPhone the keyboard covered the bottom sheets (Log sets): fixed elements don't
+// move up with it. The visible viewport says how much the keyboard takes; the sheets sit
+// above it, and the field you tap scrolls to the middle of the sheet.
+(()=>{const vv=window.visualViewport;if(!vv)return;const st=document.documentElement.style;
+  const upd=()=>{const kb=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);st.setProperty('--kb',(kb>60?Math.round(kb):0)+'px');if(vv.height>200)st.setProperty('--vvh',Math.round(vv.height)+'px');};
+  vv.addEventListener('resize',upd);vv.addEventListener('scroll',upd);upd();
+  document.addEventListener('focusin',e=>{const t=e.target;if(t&&t.matches&&t.matches('input,textarea')&&t.closest('.swap-sheet'))setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:'smooth'});}catch(_){}},350);});
+})();
 function openExLog(exId,exIdx,ds){
   const date=new Date(ds+'T12:00:00');
   S.viewDate=date;S.weekStart=getMon(date);
