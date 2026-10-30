@@ -434,6 +434,7 @@ const EX = {
   mach_chest_press:   {n:'Machine Chest Press',         g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Chest · Triceps',         p:'Machine_Bench_Press'},
   db_fly:             {n:'Dumbbell Fly',                g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest',                   p:'Dumbbell_Flyes'},
   cable_crossover:    {n:'Cable Crossover',             g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest',                   p:'Cable_Crossover'},
+  mach_lat_raise:     {n:'Machine Lateral Raise',       g:'sdelt',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Side Delts',              p:'Seated_Side_Lateral_Raise'}, // v3.90
   mach_shoulder_press:{n:'Machine Shoulder Press',      g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders',               p:'Machine_Shoulder_Military_Press'},
   front_raise:        {n:'Dumbbell Front Raise',        g:'shoulder', t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Front Delts',             p:'Front_Two-Dumbbell_Raise'},
   upright_row:        {n:'Upright Row',                 g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders · Traps',       p:'Upright_Barbell_Row'},
@@ -536,7 +537,7 @@ const SLOTS = {
     ['bb_bench','incline_bb','db_bench','incline_db','pushup'],          // 1. Chest press A (v3.83: flat or incline)
     ['ohp','db_spress','arnold','pike_pu'],                              // 2. Shoulder compound (ordered after the chest work)
     ['incline_db','db_bench','incline_bb','bb_bench','cable_fly','pec_deck','decline_pu'], // 3. Chest press B: the other angle / equipment
-    ['lat_raise','cable_lat'],                                           // 4. Lateral delt isolation
+    ['lat_raise','cable_lat','mach_lat_raise'],                                           // 4. Lateral delt isolation
     ['tri_push','skull','tri_oh','dips','assisted_dip','diamond_pu'],    // 5. Tricep isolation — arm finisher
   ],
   // PULL — Back / Biceps
@@ -561,7 +562,7 @@ const SLOTS = {
     ['db_bench','incline_db','cable_fly','pec_deck','pushup','decline_pu'], // 1. Chest — DB preferred on pump days
     ['lat_pull','cable_row','inverted_row'],                                 // 2. Back — paired with chest for upper-body balance
     ['db_spress','arnold','pike_pu'],                                        // 3. Shoulder press
-    ['lat_raise','cable_lat'],                                               // 4. Lateral delt isolation
+    ['lat_raise','cable_lat','mach_lat_raise'],                                               // 4. Lateral delt isolation
     ['hammer','preacher','cable_curl','incline_curl','db_curl'],             // 5. Bicep isolation
     ['tri_push','tri_oh','skull','diamond_pu'],                             // 6. Tricep isolation
   ],
@@ -569,7 +570,7 @@ const SLOTS = {
   // arms, what PPL gives least, without another heavy chest or back day.
   SHOULDERS_ARMS:[
     ['ohp','db_spress','arnold','pike_pu'],                                // 1. Shoulder press
-    ['lat_raise','cable_lat'],                                             // 2. Lateral delts
+    ['lat_raise','cable_lat','mach_lat_raise'],                                             // 2. Lateral delts
     ['face_pull','rear_fly'],                                              // 3. Rear delts
     ['bb_curl','db_curl','cable_curl','preacher','incline_curl'],          // 4. Biceps
     ['tri_push','skull','tri_oh','dips','assisted_dip','diamond_pu'],      // 5. Triceps
@@ -615,7 +616,7 @@ const EX_EQUIP={
   sl_rdl:['dumbbell'],cable_kickback:['cable'],sl_seated_calf:['dumbbell'],
   // v3.22 library expansion
   decline_bench:['barbell','bench'],mach_chest_press:['machine'],db_fly:['dumbbell','bench'],cable_crossover:['cable'],
-  mach_shoulder_press:['machine'],front_raise:['dumbbell'],upright_row:['barbell'],reverse_pec_deck:['machine'],
+  mach_shoulder_press:['machine'],mach_lat_raise:['machine'],front_raise:['dumbbell'],upright_row:['barbell'],reverse_pec_deck:['machine'],
   seated_rear_delt:['dumbbell'],bb_shrug:['barbell'],db_shrug:['dumbbell'],
   close_grip_bench:['barbell','bench','rack'],cable_tri_1arm:['cable'],db_kickback:['dumbbell'],bench_dip:['bench'],
   concentration_curl:['dumbbell'],spider_curl:['ez_bar','incline_bench'],reverse_curl:['barbell'],mach_curl:['machine'],zottman_curl:['dumbbell'],
@@ -1042,10 +1043,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.89';
+const APP_VERSION='3.90';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.90',d:'Machine Lateral Raise, and a Remove set button',det:'Added the Machine Lateral Raise. Swap it in on any day with side delts, and the planner can pick it too. Next to + Add set there is now − Remove set: it takes away the last set you have not ticked yet (it asks first if they are all ticked), and the message has an Undo in case you tapped it by mistake.'},
   {v:'3.89',d:'Name the machine you are on, and its numbers stay separate',det:'The same exercise on two machines can have very different weights (your Dual Pulley Pulldown versus another lat pulldown), and the app mixed them up, so the target said 130 lb while your last set was 100. On an exercise you can now tap Name this machine. From then on, last time, the target and the PR for that exercise come only from sets on that machine. Each gym keeps its own list of machines, and the app picks the one you used last there. Sets logged before this count as Other.'},
   {v:'3.88',d:'Typing in Log sets: the panel moves up above the keyboard',det:'On iPhone the keyboard covered the Log sets panel, so you could only see the first set while typing. The panel now sits just above the keyboard, and the box you tap scrolls into view. The weight and reps boxes also no longer offer to AutoFill a contact.'},
   {v:'3.87',d:'A re-planned day says why, and the coaches see your real week',det:'When a gym day goes by without a workout, the days left are re-planned, but the day just said Full Body with no reason. Now it says what happened, like: Wed’s Legs was missed, so this covers Pull + Legs (Push done already). A make-up Full Body now works what you still owe that week instead of repeating Tuesday’s chest and shoulders. The AI Coach also plans a re-planned day again; before, its picks were thrown away the moment a day was missed. The Ask Coach chat now sees the skipped days and why, your Full Body exercises, how long since your last gym session and the coach’s weekly review, so it stops guessing. It gives a real recommendation and makes the change for you to confirm.'},
@@ -12063,7 +12065,7 @@ function rLogEx(le,ei){
   <div style="font-size:11px;color:var(--t2);margin-bottom:8px">${tgt.sets} ${_T('sets_unit')} · ${tgt.reps} ${_T('reps_unit')} · RPE ${tgt.rpe}${tgt.sugW?' · <span style="color:var(--al);font-weight:700">~'+tgt.sugW+unit()+' '+_T('suggested')+'</span>':''}</div>
   ${ex.assist?`<div style="font-size:11px;color:var(--amb);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:8px;padding:6px 10px;margin-bottom:8px;line-height:1.45">⚖️ This is <strong>assistance weight</strong> — how much the machine helps. <strong>Lower = stronger.</strong> Your goal is to reduce it over time toward unassisted.</div>`:''}
   ${setBlockHtml(ei,le,{pre:'sr',ck:'ck',tog:'togSet',wPh,rPh,ds:S.activeLog.date})}
-  <button class="add-set" onclick="addSet(${ei})">+ Add set</button>
+  <div style="display:flex;gap:6px"><button class="add-set" style="flex:1" onclick="removeSet(${ei})">− Remove set</button><button class="add-set" style="flex:2" onclick="addSet(${ei})">+ Add set</button></div>
   <button class="ex-busy-btn" style="margin-top:10px;width:100%;text-align:center" onclick="openExSwap('${le.id}',${ei},'${S.activeLog.date}','${S.activeLog.type}')">🔄 Swap exercise</button>
 </div>
 </div>`;
@@ -14893,7 +14895,7 @@ function showExLogModal(le,ei,ds){
   ${_progTargetHtml(computeProgressionTarget(le.id,getLastLog(le.id,_m),_m),le.sets.every(x=>x.done))}
   ${unitBar(ex)}
   <div id="exlog-rows">${setBlockHtml(ei,le,{pre:'elr',ck:'elk',tog:'exLogTog',wPh:'—',rPh:'—',ds})}</div>
-  <button class="add-set" style="margin-top:6px" onclick="exLogAdd(${ei})">+ Add set</button>
+  <div style="display:flex;gap:6px;margin-top:6px"><button class="add-set" style="flex:1" onclick="removeSet(${ei})">− Remove set</button><button class="add-set" style="flex:2" onclick="exLogAdd(${ei})">+ Add set</button></div>
   <button class="btn btn-p" style="margin-top:14px" onclick="closeExLog('${ds}')">Done</button>
 </div>`;
   document.body.appendChild(modal);
@@ -14917,6 +14919,33 @@ function exLogTog(ei,si){
   _placeHelper(ei); // helper moves on to the next set still to do
 }
 
+// v3.90: there was no way to take a set away. Removes the last set not ticked yet; if
+// they're all ticked, asks before removing the last one. Undo from the toast.
+function removeSet(ei){
+  if(!S.activeLog)return;
+  const le=S.activeLog.exercises[ei];if(!le||!le.sets.length)return;
+  let si=-1;for(let i=le.sets.length-1;i>=0;i--)if(!le.sets[i].done){si=i;break;}
+  if(si<0){si=le.sets.length-1;if(!confirm('All sets are ticked. Remove the last one?'))return;}
+  if(le.sets.length===1&&!confirm('Remove the only set?'))return;
+  const gone=le.sets.splice(si,1)[0];
+  S._lastRemoved={ei,si,set:gone,key:S.activeLogKey};
+  _saveLog();_rerenderSets(ei);
+  _undoBar(`Set ${si+1} removed`);
+}
+function _undoBar(msg){
+  document.getElementById('_undo')?.remove();
+  const b=document.createElement('div');b.id='_undo';
+  b.style.cssText='position:fixed;left:50%;bottom:calc(var(--kb,0px) + 24px);transform:translateX(-50%);z-index:400;background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:9px 10px 9px 16px;font-size:13px;font-weight:600;color:var(--txt);display:flex;gap:14px;align-items:center;box-shadow:0 6px 24px rgba(0,0,0,.4)';
+  b.innerHTML=`<span>${_esc(msg)}</span><button onclick="undoRemoveSet()" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-weight:800;font-size:13px;padding:7px 14px;cursor:pointer">Undo</button>`;
+  document.body.appendChild(b);clearTimeout(_undoBar.t);_undoBar.t=setTimeout(()=>b.remove(),7000);
+}
+function undoRemoveSet(){
+  document.getElementById('_undo')?.remove();
+  const r=S._lastRemoved;if(!r||!S.activeLog||S.activeLogKey!==r.key)return;
+  const le=S.activeLog.exercises[r.ei];if(!le)return;
+  le.sets.splice(Math.min(r.si,le.sets.length),0,r.set);S._lastRemoved=null;
+  _saveLog();_rerenderSets(r.ei);
+}
 function exLogAdd(ei){
   if(!S.activeLog)return;
   const le=S.activeLog.exercises[ei];if(!le)return;
