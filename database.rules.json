@@ -7,6 +7,7 @@
         "updated": { ".write": "auth != null && auth.uid === $uid" },
         "profile": { ".write": "auth != null && auth.uid === $uid" },
         "advisor": { ".write": "auth != null && auth.uid === $uid" },
+        "rides":   { ".write": "auth != null && auth.uid === $uid" },
         "friends": {
           "$fid": {
             ".write": "auth != null && (auth.uid === $uid || auth.uid === $fid)"

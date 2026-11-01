@@ -1,8 +1,13 @@
 // Training Brain service worker
-// index.html → network-first (always fresh, fallback to cache when offline)
-// Exercise GIFs → cache-forever (immutable CDN assets)
-// Everything else → cache-first with background update
-const CACHE = 'tb-v6';
+// index.html → stale-while-revalidate (instant launch; a newer version shows the Reload bar)
+// Exercise photos → cache-forever (immutable CDN assets, so they still show with no signal)
+// This site's other files and static CDN files → cache-first with background update
+// Anything else (intervals.icu, weather, Endurain, the AI Worker, Firebase) → network only
+const CACHE = 'tb-v7'; // v3.96: new name clears API replies the old catch-all had cached
+// Hosts that only serve files that don't change. v3.96: before, every GET that wasn't
+// Firebase, Strava or the Worker was answered from the cache first, so an intervals.icu
+// sync or a weather check could show the previous fetch's data.
+const STATIC_HOSTS = ['cdn.jsdelivr.net', 'yuhonas.github.io', 'wger.de', 'upload.wikimedia.org', 'www.gstatic.com'];
 const ASSETS = [
   '/training-brain/',
   '/training-brain/index.html',
@@ -28,14 +33,15 @@ self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
   // Only cache same-origin HTML/assets — pass through API/Firebase/Strava calls
   if (e.request.method !== 'GET') return;
-  if (url.hostname.includes('firebase') || url.hostname.includes('googleapis') ||
-      url.hostname.includes('strava') || url.hostname.includes('workers.dev')) return;
+  if (url.origin !== self.location.origin && !STATIC_HOSTS.includes(url.hostname)) return;
   // Demo videos: leave to the browser. iPhone Safari fetches video in byte ranges and
   // won't play a whole cached copy handed back by a service worker.
   if (url.pathname.endsWith('.mp4')) return;
 
-  // Exercise GIFs/images from the free-exercise-db CDN are immutable — cache them permanently.
-  const isExerciseImg = url.hostname === 'yuhonas.github.io';
+  // Exercise photos from free-exercise-db never change, so keep them for good. v3.96: they
+  // come from jsDelivr now, which the old check (yuhonas.github.io only) missed.
+  const isExerciseImg = url.hostname === 'yuhonas.github.io' ||
+    (url.hostname === 'cdn.jsdelivr.net' && url.pathname.includes('/free-exercise-db@main/exercises/'));
   if (isExerciseImg) {
     e.respondWith(
       caches.open(CACHE).then(async cache => {

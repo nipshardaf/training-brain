@@ -417,8 +417,8 @@ const EX = {
   deadlift:    {n:'Conventional Deadlift',g:'ham',      t:'C',sets:4,reps:'5–6',  rpe:'8–9',m:'Full Posterior Chain',    p:'Barbell_Deadlift'},
   hip_thrust:  {n:'Barbell Hip Thrust',   g:'ham',      t:'C',sets:4,reps:'10–12',rpe:'8',  m:'Glutes · Hamstrings',     p:'Barbell_Hip_Thrust'},
   glute_bridge:{n:'Glute Bridge',         g:'ham',      t:'C',sets:3,reps:'12–15',rpe:'6',  m:'Glutes · Hamstrings',     p:'Barbell_Glute_Bridge'},
-  mach_hip_thrust:{n:'Hip Thrust Machine',g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Glutes · Hamstrings',     p:null},
-  glute_kick:  {n:'Cable Glute Kickback', g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Glutes',                  p:'Glute_Kickback',                          uni:true},
+  mach_hip_thrust:{n:'Hip Thrust Machine',g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Glutes · Hamstrings',     p:null, k:'glute drive plate loaded'},
+  glute_kick:  {n:'Cable Glute Kickback', g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Glutes',                  p:'One-Legged_Cable_Kickback',               uni:true},
   nordic_curl: {n:'Nordic Curl',          g:'ham',      t:'C',sets:3,reps:'5–8',  rpe:'9',  m:'Hamstrings',              p:'Natural_Glute_Ham_Raise'},
   leg_curl:    {n:'Lying Leg Curl',       g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Lying_Leg_Curls'},
   seated_leg_curl:{n:'Seated Leg Curl',   g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Seated_Leg_Curl'},
@@ -490,7 +490,7 @@ const EX = {
   reverse_lunge:{n:'Reverse Lunge',        g:'quad',     t:'C',sets:3,reps:'10/leg',rpe:'7',  m:'Quads · Glutes',          p:'Dumbbell_Rear_Lunge',                     uni:true},
   sl_legext:    {n:'Single-Leg Leg Extension',g:'quad',  t:'I',sets:3,reps:'12/leg',rpe:'7',  m:'Quads',                   p:'Single-Leg_Leg_Extension',                uni:true},
   sl_rdl:       {n:'Single-Leg Deadlift',  g:'ham',      t:'C',sets:3,reps:'8/leg', rpe:'8',  m:'Hamstrings · Glutes',     p:'Kettlebell_One-Legged_Deadlift',          uni:true},
-  cable_kickback:{n:'Cable Glute Kickback',g:'glute',    t:'I',sets:3,reps:'12/leg',rpe:'7',  m:'Glutes',                  p:'One-Legged_Cable_Kickback',               uni:true},
+  cable_kickback:{n:'Cable Glute Kickback',g:'glute',    t:'I',sets:3,reps:'12/leg',rpe:'7',  m:'Glutes',                  p:'One-Legged_Cable_Kickback',               uni:true, hide:1}, // v3.96: same exercise as glute_kick; kept only so old logs still show
   sl_seated_calf:{n:'Single-Leg Seated Calf',g:'calf',   t:'I',sets:3,reps:'15/leg',rpe:'7',  m:'Calves · Soleus',         p:'Dumbbell_Seated_One-Leg_Calf_Raise',      uni:true},
   mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:'Mountain_Climbers', bw:true},
   bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:['https://wger.de/media/exercise-images/176/Cross-body-crunch-1.png','https://wger.de/media/exercise-images/176/Cross-body-crunch-2.png'], bw:true},
@@ -498,6 +498,76 @@ const EX = {
   leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:['https://wger.de/media/exercise-images/125/Leg-raises-1.png','https://wger.de/media/exercise-images/125/Leg-raises-2.png'], bw:true},
   crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:'Crunches', bw:true},
   burpee:       {n:'Burpee',               g:'core',     t:'C',sets:3,reps:'10–15', rpe:'8', m:'Full Body',               p:['https://upload.wikimedia.org/wikipedia/commons/d/df/Burpee.gif'], bw:true},
+  // ── v3.96 gym machines and stations: Smith machine, plate-loaded (Hammer Strength style)
+  // and pin-loaded machines, cable / functional trainer, landmine, trap bar, kettlebell, plus
+  // dumbbell options for home days. Photos are free-exercise-db folders (checked against its
+  // exercise list); p:null shows the coloured placeholder with a demo-video link. k = extra
+  // search words. They sit in SLOT_MORE (below), not in SLOTS, so the usual rotation stays. ──
+  smith_bench:        {n:'Smith Machine Bench Press',   g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Chest · Triceps',         p:'Smith_Machine_Bench_Press'},
+  smith_incline:      {n:'Smith Machine Incline Press', g:'chest',    t:'C',sets:3,reps:'8–10', rpe:'7–8',m:'Upper Chest · Triceps',   p:'Smith_Machine_Incline_Bench_Press'},
+  mach_incline_press: {n:'Incline Machine Press',       g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Upper Chest · Triceps',   p:'Leverage_Incline_Chest_Press', k:'incline chest press hammer strength leverage plate loaded'},
+  iso_chest_press:    {n:'Iso-Lateral Chest Press',     g:'chest',    t:'C',sets:3,reps:'8–10', rpe:'7–8',m:'Chest · Triceps',         p:'Leverage_Chest_Press',         k:'hammer strength leverage plate loaded machine'},
+  mach_decline_press: {n:'Decline Machine Press',       g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lower Chest · Triceps',   p:'Leverage_Decline_Chest_Press', k:'decline chest press hammer strength leverage'},
+  cable_chest_press:  {n:'Cable Chest Press',           g:'chest',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Chest · Triceps',         p:'Cable_Chest_Press',            k:'standing functional trainer'},
+  low_cable_fly:      {n:'Low-to-High Cable Fly',       g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Upper Chest',             p:'Low_Cable_Crossover',          k:'crossover low pulley'},
+  incline_cable_fly:  {n:'Incline Cable Fly',           g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Upper Chest',             p:'Incline_Cable_Flye'},
+  incline_db_fly:     {n:'Incline Dumbbell Fly',        g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Upper Chest',             p:'Incline_Dumbbell_Flyes'},
+  chest_dip:          {n:'Chest Dip',                   g:'chest',    t:'C',sets:3,reps:'8–12', rpe:'8',  m:'Lower Chest · Triceps',   p:'Dips_-_Chest_Version'},
+  smith_ohp:          {n:'Smith Machine Shoulder Press',g:'shoulder', t:'C',sets:3,reps:'8–10', rpe:'7–8',m:'Shoulders · Triceps',     p:'Smith_Machine_Overhead_Shoulder_Press'},
+  iso_shoulder_press: {n:'Iso-Lateral Shoulder Press',  g:'shoulder', t:'C',sets:3,reps:'8–10', rpe:'7–8',m:'Shoulders · Triceps',     p:'Leverage_Shoulder_Press',      k:'hammer strength leverage plate loaded machine'},
+  landmine_press:     {n:'Landmine Press',              g:'shoulder', t:'C',sets:3,reps:'8–10', rpe:'7',  m:'Shoulders · Upper Chest', p:null,                           uni:true},
+  cable_front_raise:  {n:'Cable Front Raise',           g:'shoulder', t:'I',sets:3,reps:'12–15',rpe:'6',  m:'Front Delts',             p:'Front_Cable_Raise'},
+  cable_upright_row:  {n:'Cable Upright Row',           g:'shoulder', t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Shoulders · Traps',       p:null},
+  mach_shrug:         {n:'Machine Shrug',               g:'shoulder', t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Traps',                   p:'Leverage_Shrug',               k:'hammer strength leverage plate loaded'},
+  cable_y_raise:      {n:'Cable Y-Raise',               g:'sdelt',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Side Delts · Lower Traps',p:null},
+  cable_rear_fly:     {n:'Cable Rear Delt Fly',         g:'rdelt',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Rear Delts',              p:'Cable_Rear_Delt_Fly',          k:'reverse fly crossover'},
+  cable_ext_rot:      {n:'Cable External Rotation',     g:'rdelt',    t:'I',sets:2,reps:'12–15',rpe:'6',  m:'Rotator Cuff · Rear Delts',p:'External_Rotation_with_Cable', uni:true},
+  band_pull_apart:    {n:'Band Pull-Apart',             g:'rdelt',    t:'I',sets:3,reps:'15–20',rpe:'6',  m:'Rear Delts · Upper Back', p:'Band_Pull_Apart'},
+  rope_pushdown:      {n:'Rope Pushdown',               g:'tri',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Triceps',                 p:'Triceps_Pushdown_-_Rope_Attachment', k:'tricep rope cable'},
+  mach_tri_ext:       {n:'Machine Triceps Extension',   g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Triceps',                 p:'Machine_Triceps_Extension'},
+  seated_dip_mach:    {n:'Seated Dip Machine',          g:'tri',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Triceps · Chest',         p:'Dip_Machine',                  k:'triceps press'},
+  db_oh_ext:          {n:'Overhead Dumbbell Extension', g:'tri',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Triceps',                 p:'Standing_Dumbbell_Triceps_Extension', k:'tricep'},
+  ez_curl:            {n:'EZ-Bar Curl',                 g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'EZ-Bar_Curl'},
+  mach_preacher:      {n:'Machine Preacher Curl',       g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:'Machine_Preacher_Curls'},
+  rope_hammer:        {n:'Rope Hammer Curl',            g:'bi',       t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Biceps · Brachialis · Forearms', p:'Cable_Hammer_Curls_-_Rope_Attachment'},
+  bayesian_curl:      {n:'Bayesian Cable Curl',         g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps',                  p:null,                           uni:true, k:'behind the body single arm cable curl'},
+  wrist_curl:         {n:'Wrist Curl',                  g:'bi',       t:'I',sets:2,reps:'15–20',rpe:'7',  m:'Forearms',                p:'Seated_Dumbbell_Palms-Up_Wrist_Curl', k:'forearm grip'},
+  neutral_pulldown:   {n:'Neutral-Grip Lat Pulldown',   g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Biceps',           p:'V-Bar_Pulldown',               k:'v-bar close grip'},
+  rev_pulldown:       {n:'Reverse-Grip Lat Pulldown',   g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Biceps',           p:'Underhand_Cable_Pulldowns',    k:'underhand supinated'},
+  sa_pulldown:        {n:'Single-Arm Lat Pulldown',     g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats',                    p:'One_Arm_Lat_Pulldown',         uni:true},
+  iso_pulldown:       {n:'Iso-Lateral Pulldown',        g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Biceps',           p:null,                           k:'hammer strength plate loaded front lat pulldown machine'},
+  high_row:           {n:'High Row Machine',            g:'vback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Upper Back',       p:'Leverage_High_Row',            k:'hammer strength iso-lateral leverage plate loaded'},
+  db_pullover:        {n:'Dumbbell Pullover',           g:'vback',    t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Lats · Chest',            p:'Straight-Arm_Dumbbell_Pullover'},
+  mach_pullover:      {n:'Pullover Machine',            g:'vback',    t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Lats',                    p:null,                           k:'nautilus'},
+  mach_row:           {n:'Seated Row Machine',          g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Upper Back · Lats',       p:'Leverage_Iso_Row',             k:'chest supported row machine'},
+  iso_row:            {n:'Iso-Lateral Row',             g:'hback_h',  t:'C',sets:3,reps:'8–10', rpe:'7–8',m:'Back · Biceps',           p:'Leverage_Iso_Row',             k:'hammer strength plate loaded leverage low row'},
+  sa_cable_row:       {n:'Single-Arm Cable Row',        g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Back · Lats',             p:'Seated_One-arm_Cable_Pulley_Rows', uni:true},
+  cs_db_row:          {n:'Chest-Supported Dumbbell Row',g:'hback',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Upper Back · Rear Delts', p:'Dumbbell_Incline_Row',         k:'incline bench row seal'},
+  smith_row:          {n:'Smith Machine Row',           g:'hback_h',  t:'C',sets:3,reps:'8–10', rpe:'7–8',m:'Back · Biceps',           p:'Smith_Machine_Bent_Over_Row'},
+  rack_pull:          {n:'Rack Pull',                   g:'ham',      t:'C',sets:3,reps:'5–6',  rpe:'8',  m:'Back · Glutes · Hamstrings', p:'Rack_Pulls'},
+  trap_bar_dl:        {n:'Trap Bar Deadlift',           g:'ham',      t:'C',sets:4,reps:'5–8',  rpe:'8',  m:'Glutes · Quads · Hamstrings', p:'Trap_Bar_Deadlift',         k:'hex bar'},
+  sumo_dl:            {n:'Sumo Deadlift',               g:'ham',      t:'C',sets:4,reps:'5–6',  rpe:'8',  m:'Glutes · Hamstrings · Adductors', p:'Sumo_Deadlift'},
+  db_rdl:             {n:'Dumbbell Romanian Deadlift',  g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings · Glutes',     p:'Stiff-Legged_Dumbbell_Deadlift', k:'rdl stiff leg'},
+  back_ext:           {n:'Back Extension',              g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Back · Glutes · Hamstrings', p:'Hyperextensions_Back_Extensions', k:'hyperextension roman chair 45'},
+  back_ext_mach:      {n:'Back Extension Machine',      g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Back',              p:null,                           k:'lower back'},
+  kb_swing:           {n:'Kettlebell Swing',            g:'ham',      t:'C',sets:3,reps:'15–20',rpe:'7',  m:'Glutes · Hamstrings · Core', p:'One-Arm_Kettlebell_Swings'},
+  smith_hip_thrust:   {n:'Smith Machine Hip Thrust',    g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7–8',m:'Glutes · Hamstrings',     p:null},
+  glute_kick_mach:    {n:'Glute Kickback Machine',      g:'glute',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Glutes',                  p:null,                           uni:true, k:'glute machine'},
+  standing_leg_curl:  {n:'Standing Leg Curl',           g:'ham',      t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings',              p:'Standing_Leg_Curl',            uni:true},
+  smith_squat:        {n:'Smith Machine Squat',         g:'quad',     t:'C',sets:4,reps:'8–10', rpe:'7–8',m:'Quads · Glutes',          p:'Smith_Machine_Squat'},
+  pendulum_squat:     {n:'Pendulum Squat',              g:'quad',     t:'C',sets:3,reps:'8–12', rpe:'8',  m:'Quads · Glutes',          p:null},
+  belt_squat:         {n:'Belt Squat',                  g:'quad',     t:'C',sets:3,reps:'8–12', rpe:'8',  m:'Quads · Glutes',          p:null},
+  v_squat:            {n:'V-Squat Machine',             g:'quad',     t:'C',sets:3,reps:'8–12', rpe:'8',  m:'Quads · Glutes',          p:null,                           k:'power squat leverage squat'},
+  seated_leg_press:   {n:'Seated Leg Press',            g:'quad',     t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Quads · Glutes',          p:null,                           k:'horizontal leg press'},
+  smith_split_squat:  {n:'Smith Machine Split Squat',   g:'quad',     t:'C',sets:3,reps:'8–10', rpe:'8',  m:'Quads · Glutes',          p:'Smith_Single-Leg_Split_Squat', uni:true},
+  leg_press_calf:     {n:'Leg Press Calf Raise',        g:'calf',     t:'I',sets:4,reps:'15–20',rpe:'7',  m:'Calves',                  p:'Calf_Press_On_The_Leg_Press_Machine', k:'calf press'},
+  smith_calf:         {n:'Smith Machine Calf Raise',    g:'calf',     t:'I',sets:4,reps:'12–15',rpe:'7',  m:'Calves',                  p:'Smith_Machine_Calf_Raise'},
+  pallof:             {n:'Pallof Press',                g:'core',     t:'I',sets:3,reps:'10/side',rpe:'6',m:'Core · Obliques',         p:'Pallof_Press',                 uni:true, k:'anti rotation'},
+  woodchop:           {n:'Cable Woodchop',              g:'core',     t:'I',sets:3,reps:'12/side',rpe:'6',m:'Obliques · Core',         p:'Standing_Cable_Wood_Chop',     uni:true, k:'wood chop'},
+  knee_raise:         {n:'Vertical Knee Raise',         g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Abs · Hip Flexors', p:'Knee_Hip_Raise_On_Parallel_Bars', k:'captains chair roman chair'},
+  rotary_torso:       {n:'Rotary Torso Machine',        g:'core',     t:'I',sets:3,reps:'12/side',rpe:'6',m:'Obliques',                p:null,                           uni:true, k:'torso rotation oblique twist'},
+  dead_bug:           {n:'Dead Bug',                    g:'core',     t:'I',sets:3,reps:'10/side',rpe:'5',m:'Core',                    p:'Dead_Bug',                     bw:true},
+  farmers_walk:       {n:'Farmers Walk',                g:'core',     t:'C',sets:3,reps:'40s',  rpe:'7',  m:'Grip · Traps · Core',     p:'Farmers_Walk',                 k:'carry'},
 };
 
 /* ── EXERCISE NAMES — Traditional Chinese ── */
@@ -597,6 +667,59 @@ const SLOTS = {
     ['plank','hang_raise','ab_wheel','cable_crunch','bicycle_crunch','leg_raise_floor'], // 6. Core
   ],
 };
+// v3.96: more options per slot (same index as SLOTS). The planner only reaches for them when
+// your gym has nothing from the main list for that slot (no barbell: a Smith or plate-loaded
+// row instead of a barbell row); the swap sheet lists them under "Same movement slot", and the
+// AI's exercise picks may use them.
+const SLOT_MORE={
+  PUSH:[
+    ['smith_bench','smith_incline','iso_chest_press','mach_chest_press','mach_incline_press'],
+    ['mach_shoulder_press','smith_ohp','iso_shoulder_press','landmine_press'],
+    ['mach_chest_press','mach_incline_press','iso_chest_press','smith_incline','cable_chest_press','low_cable_fly','incline_cable_fly','incline_db_fly','db_fly','cable_crossover','chest_dip','mach_decline_press','decline_bench'],
+    ['cable_y_raise'],
+    ['rope_pushdown','mach_tri_ext','seated_dip_mach','db_oh_ext','cable_tri_1arm','close_grip_bench','db_kickback'],
+  ],
+  PULL:[
+    ['neutral_pulldown','rev_pulldown','sa_pulldown','cg_lat_pull','chinup','iso_pulldown','high_row'],
+    ['iso_row','smith_row','rev_grip_row','lying_tbar','cs_db_row'],
+    ['mach_row','sa_cable_row','cs_db_row','elevated_row'],
+    ['reverse_pec_deck','cable_rear_fly','seated_rear_delt','band_pull_apart'],
+    ['ez_curl','mach_curl','mach_preacher','rope_hammer','bayesian_curl','spider_curl','concentration_curl'],
+  ],
+  LEGS:[
+    ['smith_squat','pendulum_squat','belt_squat','hack_squat','v_squat'],
+    ['trap_bar_dl','db_rdl','mach_hip_thrust','smith_hip_thrust','sumo_dl','back_ext','good_morning','cable_pull_through','kb_swing'],
+    ['pendulum_squat','v_squat','seated_leg_press','belt_squat','smith_split_squat','smith_squat','reverse_lunge','sl_leg_press'],
+    ['standing_leg_curl','glute_kick_mach','glute_kick','abductor_mach','adductor_mach'],
+    ['leg_press_calf','smith_calf','sl_seated_calf'],
+    ['pallof','woodchop','knee_raise','rotary_torso','dead_bug','russian_twist','decline_crunch','back_ext_mach'],
+  ],
+  UPPER_PUMP:[
+    ['mach_chest_press','mach_incline_press','low_cable_fly','incline_cable_fly','cable_crossover','incline_db_fly','cable_chest_press'],
+    ['mach_row','neutral_pulldown','sa_cable_row','high_row','cs_db_row','cg_lat_pull'],
+    ['mach_shoulder_press','landmine_press','smith_ohp'],
+    ['cable_y_raise'],
+    ['rope_hammer','bayesian_curl','mach_curl','ez_curl'],
+    ['rope_pushdown','mach_tri_ext','db_oh_ext'],
+  ],
+  SHOULDERS_ARMS:[
+    ['mach_shoulder_press','smith_ohp','iso_shoulder_press','landmine_press'],
+    ['cable_y_raise'],
+    ['reverse_pec_deck','cable_rear_fly','seated_rear_delt','band_pull_apart'],
+    ['ez_curl','mach_curl','mach_preacher','bayesian_curl','spider_curl'],
+    ['rope_pushdown','mach_tri_ext','seated_dip_mach','db_oh_ext','close_grip_bench'],
+    ['rope_hammer','reverse_curl','zottman_curl'],
+  ],
+  FULL_BODY:[
+    ['smith_squat','hack_squat','pendulum_squat','belt_squat'],
+    ['db_rdl','trap_bar_dl','mach_hip_thrust','kb_swing'],
+    ['mach_chest_press','smith_bench','iso_chest_press'],
+    ['mach_row','neutral_pulldown','cable_row','cs_db_row'],
+    ['mach_shoulder_press','cable_lat','mach_lat_raise'],
+    ['pallof','woodchop','knee_raise','dead_bug'],
+  ],
+};
+const _slotMore=(type,i)=>(SLOT_MORE[type]||[])[i]||[];
 
 /* ── EQUIPMENT TAGS ── */
 const EX_EQUIP={
@@ -632,7 +755,30 @@ const EX_EQUIP={
   chinup:['pullup_bar'],cg_lat_pull:['machine'],straight_arm_pull:['cable'],elevated_row:['cable'],
   rev_grip_row:['barbell'],lying_tbar:['machine'],good_morning:['barbell','rack'],cable_pull_through:['cable'],
   russian_twist:['bodyweight'],decline_crunch:['bodyweight'],
+  // v3.96 machines and stations
+  smith_bench:['smith','bench'],smith_incline:['smith','incline_bench'],mach_incline_press:['machine'],iso_chest_press:['machine'],
+  mach_decline_press:['machine'],cable_chest_press:['cable'],low_cable_fly:['cable'],incline_cable_fly:['cable','incline_bench'],
+  incline_db_fly:['dumbbell','incline_bench'],chest_dip:['dip_bar'],
+  smith_ohp:['smith'],iso_shoulder_press:['machine'],landmine_press:['barbell','landmine'],cable_front_raise:['cable'],
+  cable_upright_row:['cable'],mach_shrug:['machine'],cable_y_raise:['cable'],cable_rear_fly:['cable'],cable_ext_rot:['cable'],band_pull_apart:['band'],
+  rope_pushdown:['cable'],mach_tri_ext:['machine'],seated_dip_mach:['machine'],db_oh_ext:['dumbbell'],
+  ez_curl:['ez_bar'],mach_preacher:['machine'],rope_hammer:['cable'],bayesian_curl:['cable'],wrist_curl:['dumbbell'],
+  neutral_pulldown:['machine'],rev_pulldown:['machine'],sa_pulldown:['cable'],iso_pulldown:['machine'],high_row:['machine'],
+  db_pullover:['dumbbell','bench'],mach_pullover:['machine'],mach_row:['machine'],iso_row:['machine'],sa_cable_row:['cable'],
+  cs_db_row:['dumbbell','incline_bench'],smith_row:['smith'],
+  rack_pull:['barbell','rack'],trap_bar_dl:['trap_bar'],sumo_dl:['barbell'],db_rdl:['dumbbell'],back_ext:['back_ext'],back_ext_mach:['machine'],
+  kb_swing:['kettlebell'],smith_hip_thrust:['smith','bench'],glute_kick_mach:['machine'],standing_leg_curl:['machine'],
+  smith_squat:['smith'],pendulum_squat:['machine'],belt_squat:['machine'],v_squat:['machine'],seated_leg_press:['machine'],
+  smith_split_squat:['smith'],leg_press_calf:['machine'],smith_calf:['smith'],
+  pallof:['cable'],woodchop:['cable'],knee_raise:['dip_bar'],rotary_torso:['machine'],dead_bug:['bodyweight'],farmers_walk:['dumbbell'],
 };
+// v3.96: extra search words for older entries (the new ones carry k inline)
+Object.entries({pec_deck:'chest fly machine butterfly pec fly',lat_pull:'pulldown machine wide grip',cable_row:'seated row low row v-bar',
+  leg_press:'45 degree sled plate loaded',hack_squat:'plate loaded sled',reverse_pec_deck:'rear delt machine reverse fly',
+  mach_chest_press:'chest press seated',mach_shoulder_press:'shoulder press seated',assisted_pullup:'gravitron assist',assisted_dip:'gravitron assist',
+  abductor_mach:'hip abduction outer thigh',adductor_mach:'hip adduction inner thigh',mach_crunch:'ab crunch machine',calf_raise:'calf machine',
+  lying_tbar:'chest supported t-bar row machine',cable_crossover:'functional trainer high pulley',tri_push:'straight bar cable'})
+  .forEach(([id,k])=>{if(EX[id]&&!EX[id].k)EX[id].k=k;});
 
 /* ── OWN 3D DEMO VIDEOS ── rendered in Blender from an MPFB (CC0) figure, see
    Downloads\Claude\exercise-test on the PC. Silent looping clips (900×500) that replace the
@@ -717,6 +863,119 @@ const EX_CUES={
   leg_raise_floor:'Hands under lower back for support. Keep legs straight, lower slowly without letting them touch the floor.',
   crunch:'Hands lightly behind head, elbows wide. Curl upper back up — focus on abs shortening, not pulling your neck.',
   burpee:'Hands down, feet back, chest to floor (or push-up), feet forward, stand, jump with arms overhead. Keep pace.',
+  // v3.96 machines and stations
+  smith_bench:'Set the bench so the bar lands on mid-chest. Unhook with a twist, lower under control, press straight up.',
+  smith_incline:'Bench at 30°, bar lands on the upper chest. Elbows slightly tucked, press straight up.',
+  mach_incline_press:'Seat so the handles start at upper-chest height. Press up and in, then let them back slowly.',
+  iso_chest_press:'Handles at mid-chest. Press both arms evenly and let the stretch come back slowly.',
+  mach_decline_press:'Handles at lower-chest height. Press down and out, squeeze, return slowly.',
+  cable_chest_press:'Staggered stance, brace. Press forward and slightly together, shoulders down.',
+  low_cable_fly:'Pulleys low. Sweep up and in to chin height with soft elbows, squeeze the upper chest.',
+  incline_cable_fly:'Bench at 30° between low pulleys. Wide arc, soft elbows, hands meet over the upper chest.',
+  incline_db_fly:'Bench at 30°. Lower wide with soft elbows to a deep stretch, then hug back up.',
+  chest_dip:'Lean forward about 30°, elbows out a little. Lower until the chest stretches, press up.',
+  smith_ohp:'Seated, bar just in front of the face. Press straight up without slamming the lockout.',
+  iso_shoulder_press:'Seat so the handles start at shoulder height. Press up, ribs down, lower slowly.',
+  landmine_press:'Half-kneel or stand. Press the bar up and forward, ribs down, no leaning back.',
+  cable_front_raise:'Low pulley behind you. Raise to shoulder height with a soft elbow, lower slowly.',
+  cable_upright_row:'Bar or rope on a low pulley. Pull the elbows up and out to shoulder height, no higher.',
+  mach_shrug:'Stand tall, shrug straight up, hold a second, lower all the way.',
+  cable_y_raise:'Low pulleys crossed. Raise up and out into a Y, thumbs up, stop at head height.',
+  cable_rear_fly:'Pulleys at shoulder height, cables crossed. Pull back and out with almost straight arms.',
+  cable_ext_rot:'Elbow pinned to your side at 90°. Turn the forearm out slowly, no body twist.',
+  band_pull_apart:'Arms straight at shoulder height. Pull the band to your chest, squeeze the shoulder blades.',
+  rope_pushdown:'Elbows pinned. Push down and spread the rope at the bottom, control it back up.',
+  mach_tri_ext:'Elbows on the pad, in line with the pivot. Extend fully, control the return.',
+  seated_dip_mach:'Sit tall, handles by your sides. Press down to full lockout, come up slowly.',
+  db_oh_ext:'One dumbbell overhead in both hands. Lower behind the head, elbows in, extend up.',
+  ez_curl:'Elbows at your sides. Curl without swinging, squeeze at the top, lower slowly.',
+  mach_preacher:'Armpits snug on the pad. Curl up, then lower all the way to a full stretch.',
+  rope_hammer:'Thumbs up on the rope, elbows pinned. Curl up and pull the rope ends apart.',
+  bayesian_curl:'Face away from a low pulley, arm behind you. Curl forward with the elbow still.',
+  wrist_curl:'Forearms on your thighs, palms up. Let the weight roll to your fingers, curl back up.',
+  neutral_pulldown:'V-bar, lean back slightly. Pull to the upper chest, elbows down to your sides.',
+  rev_pulldown:'Palms facing you, shoulder width. Pull to the upper chest with elbows close.',
+  sa_pulldown:'One handle. Pull the elbow down to your hip, let the lat stretch fully at the top.',
+  iso_pulldown:'Thighs under the pad. Pull each handle down to the shoulder, squeeze the lats.',
+  high_row:'Chest to the pad if there is one. Pull down and back, elbows toward the hips.',
+  db_pullover:'Upper back on the bench. Lower the dumbbell behind your head with soft elbows, pull it back over the chest.',
+  mach_pullover:'Elbows on the pads. Drive them down in an arc to your sides, let them rise slowly.',
+  mach_row:'Chest on the pad. Pull the handles to your ribs, squeeze the shoulder blades, return slowly.',
+  iso_row:'Chest on the pad. Row each handle to the hip, pause, control the stretch.',
+  sa_cable_row:'Row the handle to your hip with a little rotation, then reach forward for a full stretch.',
+  cs_db_row:'Chest on an incline bench. Row both dumbbells to your ribs, squeeze, lower slowly.',
+  smith_row:'Hinge to about 45°, bar under the chest. Row to the lower ribs with a flat back.',
+  rack_pull:'Bar just below the knees. Brace, push the floor away, finish with the glutes.',
+  trap_bar_dl:'Stand in the middle, hips a little lower than a deadlift. Push the floor away and stand tall.',
+  sumo_dl:'Wide stance, toes out, hands inside the knees. Push the knees out and stand up.',
+  db_rdl:'Soft knees, push the hips back, dumbbells slide down the thighs. Stop when the hamstrings stretch.',
+  back_ext:'Hips on the pad edge. Lower with a flat back, rise until the body is straight, squeeze the glutes.',
+  back_ext_mach:'Pad across the upper back. Extend back slowly and stop when the body is straight.',
+  kb_swing:'Hinge, hike the bell back, snap the hips forward. The arms only guide it to chest height.',
+  smith_hip_thrust:'Upper back on a bench, padded bar over the hips. Drive up, squeeze for a second.',
+  glute_kick_mach:'Chest on the pad, foot on the plate. Push back and up with the glute, not the lower back.',
+  standing_leg_curl:'Pad just above the heel. Curl the heel to the glute with the hips still, lower slowly.',
+  smith_squat:'Feet slightly in front of the bar. Sit down between your heels, drive up through mid-foot.',
+  pendulum_squat:'Back flat on the pad, feet mid-platform. Sink deep under control, drive up.',
+  belt_squat:'Belt on the hips, hands on the rails. Sit straight down, chest up, stand.',
+  v_squat:'Shoulders under the pads, feet mid-platform. Lower deep, drive up without locking the knees.',
+  seated_leg_press:'Back flat on the seat, feet hip-width. Lower until the knees reach about 90°, press away.',
+  smith_split_squat:'Front foot ahead of the bar, back heel up. Drop the back knee straight down.',
+  leg_press_calf:'Balls of the feet on the platform edge. Full stretch, then press up onto the toes.',
+  smith_calf:'Toes on a plate or step, bar on the traps. Full stretch down, rise high, pause.',
+  pallof:'Side-on to the cable, handle at the chest. Press out and hold without twisting.',
+  woodchop:'Pivot the back foot and turn from the hips and trunk, arms long.',
+  knee_raise:'Back against the pad. Lift the knees to the chest and curl the pelvis up, lower slowly.',
+  rotary_torso:'Hips locked in. Turn slowly from the trunk, no momentum, control the return.',
+  dead_bug:'Lower back pressed down. Reach the opposite arm and leg out slowly, ribs down.',
+  farmers_walk:'Heavy dumbbells, stand tall, shoulders down. Walk with short, quick steps.',
+  // v3.96: cues for older entries that had none
+  assisted_dip:'Knees on the pad, shoulders down. Lower until the upper arms are level, press up. Less assist = stronger.',
+  assisted_pullup:'Knees on the pad, full hang. Pull the chest to the bar, lower slowly. Less assist = stronger.',
+  mach_hip_thrust:'Upper back on the pad, belt over the hips. Drive up through the heels, squeeze, lower slowly.',
+  short_foot:'Pull the ball of the foot toward the heel without curling the toes. Hold, relax, repeat.',
+  towel_scrunch:'Barefoot on a towel. Scrunch it toward you with the toes, flatten, repeat.',
+  arch_raise:'Stand barefoot, toes relaxed. Lift the arch without rolling the foot out, hold, lower.',
+  toe_spread:'Spread the toes as wide as you can and hold 5 seconds. Relax and repeat.',
+  heel_raise:'Rise onto the balls of the feet keeping the arch lifted, pause, lower slowly.',
+  decline_bench:'Feet locked in, bar to the lower chest. Press up and slightly back.',
+  mach_chest_press:'Seat so the handles line up with mid-chest. Press out without locking hard, return slowly.',
+  db_fly:'Soft elbows, lower wide until the chest stretches, then hug the dumbbells back up.',
+  cable_crossover:'Pulleys high, step forward. Sweep the hands down and together, squeeze the chest.',
+  mach_lat_raise:'Pads on the outside of the elbows. Raise to shoulder height, pause, lower slowly.',
+  mach_shoulder_press:'Seat so the handles start at shoulder height. Press up, ribs down, lower slowly.',
+  front_raise:'Soft elbows, raise to shoulder height in front of you, lower slowly.',
+  upright_row:'Hands shoulder width. Pull the elbows up and out to shoulder height, no higher.',
+  reverse_pec_deck:'Face the pad, handles at shoulder height. Sweep the arms back, squeeze the rear delts.',
+  seated_rear_delt:'Sit and lean over your knees. Raise the dumbbells out to the sides, elbows soft.',
+  bb_shrug:'Stand tall, shrug straight up toward the ears, hold a second, lower fully.',
+  db_shrug:'Dumbbells at your sides. Shrug straight up, hold a second, lower fully.',
+  close_grip_bench:'Hands shoulder width, elbows tucked. Lower to the lower chest, press up with the triceps.',
+  cable_tri_1arm:'Elbow pinned to your side. Extend fully, control the return.',
+  db_kickback:'Hinge forward, upper arm level with the body. Extend the elbow fully, squeeze.',
+  bench_dip:'Hands on the bench behind you. Lower until the elbows reach 90°, press up.',
+  concentration_curl:'Elbow braced on the inner thigh. Curl up, squeeze, lower all the way.',
+  spider_curl:'Chest on an incline bench, arms hanging. Curl up without moving the elbows.',
+  reverse_curl:'Palms down, elbows at your sides. Curl up slowly, lower under control.',
+  mach_curl:'Elbows on the pad in line with the pivot. Curl up, squeeze, lower slowly.',
+  zottman_curl:'Curl up palms up, turn the palms down at the top, lower slowly.',
+  chinup:'Palms facing you, full hang. Pull the chest to the bar, lower all the way.',
+  cg_lat_pull:'Close grip, lean back slightly. Pull to the upper chest, elbows down and in.',
+  straight_arm_pull:'Arms almost straight. Sweep the bar down to your thighs using the lats.',
+  elevated_row:'Sit tall, pull the handle to your upper belly, squeeze the shoulder blades.',
+  rev_grip_row:'Palms up, hinge to about 45°. Row to the belly button, keep the back flat.',
+  lying_tbar:'Chest on the pad. Row to your ribs, squeeze the shoulder blades, lower slowly.',
+  good_morning:'Bar on the upper back, soft knees. Push the hips back with a flat back, stand up.',
+  cable_pull_through:'Face away from a low pulley, rope between the legs. Hinge back, snap the hips forward.',
+  russian_twist:'Lean back, feet up or down. Turn the shoulders side to side, not just the arms.',
+  decline_crunch:'Feet locked in. Curl up rib by rib, lower slowly.',
+  sl_squat:'Stand on one leg. Sit back and down under control, drive up through the heel.',
+  sl_leg_press:'One foot mid-platform. Lower until the knee reaches about 90°, press away.',
+  reverse_lunge:'Step back, drop the back knee straight down, drive up through the front heel.',
+  sl_legext:'One leg at a time. Extend fully, pause, lower slowly.',
+  sl_rdl:'Stand on one leg, hinge forward with a flat back, the free leg reaching back.',
+  cable_kickback:'Ankle strap on. Kick straight back with the glute, hips square.',
+  sl_seated_calf:'Dumbbell on one knee. Lower the heel fully, rise high, pause.',
 };
 
 /* ── EXERCISE CUES — Traditional Chinese ── */
@@ -901,6 +1160,10 @@ const EQUIP_ALL=[
   {id:'cable',label:'Cable Machine / Functional Trainer'},{id:'machine',label:'Weight Machines (leg press, lat pulldown, etc.)'},
   {id:'pullup_bar',label:'Pull-Up Bar'},{id:'dip_bar',label:'Dip Bars / Assisted Machine'},
   {id:'kettlebell',label:'Kettlebells'},{id:'ab_wheel',label:'Ab Wheel'},
+  // v3.96
+  {id:'smith',label:'Smith Machine'},{id:'trap_bar',label:'Trap / Hex Bar'},{id:'landmine',label:'Landmine'},
+  {id:'back_ext',label:'Back Extension Bench'},{id:'band',label:'Resistance Bands'},
+  {id:'medicine_ball',label:'Medicine Ball'},{id:'stability_ball',label:'Stability Ball'},
   {id:'bodyweight',label:'Bodyweight (no equipment)'},
 ];
 // Equipment tier presets
@@ -908,10 +1171,12 @@ const EQUIP_ALL=[
 // BUDGET — No free barbell rack (Smith machine only); has DBs, EZ bar, benches, cables, machines, KB, ab wheel
 // PLANET — DBs only (no barbell/rack/EZ), limited cables, machines, ab wheel (Planet Fitness lunk-alarm policy)
 // YMCA   — DBs, benches, cables, machines, pull-up bar (most branches); no barbell rack at most GTA YMCAs
-const _F=new Set(['barbell','dumbbell','ez_bar','bench','incline_bench','rack','cable','machine','pullup_bar','dip_bar','kettlebell','ab_wheel','bodyweight']);
-const _B=new Set(['dumbbell','ez_bar','bench','incline_bench','cable','machine','kettlebell','ab_wheel','bodyweight']);
-const _P=new Set(['dumbbell','bench','incline_bench','machine','ab_wheel','bodyweight']);
-const _Y=new Set(['dumbbell','bench','incline_bench','cable','machine','pullup_bar','ab_wheel','bodyweight']);
+// v3.96: Smith machines, trap bars, landmines, back extension benches, bands and balls added
+const _F=new Set(['barbell','dumbbell','ez_bar','bench','incline_bench','rack','cable','machine','pullup_bar','dip_bar','kettlebell','ab_wheel','bodyweight',
+  'smith','trap_bar','landmine','back_ext','band','medicine_ball','stability_ball']);
+const _B=new Set(['dumbbell','ez_bar','bench','incline_bench','cable','machine','kettlebell','ab_wheel','bodyweight','smith','back_ext','band','medicine_ball','stability_ball']);
+const _P=new Set(['dumbbell','bench','incline_bench','machine','ab_wheel','bodyweight','smith','medicine_ball','stability_ball']);
+const _Y=new Set(['dumbbell','bench','incline_bench','cable','machine','pullup_bar','ab_wheel','bodyweight','smith','back_ext','band','medicine_ball','stability_ball']);
 // Each gym: chain = brand name, area = location identifier, city, equip tier
 // Displayed as: area (bold) + chain (sub)
 const GYMS_BUILTIN={
@@ -992,23 +1257,21 @@ function getActiveEquip(){
 function exAvail(id){
   const eq=getActiveEquip();
   const needed=EX_EQUIP[id]||[];
-  return needed.every(e=>eq.has(e));
+  return needed.every(e=>e==='other'||eq.has(e)); // v3.96: 'other' = library kit we can't tell, assume it's there
 }
-function filterSlot(slot,bwOnly=false){
-  if(bwOnly){
-    // Home mode: prefer bodyweight-tagged exercises
-    const bw=slot.filter(id=>EX[id]?.bw&&exAvail(id));
-    if(bw.length)return bw;
-    // No BW option in this slot — fall through to normal equipment filter
-  }
-  const filtered=slot.filter(id=>exAvail(id));
-  if(!bwOnly){
-    // Gym mode: prefer exercises that require equipment — exclude BW-only moves
-    const gym=filtered.filter(id=>!EX[id]?.bw);
-    if(gym.length)return gym;
-    // No gym option available in this slot (e.g. minimal home setup) — allow BW as fallback
-  }
-  return filtered.length>0?filtered:slot;
+// more (v3.96): the slot's SLOT_MORE options, tried only when the main list has nothing
+// usable at this gym. Before, a slot with nothing available returned the whole list, so a
+// gym without barbells still got Barbell Row. strict: nothing usable returns [] (the planner
+// then leaves the slot out) instead of the main list.
+function filterSlot(slot,bwOnly=false,more=null,strict=false){
+  const pools=more&&more.length?[slot,more]:[slot];
+  // Home mode: prefer bodyweight-tagged exercises
+  if(bwOnly)for(const p of pools){const bw=p.filter(id=>EX[id]?.bw&&exAvail(id));if(bw.length)return bw;}
+  // Gym mode: prefer exercises that need equipment, not bodyweight-only moves
+  if(!bwOnly)for(const p of pools){const gym=p.filter(id=>exAvail(id)&&!EX[id]?.bw);if(gym.length)return gym;}
+  // Nothing better: anything available (bodyweight as a fallback), else the main list
+  for(const p of pools){const f=p.filter(id=>exAvail(id));if(f.length)return f;}
+  return strict?[]:slot;
 }
 
 /* ── ICON HELPER — PNG with emoji fallback ── */
@@ -1052,10 +1315,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.95';
+const APP_VERSION='3.96';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.96',d:'65 more gym machines and exercises, and a planner that only plans what your gym has',det:'The exercise list grew from 120 to 185, all built in like the rest. Smith machine: bench, incline, shoulder press, row, squat, split squat, hip thrust and calf raise. Plate-loaded and pin-loaded machines: iso-lateral chest press, shoulder press, row and pulldown, incline and decline machine press, high row, seated row machine, pendulum squat, belt squat, V-squat, seated leg press, standing leg curl, glute kickback machine, pullover, rotary torso, back extension, machine triceps extension, seated dip and machine preacher curl. Cable and functional trainer: rope pushdown, Y-raise, rear delt fly, front raise, upright row, single-arm pulldown and row, Bayesian curl, rope hammer curl, chest press, low-to-high fly, Pallof press and woodchop. Also trap bar and sumo deadlift, rack pull, landmine press, kettlebell swing, farmers walk, and more dumbbell options for home days. Every exercise now has a form cue, and search knows gym words like Hammer Strength, Smith, hex bar or captains chair. The AI coach can plan any of them. Your usual rotation is the same: the new ones are extra options for each slot, used when your gym lacks the usual equipment and listed under Same movement slot when you swap. Fixes from a full review: (1) a gym without barbells could still be planned Barbell Row; the planner now only plans what your equipment allows. (2) Ticking a set you left blank saved it with no reps, so progress, PRs and the debrief ignored it; it now logs the suggested reps, and the suggested weight when there is one. (3) The app kept copies of intervals.icu and weather replies, so a sync could show the previous fetch; now only app files and exercise photos are kept, and the photos also show with no signal at the gym. (4) Cable Glute Kickback was listed twice. (5) Swap suggestions could offer an exercise already in that day. (6) Settings, Advanced, Diagnostics now tells you if the cloud refuses your rides.'},
   {v:'3.95',d:'Fewer, better AI moments: one weekly coach card, and the daily note only when it matters',det:'The week screen had three AI cards doing overlapping jobs: the AI Coach card, the Weekly Advisor and the Weekly Review. It now has just the AI Coach card, which already covers what is progressing, what has stalled, sets per muscle and suggestions, and it is the one that plans your week. The daily coach note (shown when you tap Fresh, Okay, Tired or Sore on a day) now only asks the AI when there is something worth saying: you are tired or sore, the day was re-planned, a lift on today\'s list has stalled for three sessions, you are back after a week or more off, or your fatigue is high. Otherwise you get the short built-in tip, with a line saying so. The "Email me this summary" button moved to the AI Coach card; it appears once the weekly email is set up in Settings → Advanced, and it now sends the coach\'s review.'},
   {v:'3.94',d:'A coach debrief after every workout and ride, and a tidier Settings',det:'When you finish a gym session (on the phone or the watch) or a ride in Ride mode, the app writes a short debrief. The facts come from your own logs, worked out with plain rules: a new best, lifts that beat last time, any lift with no progress for three sessions, and total sets and weight lifted. For rides: time, watts and heart rate, how today compares with your past rides at a similar heart rate, whether your heart rate crept up for the same watts in the second half, and time in your heart-rate zone. The coach (Gemini, with DeepSeek as backup) then puts that into a sentence or two and suggests what to aim for next time. For lifts, those targets show up on the exercise card the next time that exercise comes up, e.g. Aim for 95 lb x 11. The debrief shows on the week screen until you close it, on that day, and at the end of the ride. If the coach can not be reached you still get the facts, with a Try again link. Settings is now grouped into Gym, Bike, Watches, Account and About. The older and technical parts (AI usage, the weekly email, the Vitruvian bridge, diagnostics) are folded under Advanced at the bottom.'},
   {v:'3.93',d:'Full Body days work from the day screen again, and no more made-up weather',det:'Three fixes from a full review of the app. (1) A Full Body day showed only its title card: no exercises and no way to start logging from the day screen. The app decided whether a day is a gym day from a list that had been copied about 15 times, and half the copies were older than Full Body. That also meant a missed Full Body day was not counted as missed, was skipped when sessions moved around a ride day, and got the rest-day coach note. It is now one shared list. Full Body days matter because the app makes them itself when you miss sessions. (2) With no forecast (location off or offline), every day showed a made-up ⛅ 15°, and ride days got a red Gym day badge because the stand-in weather scored zero for riding. Even indoor rides got it. Now no weather is shown when there is none, the riding badge only appears on outdoor rides with a real forecast, and the AI is no longer told about weather that does not exist. (3) A message such as No location access was drawn on top of the weekly which-days sheet, covering its buttons. While a sheet is open, messages now appear at the top of the screen.'},
@@ -2612,8 +2876,10 @@ function _ridesPush(){
   }
   if(!Object.keys(upd).length)return;
   const prev={};for(const k in upd){prev[k]=_ridesCloud[k];if(upd[k])_ridesCloud[k]=upd[k];else delete _ridesCloud[k];}
-  _ridesRef.update(upd).catch(e=>{
+  _ridesRef.update(upd).then(()=>{if(DB.get('rides_cloud_err',null))DB.set('rides_cloud_err',null);}).catch(e=>{
     console.warn('[rides] upload failed',e);
+    // v3.96: shown in Settings > Diagnostics, so a refused upload isn't silent any more
+    try{DB.set('rides_cloud_err',{at:new Date().toISOString(),msg:String(e&&(e.code||e.message)||e).slice(0,120)});}catch(_){}
     for(const k in prev){if(prev[k])_ridesCloud[k]=prev[k];else delete _ridesCloud[k];}
   });
 }
@@ -6121,8 +6387,11 @@ function genSession(type,energy='okay',bwOnly=false,seed=''){
   const recent=DB.get('recent_ex',[]);
   const goalProfile=getActiveGoalProfile();
   const picked=[];
-  for(const candidates of slots){
-    let avail=filterSlot(candidates,bwOnly).filter(id=>!picked.includes(id));
+  for(const [si,candidates] of slots.entries()){
+    // v3.96: already-picked moves are left out first, so the slot can fall back to its extra
+    // options; a slot with nothing your equipment allows is skipped rather than planned anyway
+    const notPicked=id=>!picked.includes(id);
+    let avail=filterSlot(candidates.filter(notPicked),bwOnly,_slotMore(type,si).filter(notPicked),true);
     if(!avail.length)continue;
     // Energy filter — prefer compound when fresh, isolation when tired/sore
     if(energy==='fresh'){
@@ -6166,7 +6435,10 @@ function genSession(type,energy='okay',bwOnly=false,seed=''){
 // pool genSession draws from, exposed so the AI prompt only ever offers ids
 // you actually have equipment for.
 function _slotCandidates(type){
-  return(SLOTS[type]||[]).map(slot=>filterSlot(slot,false));
+  return(SLOTS[type]||[]).map((slot,i)=>{
+    const more=_slotMore(type,i);
+    return[...new Set([...filterSlot(slot,false,more,true),...more.filter(id=>exAvail(id)&&!EX[id]?.bw)])];
+  }).filter(c=>c.length); // v3.96: a slot this gym can't do at all isn't offered
 }
 
 function _buildExerciseGenPrompt(freshDays,candidatesByDate){
@@ -6226,7 +6498,10 @@ function _exTier(id){const e=EX[id];return !e?1:e.g==='core'?2:e.t==='C'&&(_G_RA
 // Before, slot order decided, so a push day went chest, shoulders, chest again.
 const _G_RANK={quad:1,glute:1,ham:1,vback:2,hback:2,hback_h:2,chest:2,shoulder:3,rdelt:4,sdelt:4,tri:5,bi:5,calf:6,foot:7,core:8};
 // chest presses by angle and equipment
-const CHEST_PRESS={bb_bench:['flat','bb'],db_bench:['flat','db'],pushup:['flat','bw'],incline_bb:['incline','bb'],incline_db:['incline','db'],decline_pu:['decline','bw']};
+const CHEST_PRESS={bb_bench:['flat','bb'],db_bench:['flat','db'],pushup:['flat','bw'],incline_bb:['incline','bb'],incline_db:['incline','db'],decline_pu:['decline','bw'],
+  // v3.96: machine (mc) and Smith (sm) presses count too, so two presses still never share an angle
+  mach_chest_press:['flat','mc'],iso_chest_press:['flat','mc'],cable_chest_press:['flat','mc'],smith_bench:['flat','sm'],
+  mach_incline_press:['incline','mc'],smith_incline:['incline','sm'],mach_decline_press:['decline','mc'],decline_bench:['decline','bb']};
 // Which chest angle leads today: the opposite of what led your last logged session with a
 // chest press, so flat and incline take turns getting the first-exercise strength boost
 // (Nunes et al. 2021). Logs sync, so every device agrees. No history yet: flat.
@@ -6438,7 +6713,7 @@ async function aiCoachWeek(pk,opts={}){
   const plan=DB.get(pk,null);if(!Array.isArray(plan))return false;
   const days=plan.filter(d=>d&&SLOTS[d.type]&&!_dayWasDone(d)&&!d.locked&&d.date>=todayStr&&(opts.dates?opts.dates.includes(d.date):true));
   if(!days.length)return false;
-  const avail=Object.keys(EX).filter(id=>!EX[id].x&&exAvail(id));
+  const avail=Object.keys(EX).filter(id=>!EX[id].x&&!EX[id].hide&&exAvail(id));
   S._coachBusy=true;if(opts.ui){S._coachErr=null;render();}
   try{
     const r=await _proxyFetch({method:'POST',headers:{'Content-Type':'application/json'},
@@ -6543,6 +6818,7 @@ const G_PH={
   quad:    {bg:'linear-gradient(135deg,#059669,#34d399)',i:'🦵'},
   ham:     {bg:'linear-gradient(135deg,#065f46,#059669)',i:'🦵'},
   calf:    {bg:'linear-gradient(135deg,#047857,#10b981)',i:'🦶'},
+  glute:   {bg:'linear-gradient(135deg,#065f46,#10b981)',i:'🦵'},
   core:    {bg:'linear-gradient(135deg,#b45309,#f59e0b)',i:'💪'},
   foot:    {bg:'linear-gradient(135deg,#92400e,#d97706)',i:'🦶'},
 };
@@ -6554,7 +6830,8 @@ const G_PH={
 // list; an exercise from the library joins EX (and syncs as 'ex_extra') once you use it.
 const LIB_URL='https://cdn.jsdelivr.net/gh/yuhonas/free-exercise-db@main/dist/exercises.json';
 const LIB_G={abdominals:'core',abductors:'glute',adductors:'quad',biceps:'bi',calves:'calf',chest:'chest',forearms:'bi',glutes:'glute',hamstrings:'ham',lats:'vback','lower back':'core','middle back':'hback',neck:'shoulder',quadriceps:'quad',shoulders:'shoulder',traps:'hback',triceps:'tri'};
-const LIB_EQ={barbell:['barbell'],dumbbell:['dumbbell'],cable:['cable'],machine:['machine'],kettlebells:['kettlebell'],'e-z curl bar':['ez_bar'],'body only':['bodyweight']};
+const LIB_EQ={barbell:['barbell'],dumbbell:['dumbbell'],cable:['cable'],machine:['machine'],kettlebells:['kettlebell'],'e-z curl bar':['ez_bar'],'body only':['bodyweight'],
+  bands:['band'],'medicine ball':['medicine_ball'],'exercise ball':['stability_ball'],other:['other']}; // v3.96: these used to count as bodyweight
 let _lib=null,_libP=null;
 function _libLoad(){
   if(_lib)return Promise.resolve(_lib);
@@ -6590,6 +6867,7 @@ function _exExtraMerge(){
   for(const[id,e]of Object.entries(all)){
     if(EX[id]||!e||!e.n)continue;
     const{eq,...ex}=e;EX[id]=ex;EX_EQUIP[id]=eq||[];
+    if(typeof ex.p==='string'&&Object.entries(EX).some(([k,b])=>k!==id&&!b.x&&b.p===ex.p))ex.hide=1; // v3.96: now built in
     if(typeof EX_EN_NAMES!=='undefined')EX_EN_NAMES[id]=ex.n;
     if(ex.p&&S.gifCache)S.gifCache[id]={f0:GIF_BASE+ex.p+'/0.jpg',f1:GIF_BASE+ex.p+'/1.jpg'};
   }
@@ -10897,9 +11175,13 @@ const UNILATERAL_MAP={
   bb_squat:'sl_squat',front_squat:'sl_squat',goblet_squat:'sl_squat',bw_squat:'sl_squat',jump_squat:'sl_squat',
   hack_squat:'reverse_lunge',leg_press:'sl_leg_press',
   rdl:'sl_rdl',deadlift:'sl_rdl',nordic_curl:'sl_rdl',leg_curl:'sl_rdl',seated_leg_curl:'sl_rdl',
-  hip_thrust:'cable_kickback',glute_bridge:'sl_glute_bridge',
+  hip_thrust:'glute_kick',glute_bridge:'sl_glute_bridge',
   leg_ext:'sl_legext',
-  calf_raise:'single_calf',seated_calf:'sl_seated_calf'
+  calf_raise:'single_calf',seated_calf:'sl_seated_calf',
+  // v3.96
+  smith_squat:'smith_split_squat',pendulum_squat:'reverse_lunge',belt_squat:'reverse_lunge',v_squat:'reverse_lunge',
+  seated_leg_press:'sl_leg_press',trap_bar_dl:'sl_rdl',sumo_dl:'sl_rdl',db_rdl:'sl_rdl',rack_pull:'sl_rdl',
+  mach_hip_thrust:'glute_kick',smith_hip_thrust:'glute_kick',leg_press_calf:'single_calf',smith_calf:'single_calf'
 };
 
 // Maps a function name + args to a human-readable summary for the confirmation
@@ -11261,7 +11543,14 @@ const COACH_TOOL_HANDLERS={
 // Bare common names → the lift people mean. Without these, "bench" resolved to
 // Bench Dip (shortest name containing the word) once v3.23 added it, so "log my
 // bench 100 lb" logged the wrong exercise. Keys are singular (see _exSing). v3.31.
-const _EX_ALIASES={'bench':'bb_bench','bench press':'bb_bench','squat':'bb_squat','back squat':'bb_squat','deadlift':'deadlift','dip':'dips','row':'bb_row','curl':'bb_curl','bicep curl':'bb_curl','push up':'pushup','pushup':'pushup','chin up':'chinup','chinup':'chinup','pull up':'pullup','pullup':'pullup','calf raise':'calf_raise','hamstring curl':'leg_curl'};
+const _EX_ALIASES={'bench':'bb_bench','bench press':'bb_bench','squat':'bb_squat','back squat':'bb_squat','deadlift':'deadlift','dip':'dips','row':'bb_row','curl':'bb_curl','bicep curl':'bb_curl','push up':'pushup','pushup':'pushup','chin up':'chinup','chinup':'chinup','pull up':'pullup','pullup':'pullup','calf raise':'calf_raise','hamstring curl':'leg_curl',
+  // v3.96: common gym shorthand
+  'leg curl':'leg_curl','leg extension':'leg_ext','pec fly':'pec_deck','butterfly':'pec_deck','chest press':'mach_chest_press',
+  'chest press machine':'mach_chest_press','shoulder press machine':'mach_shoulder_press','seated row':'cable_row','pulldown':'lat_pull',
+  'pull down':'lat_pull','lat pull down':'lat_pull','reverse fly':'reverse_pec_deck','hip abduction':'abductor_mach','hip adduction':'adductor_mach',
+  'hyperextension':'back_ext','hex bar deadlift':'trap_bar_dl','calf press':'leg_press_calf','skull crusher':'skull','smith squat':'smith_squat',
+  'smith bench':'smith_bench','smith bench press':'smith_bench','chest supported row':'mach_row','rope tricep pushdown':'rope_pushdown',
+  'tricep rope pushdown':'rope_pushdown','captain chair':'knee_raise','captain s chair':'knee_raise'};
 const _exSing=w=>w.length>=3&&w.endsWith('s')&&!w.endsWith('ss')?w.slice(0,-1):w; // "ups"→"up", "press" stays
 // pool (v3.31): match only among these ids first, e.g. the exercises already on a day,
 // so "drop lateral raises" finds the cable version the day actually has.
@@ -11274,7 +11563,7 @@ function _matchExerciseByName(name,pool){
   let best=null,bestScore=0;
   const aliasId=_EX_ALIASES[words.map(_exSing).join(' ')];
   if(aliasId&&EX[aliasId]&&(!pool||pool.includes(aliasId)))return aliasId;
-  const entries=pool?pool.filter(id=>EX[id]).map(id=>[id,EX[id]]):Object.entries(EX);
+  const entries=pool?pool.filter(id=>EX[id]).map(id=>[id,EX[id]]):Object.entries(EX).filter(([,e])=>!e.hide);
   for(const [id,ex] of entries){
     const exName=norm(ex.n);
     let score;
@@ -11961,7 +12250,7 @@ function startLog(ds,extra){
   const logType=extra?dp.extraGym?.type:dp.type;
   const logExIds=extra?dp.extraGym?.exercises:dp.exercises;
   if(!logType||!logExIds)return;
-  const lk=extra?('extralog_'+ds):DB.lk(S.viewDate);
+  const lk=extra?('extralog_'+ds):'log_'+ds; // v3.96: the day asked for, not whatever S.viewDate is
   let log=DB.get(lk,null);
   if(!log){
     log=_freshLog(ds,logType,logExIds,S.energy);
@@ -12258,12 +12547,27 @@ function updSet(ei,si,field,val){
   debouncedSync();
 }
 
+// v3.96: ticking a set you left blank used to save a set with no weight or reps, which
+// progress, PRs and the debrief all ignore (common on an exercise you've never done). Now it
+// logs what the screen suggested: the low end of the rep range, plus the suggested weight
+// when there is one. Typed values are never touched.
+function _fillTickedSet(le,set){
+  if(!set||!set.done||String(set.r==null?'':set.r).trim())return false;
+  let t={};try{t=energyTargets(le.id,S.energy||'okay')||{};}catch(_){}
+  const r=parseInt((String(t.reps||(EX[le.id]||{}).reps||'').match(/\d+/)||[])[0]);
+  if(!(r>0))return false;
+  set.r=String(r);
+  const w=parseFloat(t.sugW);
+  if(!String(set.w==null?'':set.w).trim()&&w>0&&!(EX[le.id]||{}).bw){set.w=_fmtW(w);set.u=unit();}
+  return true;
+}
 function togSet(ei,si){
   if(!S.activeLog)return;
   if(guestLogBlock())return;
   const le=S.activeLog.exercises[ei];
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
+  _fillTickedSet(le,set);
   _saveLog();
   if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r),_leMach(le));
   debouncedSync();
@@ -14383,7 +14687,7 @@ ${rFriendsSection()}
 
 ${(()=>{
   const st=getAIUsageStats();
-  const typeLabels={'coach_gym':'🏋️ Daily note (gym)','coach_ride':'🚴 Daily note (ride)','coach_week':'🧠 AI Coach week plan','debrief':'📝 Debriefs','week_exercise_gen':'🏋️ Exercise picks','next_week_plan':'📅 Next-week plan','weekly_advisor':'🧠 Weekly Advisor (old)','weekly_review':'📋 Weekly Review (old)'};
+  const typeLabels={'coach_gym':'🏋️ Daily note (gym)','coach_ride':'🚴 Daily note (ride)','coach_week':'🧠 AI Coach week plan','debrief':'📝 Debriefs','week_exercise_gen':'🏋️ Exercise picks','next_week_plan':'📅 Next-week plan','ask_coach':'💬 Ask Coach','weekly_advisor':'🧠 Weekly Advisor (old)','weekly_review':'📋 Weekly Review (old)'};
   const maxBar=Math.max(...st.days.map(d=>d.n),1);
   const quotaLimit=1500;
   const quotaPct=Math.min(100,Math.round(st.todayCount/quotaLimit*100));
@@ -14478,6 +14782,10 @@ ${(()=>{
 })()}
 
 <div class="sec-hdr">🔬 Diagnostics</div>
+${(()=>{const e=DB.get('rides_cloud_err',null);return e?`<div class="card" style="border-color:var(--amb)">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">⚠️ Rides aren't saving to your account</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6">The cloud refused the last ride upload (${_esc(e.msg)}, ${_esc(new Date(e.at).toLocaleString())}). This usually means the Firebase database rules don't allow the rides list yet: deploy database.rules.json from the repo. Rides still reach this phone from intervals.icu.</div>
+</div>`:'';})()}
 <div class="card">
   <div style="font-size:13px;font-weight:700;margin-bottom:6px">Inspect intervals.icu data</div>
   <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Shows the raw data intervals.icu holds for your newest strength session and newest ride. Read-only — it changes nothing. Use it to check whether your Garmin sends per-set reps and weight, and how indoor rides are labelled.</div>
@@ -15042,12 +15350,14 @@ function showActInfo(k){
 
 function getAlternatives(exId,type){
   const slots=SLOTS[type]||[];
-  let slotAlts=[];
-  for(const slot of slots){if(slot.includes(exId)){slotAlts=slot.filter(id=>id!==exId);break;}}
   const pk=DB.pk(S.weekStart);
   const plan=DB.get(pk,null);
   const ds=S.viewDate?fd(S.viewDate):null;
   const currentExs=plan?.find(d=>d.date===ds)?.exercises||[];
+  // v3.96: the slot's extra options (machines, Smith, cables) too, minus what today already has
+  let slotAlts=[];
+  for(let i=0;i<slots.length;i++){const pool=[...slots[i],..._slotMore(type,i)];
+    if(pool.includes(exId)){slotAlts=[...new Set(pool)].filter(id=>id!==exId&&EX[id]&&!EX[id].hide&&!currentExs.includes(id));break;}}
   const ex=EX[exId];
   // v2.79: only suggest exercises the user's selected gym actually has equipment
   // for. If filtering a section empties it (e.g. minimal home gym), fall back to
@@ -15055,11 +15365,11 @@ function getAlternatives(exId,type){
   const avail=id=>exAvail(id);
   const slotAltsF=slotAlts.filter(avail); slotAlts=slotAltsF.length?slotAltsF:slotAlts;
   let sameGroup=Object.entries(EX)
-    .filter(([id,e])=>id!==exId&&e.g===ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id)&&exAvail(id))
+    .filter(([id,e])=>id!==exId&&e.g===ex.g&&!e.hide&&!currentExs.includes(id)&&!slotAlts.includes(id)&&exAvail(id))
     .map(([id])=>id);
   // broader same-category (adjacent muscle groups)
   let broader=Object.entries(EX)
-    .filter(([id,e])=>id!==exId&&e.g!==ex.g&&!currentExs.includes(id)&&!slotAlts.includes(id)&&!sameGroup.includes(id)&&exAvail(id)&&ex.m.split(' · ').some(m=>e.m.includes(m.split(' ')[0])))
+    .filter(([id,e])=>id!==exId&&e.g!==ex.g&&!e.hide&&!currentExs.includes(id)&&!slotAlts.includes(id)&&!sameGroup.includes(id)&&exAvail(id)&&(ex.m||'').split(' · ').some(m=>(e.m||'').includes(m.split(' ')[0])))
     .map(([id])=>id).slice(0,3);
   return{slotAlts,sameGroup,broader};
 }
@@ -15073,7 +15383,7 @@ function openExSwap(exId,exIdx,ds,type){
   function section(title,ids){return ids.length?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">${title}</div>${ids.map(altBtn).join('')}`:''}
   const suggestions=`
     ${section('Same movement slot',slotAlts)}
-    ${section('Same muscle group',sameGroup.slice(0,4))}
+    ${section('Same muscle group',sameGroup.slice(0,6))}
     ${section('Related muscles',broader)}
     ${(!slotAlts.length&&!sameGroup.length&&!broader.length)?'<p style="color:var(--t2);font-size:13px;padding:10px 0">No alternatives found.</p>':''}`;
   const modal=document.createElement('div');
@@ -15102,19 +15412,16 @@ function filterSwap(exId,exIdx,ds,type,query){
     function altBtn(id){const e=EX[id];if(!e)return'';
       return`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps · RPE ${e.rpe}</span></button>`;}
     function section(title,ids){return ids.length?`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">${title}</div>${ids.map(altBtn).join('')}`:''}
-    results.innerHTML=section('Same movement slot',slotAlts)+section('Same muscle group',sameGroup.slice(0,4))+section('Related muscles',broader);
+    results.innerHTML=section('Same movement slot',slotAlts)+section('Same muscle group',sameGroup.slice(0,6))+section('Related muscles',broader);
     return;
   }
-  _swapResults(q);return;
-  const matches=[];
-  results.innerHTML=`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">Search results</div>`+
-    matches.map(([id,e])=>`<button class="swap-opt" onclick="doExSwap('${exId}',${exIdx},'${ds}','${type}','${id}')">${e.n}<span>${e.m} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps · RPE ${e.rpe}</span></button>`).join('');
+  _swapResults(q);
 }
 
 // v3.77: muscle and equipment filters, and results from the whole library.
 const SWAP_G=[['','All'],['chest','Chest'],['back','Back'],['shoulder','Shoulders'],['arms','Arms'],['legs','Legs'],['core','Core']];
 const SWAP_GSET={chest:['chest'],back:['vback','hback'],shoulder:['shoulder','rdelt','sdelt'],arms:['bi','tri'],legs:['quad','ham','glute','calf','foot'],core:['core']};
-const SWAP_EQ=[['gym','My gym'],['any','Any equipment'],['bodyweight','Bodyweight'],['dumbbell','Dumbbells'],['barbell','Barbell'],['cable','Cable'],['machine','Machine'],['kettlebell','Kettlebell']];
+const SWAP_EQ=[['gym','My gym'],['any','Any equipment'],['bodyweight','Bodyweight'],['dumbbell','Dumbbells'],['barbell','Barbell'],['cable','Cable'],['machine','Machine'],['smith','Smith machine'],['kettlebell','Kettlebell'],['ez_bar','EZ bar'],['band','Bands']];
 function _swapFiltersHtml(){
   const f=S.swapF||{g:'',eq:'gym'};
   const chip=(on,l,a)=>`<button onclick="${a}" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:999px;color:${on?'#fff':'var(--txt)'};font-size:12px;font-weight:700;padding:5px 10px;cursor:pointer;flex-shrink:0">${l}</button>`;
@@ -15130,7 +15437,7 @@ function _swapSetF(k,v){
 function _swapEqOk(eqList){
   const f=(S.swapF||{}).eq||'gym';
   if(f==='any')return true;
-  if(f==='gym'){const have=getActiveEquip();return(eqList||[]).every(e=>have.has(e));}
+  if(f==='gym'){const have=getActiveEquip();return(eqList||[]).every(e=>e==='other'||have.has(e));}
   if(f==='bodyweight')return!(eqList||[]).length||(eqList||[]).every(e=>e==='bodyweight');
   return(eqList||[]).includes(f);
 }
@@ -15139,7 +15446,7 @@ function _swapResults(q){
   const c=S.swapCtx||{},f=S.swapF||{g:'',eq:'gym'},gs=f.g?SWAP_GSET[f.g]:null;
   const words=q.toLowerCase().split(/\s+/).filter(Boolean).map(w=>w.replace(/^dumbbells?$/,'db'));
   const hit=(n,m,g)=>{const t=(n+' '+m+' '+g).toLowerCase().replace(/\bdumbbells?\b/g,'db');return words.every(w=>t.includes(w));};
-  const cur=Object.entries(EX).filter(([id,e])=>id!==c.exId&&(!gs||gs.includes(e.g))&&_swapEqOk(EX_EQUIP[id])&&hit(e.n,e.m||'',e.g));
+  const cur=Object.entries(EX).filter(([id,e])=>id!==c.exId&&!e.hide&&(!gs||gs.includes(e.g))&&_swapEqOk(EX_EQUIP[id])&&hit(e.n,(e.m||'')+' '+(e.k||''),e.g));
   const btn=(id,e,tag)=>`<button class="swap-opt" onclick="_swapPick('${id}')">${_esc(e.n)}${tag?` <span style="font-size:10px;color:var(--al);font-weight:700">${tag}</span>`:''}<span>${_esc(e.m||'')} · ${e.t==='C'?'Compound':'Isolation'} · ${e.reps} reps</span></button>`;
   const hdr=t=>`<div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.8px;margin:10px 0 6px">${t}</div>`;
   let html=cur.length?hdr('Your exercises')+cur.slice(0,25).map(([id,e])=>btn(id,e)).join(''):'';
@@ -15273,6 +15580,7 @@ function exLogTog(ei,si){
   const le=S.activeLog.exercises[ei];
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
+  _fillTickedSet(le,set);
   _saveLog();
   if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r),_leMach(le));
   debouncedSync();
