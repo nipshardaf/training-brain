@@ -55,6 +55,13 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 /* v3.51 Ride screen: big tiles in portrait; on a phone on its side the numbers go across the top and the controls into a column on the right */
 /* v3.93: a toast over an open bottom sheet covered its buttons; move it to the top */
 body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!important;bottom:auto!important}
+.set-grp{font-size:15px;font-weight:800;color:var(--txt);margin:28px 4px 0;padding-top:16px;border-top:1px solid var(--bord)}
+.set-grp.first{margin-top:14px;padding-top:0;border-top:none}
+.set-adv{margin:28px 0 10px;border:1px solid var(--bord);border-radius:14px;background:var(--s1);padding:0 12px}
+.set-adv>summary{cursor:pointer;list-style:none;display:flex;flex-direction:column;gap:2px;padding:13px 2px;font-size:14px;font-weight:800;color:var(--txt)}
+.set-adv>summary::-webkit-details-marker{display:none}
+.set-adv-sub{font-size:11px;font-weight:600;color:var(--t2)}
+.set-adv[open]{padding-bottom:6px}
 .rd-a{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .rd-b{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .rd-t{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
@@ -1045,10 +1052,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.93';
+const APP_VERSION='3.94';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.94',d:'A coach debrief after every workout and ride, and a tidier Settings',det:'When you finish a gym session (on the phone or the watch) or a ride in Ride mode, the app writes a short debrief. The facts come from your own logs, worked out with plain rules: a new best, lifts that beat last time, any lift with no progress for three sessions, and total sets and weight lifted. For rides: time, watts and heart rate, how today compares with your past rides at a similar heart rate, whether your heart rate crept up for the same watts in the second half, and time in your heart-rate zone. The coach (Gemini, with DeepSeek as backup) then puts that into a sentence or two and suggests what to aim for next time. For lifts, those targets show up on the exercise card the next time that exercise comes up, e.g. Aim for 95 lb x 11. The debrief shows on the week screen until you close it, on that day, and at the end of the ride. If the coach can not be reached you still get the facts, with a Try again link. Settings is now grouped into Gym, Bike, Watches, Account and About. The older and technical parts (AI usage, the weekly email, the Vitruvian bridge, diagnostics) are folded under Advanced at the bottom.'},
   {v:'3.93',d:'Full Body days work from the day screen again, and no more made-up weather',det:'Three fixes from a full review of the app. (1) A Full Body day showed only its title card: no exercises and no way to start logging from the day screen. The app decided whether a day is a gym day from a list that had been copied about 15 times, and half the copies were older than Full Body. That also meant a missed Full Body day was not counted as missed, was skipped when sessions moved around a ride day, and got the rest-day coach note. It is now one shared list. Full Body days matter because the app makes them itself when you miss sessions. (2) With no forecast (location off or offline), every day showed a made-up ⛅ 15°, and ride days got a red Gym day badge because the stand-in weather scored zero for riding. Even indoor rides got it. Now no weather is shown when there is none, the riding badge only appears on outdoor rides with a real forecast, and the AI is no longer told about weather that does not exist. (3) A message such as No location access was drawn on top of the weekly which-days sheet, covering its buttons. While a sheet is open, messages now appear at the top of the screen.'},
   {v:'3.92',d:'Ride screen walks you through it: connect, pick, start',det:'Opening Ride used to show everything at once before you had done anything: connect buttons, the workout picker, a dashboard full of dashes, a resistance control that did nothing yet, and a Start button that would start without a bike. Now it reads as three steps. 1 Connect your bike (heart rate is optional), 2 What are you riding, then a button that says what it starts, like Start Brisk Ride 60 min. Until the bike is connected that button connects it instead, and the dashboard and resistance controls stay hidden. Once connected they appear, so you can spin and check the numbers before starting. You can still start without the bike from the small link under the button.'},
   {v:'3.91',d:'Ride screen suggests a workout for today, even on days with no ride planned',det:'Opening Ride on a gym or rest day used to land on a bare Free ride, with the real workouts hidden under Pick a different workout. The cycling plan only chose workouts for the days it had marked as ride days. Now the Ride screen opens on a Suggested workout for today, using the same rules as your weekly plan: your goal, which hard session you have gone longest without, how tired you are, legs yesterday, today or tomorrow, and recovery weeks. It also looks at the rest of your week. If you already did your hard session, or your planned hard day is coming up, it suggests an easy ride and tells you why, so an extra ride does not steal from it or stack two hard days. Under the suggestion are one or two alternatives (keep it easy, or a harder one if you feel fresh), each with a one-line reason. The full list is still there as All 8 workouts. The Ride with my bike button on the week screen now shows the workout it will open with. None of this is AI: the bike workouts come from the app\'s own training rules. The AI coach only plans your gym exercises.'},
@@ -4232,6 +4240,7 @@ async function watchImportSets(manual=false){
       const res=_watchApplyNote(n);
       if(!res)continue;
       if(!res.already)changed=true;
+      if(res.final&&!res.already)setTimeout(()=>_gymDebrief(res.ds),2500); // v3.94: watch sessions get a debrief too
       res.unknown.forEach(x=>unknown.add(x));
       added+=res.added;
       if(res.added)days.add(res.ds);
@@ -5107,7 +5116,7 @@ let _pinBuf='';
 const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
-const SYNC_KEYS=['prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+const SYNC_KEYS=['ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
   'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
@@ -8657,6 +8666,7 @@ async function rideFinish(){
   Ride.state='done';Ride.changeOpen=false;
   try{Ride.learned=_rideLearnZones();}catch(e){console.warn('[zone learn]',e);}
   try{Ride.levelNote=_bikeAfterRide();}catch(e){console.warn('[bike level]',e);}
+  _rideDebrief(); // v3.94: runs alongside the save, fills in when the coach answers
   _bikeSend(0,0x40,[0,5]);
   if(Ride.deposit)rideKnob();
   try{if(Ride.wake)Ride.wake.release();}catch(_){}
@@ -9349,7 +9359,8 @@ function _rideDraw(){
     <div style="font-size:12px;color:var(--t2);margin:2px 0 8px">${_esc(ln.why)}.${ln.feel==null?' How did it feel?':' Thanks — noted for next time.'}</div>
     ${ln.feel==null?`<div style="display:flex;gap:6px">${[[0.5,'😴 Too easy'],[0,'👌 About right'],[-1,'🥵 Too hard']].map(([n,t])=>`<button class="btn btn-s" style="flex:1;margin:0;font-size:12px;padding:8px 4px" onclick="rideFeel(${n})">${t}</button>`).join('')}</div>`:''}
   </div>`:'';
-  put('rd-after',lostHtml+trHtml+lzHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
+  const dbHtml=Ride.state==='done'&&Ride.start?(()=>{const m=DB.get('ride_debriefs',{})||{},id=new Date(Ride.start).toISOString();return m[id]?_debriefCard('ride',id,m[id]):'';})():'';
+  put('rd-after',lostHtml+trHtml+dbHtml+lzHtml+lvHtml+(gp?`<div style="background:var(--s1);border:1px solid var(--acc);border-radius:14px;padding:11px 12px;margin-bottom:10px">
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
     <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
@@ -9386,6 +9397,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rGymDaysBar(plan)}
+${+S.weekStart===+getMon(new Date())?_weekDebriefs():''}
 ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
 ${rAskCoach()}
 ${rRideOnGymDayBanner()}
@@ -9556,6 +9568,7 @@ function rDay(){
   ${isRide&&/OUTDOOR/.test(dp.type)&&!_wxFake(w)?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
   ${DB.get('home_day_'+ds,false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 At home today</div>`:''}
 </div>
+${_dayDebriefs(ds)}
 ${rideAlongsideAck?(()=>{
   const a=rideAlongsideAck;
   const km=+((a.distance||0)/1000).toFixed(1);
@@ -9713,6 +9726,7 @@ function rExList(dp,log,opts){
     ${doneSets>0?`<span class="bdg" style="background:rgba(16,185,129,.15);color:var(--grn)">${doneSets===totalSets?'✓ Done':doneSets+'/'+totalSets+' done'}</span>`:''}
   </div>
   ${dp.exPlan&&dp.exPlan[id]?`<div style="font-size:12px;line-height:1.5;margin-top:7px;padding:7px 10px;background:rgba(124,58,237,.1);border-radius:9px;border-left:2px solid var(--acc)">🧠 <b>${dp.exPlan[id].sets} × ${_esc(dp.exPlan[id].reps)}</b>${dp.exPlan[id].note?' · '+_esc(dp.exPlan[id].note):''}</div>`:''}
+  ${_dbNextHtml(id,dp.date)}
   ${_mmHtml(id)}
   ${EX_CUES[id]?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:7px;padding:7px 10px;background:var(--s2);border-radius:9px;border-left:2px solid var(--acc)">💡 ${EX_CUES[id]}</div>`:''}
   <div style="display:flex;gap:7px;margin-top:9px">
@@ -12403,6 +12417,8 @@ function completeWk(){
   if(!S.activeLog)return;
   S.activeLog.completed=true;
   _saveLog();
+  const _dbKey=S.activeLogKey; // v3.94: debrief this session once it's saved
+  setTimeout(()=>{if(_dbKey)_gymDebrief(_dbKey);},300);
   const ids=S.activeLog.exercises.map(e=>e.id);
   const recent=DB.get('recent_ex',[]);
   DB.set('recent_ex',[...new Set([...ids,...recent])].slice(0,40));
@@ -12412,6 +12428,198 @@ function completeWk(){
   S.activeLog=null;S.activeLogKey=null;
   go('week',{_dir:'back'});
   showToast('✓ Workout logged','var(--grn)');
+}
+
+/* ── DEBRIEFS (v3.94) ─────────────────────────────────────────────────────────
+   After a gym session or a Ride-mode ride: the app works out the facts with plain
+   rules (what improved, what has stalled, heart-rate drift, today against your
+   usual watts), and the AI only puts them into words and suggests next time.
+   Facts always show; the AI note is added when it answers (signed in, online).
+   Gym debriefs live on the log (log.debrief, synced with it); ride debriefs in the
+   synced map ride_debriefs; next-time targets in synced debrief_next {exId:…}. */
+const _e1=(w,r)=>{w=parseFloat(w);r=parseInt(r);return w>0&&r>0?w*(1+r/30):0;};
+function _dbScore(id,s){const w=parseFloat(s.w),r=parseInt(s.r);if(!(r>0))return 0;
+  // assisted machines: less help = stronger
+  return EX[id]&&EX[id].assist?1000-(w||0)+r*0.5:_e1(w,r);}
+function _dbBest(id,sets){let b=null;for(const s of sets||[])if(s&&s.done){const e=_dbScore(id,s);if(e&&(!b||e>b.e))b={w:s.w,r:s.r,e};}return b;}
+function _dbHist(id,before,mach,n){
+  const ks=[];
+  for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(/^(extra)?log_\d{4}-\d{2}-\d{2}$/.test(k)&&k.slice(-10)<before)ks.push(k);}
+  ks.sort((a,b)=>b.slice(-10).localeCompare(a.slice(-10)));
+  const out=[];
+  for(const k of ks){const le=(DB.get(k,null)?.exercises||[]).find(e=>e.id===id&&(e.mach||'')===(mach||''));
+    const b=le&&_dbBest(id,le.sets);if(b)out.push({date:k.slice(-10),...b});if(out.length>=n)break;}
+  return out;
+}
+const _dbSet=b=>b?`${b.w||0}×${b.r}`:'';
+function _gymDebriefFacts(key){
+  const lg=DB.get(key,null);if(!lg)return null;
+  const ds=key.slice(-10),u=unit(),prs=DB.get('prs',{})||{};
+  const ex=[];
+  for(const le of lg.exercises||[]){
+    const done=(le.sets||[]).filter(x=>x&&x.done&&parseInt(x.r)>0);if(!done.length)continue;
+    const b=_dbBest(le.id,done),prev=_dbHist(le.id,ds,le.mach,3),p0=prev[0];
+    const trend=!p0?'new':b.e>p0.e*1.005?'up':b.e<p0.e*0.97?'down':'same';
+    const stalled=prev.length>=2&&Math.max(b.e,p0.e)<=prev[1].e+0.01;
+    ex.push({id:le.id,name:(EX[le.id]&&EX[le.id].n)||le.id,mach:le.mach||'',assist:!!(EX[le.id]&&EX[le.id].assist),
+      sets:done.map(x=>`${x.w||0}×${x.r}`).join(', '),best:_dbSet(b),prev:prev.map(p=>`${p.date.slice(5)} ${_dbSet(p)}`),
+      last:p0?_dbSet(p0):'',trend,stalled,pr:!!(prs[le.id]&&prs[le.id].date===ds)});
+  }
+  if(!ex.length)return null;
+  const vol=Math.round((lg.exercises||[]).reduce((a,le)=>a+(le.sets||[]).filter(x=>x.done).reduce((b,x)=>b+(parseFloat(x.w)||0)*(parseInt(x.r)||0),0),0));
+  return{ds,type:lg.type||'',unit:u,ex,sets:ex.reduce((a,e)=>a+e.sets.split(',').length,0),vol};
+}
+function _gymDebriefPrompt(f){
+  const prof=DB.get('user_profile',{})||{},goals=(prof.goals||[]).join(', ')||'general fitness';
+  const rodeY=(DB.get('strava_activities',[])||[]).some(a=>(a.start_date_local||'').slice(0,10)===fd(addDays(new Date(f.ds+'T12:00:00'),-1)));
+  return`You are a strength coach writing a short debrief right after a gym session. Plain English, no jargon, no emojis, warm but direct. Use ONLY the numbers given. Weights are in ${f.unit}.
+Return JSON only: {"headline":"one sentence on how the session went","notes":["1 to 3 short sentences"],"next":[{"id":"<exercise id from the list>","target":"<weight> ${f.unit} x <reps>","why":"under 12 words"}]}
+- notes: name one clear win if there is one; for a stalled lift give one concrete fix (add a rep before adding weight, an extra set, or a lighter week); keep it short.
+- next: 2 to 4 exercises from the list, the target for the next time that exercise comes up. Small steps: +1 rep, or +2.5 to 5 ${f.unit} once the reps are there; never more than 5% heavier. For assisted machines LESS weight is progress.
+Goals: ${goals}. ${rodeY?'Rode the bike yesterday.':''}
+Session ${f.ds} (${f.type}), ${f.sets} working sets.
+Exercises (id | name | today's sets | best set | previous best sets, newest first | trend | stalled | new PR):
+${f.ex.map(e=>`${e.id} | ${e.name}${e.mach?' ('+e.mach+')':''}${e.assist?' [assisted]':''} | ${e.sets} | ${e.best} | ${e.prev.join('; ')||'first time'} | ${e.trend} | ${e.stalled?'yes':'no'} | ${e.pr?'yes':'no'}`).join('\n')}`;
+}
+function _rideDebriefFacts(){
+  const x=Ride.samples||[];if(x.length<300)return null;
+  const avg=a=>a.length?a.reduce((p,c)=>p+c,0)/a.length:0,st=_rideStats();
+  const blocks=[];for(let i=0;i<x.length;i+=300){const b=x.slice(i,i+300);const h=b.map(v=>v[4]).filter(v=>v>0);
+    blocks.push(`${Math.round(i/60)}-${Math.round((i+b.length)/60)} min: ${Math.round(avg(b.map(v=>v[1])))} W, HR ${h.length?Math.round(avg(h)):'-'}, ${Math.round(avg(b.map(v=>v[2]).filter(v=>v>0)))} rpm`);}
+  // heart-rate drift at the same watts: first half vs second half after a 10-min settle
+  let drift=null;const y=x.slice(600).filter(v=>v[1]>0&&v[4]>0);
+  if(y.length>=1200){const m=y.length>>1,r=a=>avg(a.map(v=>v[1]))/avg(a.map(v=>v[4]));const r1=r(y.slice(0,m)),r2=r(y.slice(m));drift=Math.round((r1-r2)/r1*1000)/10;}
+  const today=fd(new Date(Ride.start||Date.now()));
+  const sim=(DB.get('strava_activities',[])||[]).filter(a=>{const d=(a.start_date_local||'').slice(0,10);
+    return d<today&&d>=fd(addDays(new Date(),-60))&&a.average_watts>0&&a.average_heartrate&&st.avgHr&&Math.abs(a.average_heartrate-st.avgHr)<=5&&(a.moving_time||0)>=900;})
+    .map(a=>a.average_watts).sort((a,b)=>a-b);
+  const usual=sim.length>=2?Math.round(sim[sim.length>>1]):null;
+  const g=Ride.goal&&Ride.goal.type==='hr'?Ride.goal:null;
+  const inBand=g?Math.round(x.filter(v=>v[4]>=g.lo&&v[4]<=g.hi).length/x.length*100):null;
+  const ln=Ride.levelNote,ctl=(Ride.dbg||[]).some(r=>Array.isArray(r)&&r[6]);
+  return{start:new Date(Ride.start).toISOString(),date:today,name:Ride.name,mins:Math.round(st.secs/60),avgW:st.avgW,maxW:st.maxW,avgHr:st.avgHr,
+    maxHr:Math.max(0,...x.map(v=>v[4]||0)),cad:st.avgCad,kcal:st.kcal,blocks,drift,usual,usualN:sim.length,
+    band:g?`${g.lo}-${g.hi}`:null,inBand,auto:!!Ride.auto,ftp:_rideFtp()||null,lthr:_rideLthr()||null,
+    level:ln?`${BIKE_CATS[ln.cat].name} level ${ln.from} -> ${ln.to} (${ln.why})`:null,ctlTrouble:ctl};
+}
+function _rideDebriefPrompt(f){
+  return`You are a cycling coach writing a short debrief right after an indoor ride on a smart bike. Plain English, no jargon (say "heart rate crept up" not "decoupling"), no emojis. Use ONLY the numbers given.
+Return JSON only: {"headline":"one sentence on how the ride went","notes":["1 to 3 short sentences"],"next":"one sentence: what to do on the next ride"}
+Ride: ${f.name}, ${f.mins} min, average ${f.avgW} W (max ${f.maxW}), heart rate average ${f.avgHr||'-'} max ${f.maxHr||'-'}, cadence ${f.cad} rpm, ${f.kcal} kcal.
+${f.band?`Heart-rate goal ${f.band} bpm, in the band ${f.inBand}% of the time. `:''}${f.auto?'Auto resistance was on. ':''}${f.ftp?`FTP ${f.ftp} W. `:''}${f.lthr?`Threshold heart rate ${f.lthr}. `:''}
+${f.drift!=null?`Heart rate vs power, second half against first half: ${f.drift>0?'heart rate higher for the same watts by':'heart rate lower for the same watts by'} ${Math.abs(f.drift)}% (over 5% means tiring, too warm, or under-fuelled; under 3% is steady).`:''}
+${f.usual?`Previous ${f.usualN} rides at a similar average heart rate averaged ${f.usual} W (today ${f.avgW} W).`:''}
+${f.level?`Workout level: ${f.level}.`:''}${f.ctlTrouble?' The bike did not always follow the app\'s resistance.':''}
+Five-minute blocks:
+${f.blocks.join('\n')}`;
+}
+async function _debriefAsk(prompt){
+  if(S.guest||!S.fbUser)return{err:'Sign in to get the coach\'s note.'};
+  try{
+    const r=await _proxyFetch({method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({contents:[{parts:[{text:prompt}]}],generationConfig:{maxOutputTokens:900,temperature:0.5,responseMimeType:'application/json',thinkingConfig:{thinkingBudget:0}}})});
+    trackAICall('debrief',r.ok);
+    if(!r.ok)return{err:'The coach didn\'t answer ('+r.status+').'};
+    const j=await r.json(),o=_coachParse(j.candidates?.[0]?.content?.parts?.[0]?.text);
+    if(!o||!o.headline)return{err:'The coach\'s answer couldn\'t be read.'};
+    return{ai:o};
+  }catch(e){return{err:'The coach couldn\'t be reached.'};}
+}
+const _dbClip=(t,n)=>String(t==null?'':t).replace(/\s+/g,' ').trim().slice(0,n||220);
+function _dbCleanGym(o,f){
+  const ids=new Set(f.ex.map(e=>e.id));
+  return{headline:_dbClip(o.headline),notes:(Array.isArray(o.notes)?o.notes:[]).slice(0,3).map(t=>_dbClip(t)).filter(Boolean),
+    next:(Array.isArray(o.next)?o.next:[]).filter(n=>n&&ids.has(n.id)&&n.target).slice(0,4).map(n=>({id:n.id,target:_dbClip(n.target,40),why:_dbClip(n.why,90)}))};
+}
+function _gymLogKeyFor(ds){
+  const has=k=>(DB.get(k,null)?.exercises||[]).some(e=>(e.sets||[]).some(x=>x&&x.done));
+  return has('log_'+ds)?'log_'+ds:has('extralog_'+ds)?'extralog_'+ds:null;
+}
+async function _gymDebrief(dsOrKey){
+  const key=/^(extra)?log_/.test(dsOrKey)?dsOrKey:_gymLogKeyFor(dsOrKey);if(!key)return;
+  const f=_gymDebriefFacts(key);if(!f)return;
+  const put=d=>{const lg=DB.get(key,null);if(!lg)return;lg.debrief=d;DB.set(key,lg);syncUp();if(['week','day','log'].includes(S.screen))render();};
+  put({at:new Date().toISOString(),facts:f,pending:true});
+  const res=await _debriefAsk(_gymDebriefPrompt(f));
+  const ai=res.ai?_dbCleanGym(res.ai,f):null;
+  put({at:new Date().toISOString(),facts:f,ai,err:res.err||null});
+  if(ai&&ai.next.length){const nx=DB.get('debrief_next',{})||{};for(const n of ai.next)nx[n.id]={target:n.target,why:n.why,date:f.ds};DB.set('debrief_next',nx);}
+}
+async function _rideDebrief(){
+  let f;try{f=_rideDebriefFacts();}catch(e){console.warn('[ride debrief]',e);return;}
+  if(!f)return;
+  const save=d=>{const m=DB.get('ride_debriefs',{})||{};m[f.start]=d;
+    const ks=Object.keys(m).sort();while(ks.length>20)delete m[ks.shift()];
+    DB.set('ride_debriefs',m);syncUp();const e=document.getElementById('rd-after');if(e)e._h='';if(S.screen==='ride')_rideDraw();else if(['week','day'].includes(S.screen))render();};
+  save({at:new Date().toISOString(),facts:f,pending:true});
+  const res=await _debriefAsk(_rideDebriefPrompt(f));
+  const o=res.ai;
+  save({at:new Date().toISOString(),facts:f,err:res.err||null,
+    ai:o?{headline:_dbClip(o.headline),notes:(Array.isArray(o.notes)?o.notes:[]).slice(0,3).map(t=>_dbClip(t)).filter(Boolean),next:_dbClip(typeof o.next==='string'?o.next:Array.isArray(o.next)&&typeof o.next[0]==='string'?o.next[0]:'')}:null});
+}
+function debriefRetry(kind,id){
+  if(kind==='gym')_gymDebrief(id);
+  else{const m=DB.get('ride_debriefs',{})||{};const d=m[id];if(!d)return;
+    const f=d.facts;m[id]={...d,pending:true,err:null};DB.set('ride_debriefs',m);render();
+    _debriefAsk(_rideDebriefPrompt(f)).then(res=>{const mm=DB.get('ride_debriefs',{})||{},o=res.ai;
+      mm[id]={...d,pending:false,err:res.err||null,ai:o?{headline:_dbClip(o.headline),notes:(Array.isArray(o.notes)?o.notes:[]).slice(0,3).map(t=>_dbClip(t)).filter(Boolean),next:_dbClip(typeof o.next==='string'?o.next:Array.isArray(o.next)&&typeof o.next[0]==='string'?o.next[0]:'')}:null};
+      DB.set('ride_debriefs',mm);syncUp();if(S.screen==='ride'){const e=document.getElementById('rd-after');if(e)e._h='';_rideDraw();}else render();});}
+}
+// Plain-rules summary, shown with or without the AI.
+function _gymFactLines(f){
+  const up=f.ex.filter(e=>e.trend==='up'),st=f.ex.filter(e=>e.stalled),pr=f.ex.filter(e=>e.pr),nw=f.ex.filter(e=>e.trend==='new');
+  const L=[];
+  if(pr.length)L.push(`🏆 New best: ${pr.map(e=>`${_esc(e.name)} ${e.best}`).join(', ')}`);
+  const upNp=up.filter(e=>!e.pr); // a new best is already listed above
+  if(upNp.length)L.push(`📈 Better than last time: ${upNp.map(e=>`${_esc(e.name)} (${e.last} → ${e.best})`).join(', ')}`);
+  if(st.length)L.push(`⏸ No progress for 3 sessions: ${st.map(e=>`${_esc(e.name)} ${e.best}`).join(', ')}`);
+  if(nw.length)L.push(`🆕 First time logged: ${nw.map(e=>_esc(e.name)).join(', ')}`);
+  L.push(`${f.sets} working sets · ${f.vol.toLocaleString()} ${f.unit} lifted in total`);
+  return L;
+}
+function _rideFactLines(f){
+  const L=[`${f.mins} min · ${f.avgW} W average${f.avgHr?` · heart rate ${f.avgHr}`:''} · ${f.kcal} kcal`];
+  if(f.usual)L.push(f.avgW>=f.usual*1.03?`📈 ${f.avgW} W today — your last ${f.usualN} rides at a similar heart rate averaged ${f.usual} W.`
+    :f.avgW<=f.usual*0.97?`${f.avgW} W today — your rides at a similar heart rate usually average ${f.usual} W.`
+    :`About your usual: rides at a similar heart rate average ${f.usual} W.`);
+  if(f.drift!=null)L.push(f.drift>5?`❤️ Heart rate crept up ${f.drift}% for the same watts in the second half.`:f.drift<3?'❤️ Steady — heart rate held at the same watts all ride.':`❤️ Heart rate rose a little (${f.drift}%) for the same watts later on.`);
+  if(f.band&&f.inBand!=null)L.push(`In your ${f.band} bpm zone ${f.inBand}% of the ride.`);
+  return L;
+}
+function _debriefCard(kind,id,d,opts){
+  if(!d||!d.facts)return'';
+  const o=opts||{},f=d.facts,a=d.ai;
+  const facts=(kind==='gym'?_gymFactLines(f):_rideFactLines(f)).map(t=>`<div>${t}</div>`).join('');
+  const nx=kind==='gym'&&a&&a.next&&a.next.length?`<div style="margin-top:8px;padding-top:8px;border-top:1px solid var(--bord)"><div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px">Next time</div>${a.next.map(n=>`<div><b>${_esc((EX[n.id]&&EX[n.id].n)||n.id)}</b> ${_esc(n.target)}${n.why?` <span style="color:var(--t2)">· ${_esc(n.why)}</span>`:''}</div>`).join('')}</div>`:'';
+  const ai=a?`<div style="font-size:14px;font-weight:700;line-height:1.4;margin:2px 0 4px">${_esc(a.headline)}</div>${(a.notes||[]).map(t=>`<div style="margin-bottom:3px">${_esc(t)}</div>`).join('')}${kind==='ride'&&a.next?`<div style="margin-top:6px"><b>Next ride:</b> ${_esc(a.next)}</div>`:''}`
+    :d.pending?`<div style="color:var(--t2);margin:2px 0 4px">🧠 The coach is reading your ${kind==='gym'?'session':'ride'}…</div>`
+    :d.err?`<div style="color:var(--t2);margin:2px 0 4px">${_esc(d.err)} ${S.fbUser&&!S.guest?`<button onclick="debriefRetry('${kind}','${id}')" style="background:none;border:none;color:var(--al);font-weight:700;cursor:pointer;padding:0">Try again</button>`:''}</div>`:'';
+  return`<div style="background:var(--s1);border:1px solid rgba(124,58,237,.35);border-radius:14px;padding:12px 13px;margin-bottom:12px;font-size:12px;line-height:1.55">
+  <div style="display:flex;justify-content:space-between;align-items:center"><div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.6px">🧠 ${o.title||(kind==='gym'?'Workout debrief':'Ride debrief')}</div>${o.close?`<button onclick="${o.close}" aria-label="Dismiss" style="background:none;border:none;color:var(--t2);font-size:16px;cursor:pointer;padding:0 2px;line-height:1">×</button>`:''}</div>
+  ${ai}<div style="color:var(--t2);margin-top:6px">${facts}</div>${nx}</div>`;
+}
+function _dayDebriefs(ds){
+  const out=[];
+  for(const k of['log_'+ds,'extralog_'+ds]){const d=DB.get(k,null)?.debrief;if(d)out.push(_debriefCard('gym',k,d));}
+  const m=DB.get('ride_debriefs',{})||{};
+  for(const id of Object.keys(m).sort())if(m[id]&&m[id].facts&&m[id].facts.date===ds)out.push(_debriefCard('ride',id,m[id]));
+  return out.join('');
+}
+// The week screen shows today's debriefs until you close them.
+function _weekDebriefs(){
+  const ds=fd(new Date()),seen=(()=>{try{return JSON.parse(localStorage.getItem('debrief_seen')||'[]');}catch(_){return[];}})();
+  const out=[];
+  for(const k of['log_'+ds,'extralog_'+ds]){const d=DB.get(k,null)?.debrief;if(d&&!seen.includes(k+d.at.slice(0,16)))out.push(_debriefCard('gym',k,d,{title:"Today's workout",close:`debriefSeen('${k+d.at.slice(0,16)}')`}));}
+  const m=DB.get('ride_debriefs',{})||{};
+  for(const id of Object.keys(m).sort()){const d=m[id];if(d&&d.facts&&d.facts.date===ds&&!seen.includes(id))out.push(_debriefCard('ride',id,d,{title:"Today's ride",close:`debriefSeen('${id}')`}));}
+  return out.join('');
+}
+function debriefSeen(tag){try{const a=JSON.parse(localStorage.getItem('debrief_seen')||'[]');a.push(tag);localStorage.setItem('debrief_seen',JSON.stringify(a.slice(-40)));}catch(_){}render();}
+// Next-time target from the last debrief, on the exercise card of a later session.
+function _dbNextHtml(id,ds){
+  const n=(DB.get('debrief_next',{})||{})[id];
+  if(!n||!(n.date<ds))return'';
+  return`<div style="font-size:12px;line-height:1.5;margin-top:6px;padding:6px 10px;background:rgba(16,185,129,.1);border-radius:9px;border-left:2px solid var(--grn)">🎯 <b>Aim for ${_esc(n.target)}</b>${n.why?` · ${_esc(n.why)}`:''} <span style="color:var(--t2)">(coach, ${_esc(n.date.slice(5))})</span></div>`;
 }
 
 /* ── CYCLING PROFILE (FTP + weight) ── */
@@ -13944,13 +14152,207 @@ function rSettings(){
   return`<div class="screen">
 <div class="hdr"><h1><img src="/training-brain/assets/icons/app-logo-symbol.png" width="22" height="22" style="vertical-align:middle;margin-right:5px;object-fit:contain" onerror="this.style.display='none'">Training Brain</h1><div class="hdr-sub">${_T('sub_settings')}</div></div>
 
+<div class="set-grp first">💪 Gym</div>
+<div class="sec-hdr">${_T('gym_profile')}</div>
+${(()=>{
+  const gid=DB.get('gym_profile',null);
+  const isHome=gid==='home';
+  const homeEquip=DB.get('home_equip',[]);
+  const curGym=gid!=='home'?GYMS_BUILTIN[gid]:null;
+  return`<div class="card">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${isHome?'12px':'0'}">
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:${!gid?'var(--t2)':'var(--txt)'};margin-bottom:2px">${curGym?curGym.area:isHome?'🏠 Home Gym':'No gym selected'}</div>
+      <div style="font-size:11px;color:var(--t2)">${curGym?`${curGym.chain} · ${curGym.city}`:isHome?'Custom equipment':'Tap Change to set your gym'}</div>
+    </div>
+    <button onclick="openGymPicker()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;flex-shrink:0">Change</button>
+  </div>
+  ${isHome?`<div style="border-top:1px solid var(--bord);padding-top:12px">
+    <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:10px">Your equipment:</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      ${EQUIP_ALL.map(e=>`<label style="display:flex;align-items:center;gap:10px;cursor:pointer">
+        <input type="checkbox" value="${e.id}" ${homeEquip.includes(e.id)?'checked':''} onchange="(()=>{const h=DB.get('home_equip',[]);const v='${e.id}';if(this.checked){if(!h.includes(v))h.push(v);}else{const i=h.indexOf(v);if(i>-1)h.splice(i,1);}DB.set('home_equip',h);})()" style="accent-color:var(--acc);width:16px;height:16px">
+        <span style="font-size:13px;color:var(--txt)">${e.label}</span>
+      </label>`).join('')}
+    </div>
+  </div>`:''}
+</div>`;})()}
+
+<div class="set-grp">🚴 Bike</div>
+${(()=>{
+  const profile=DB.get('user_profile',null);
+  const hasCycling=(profile?.activities||[]).includes('cycling');
+  if(!hasCycling)return'';
+  const p=DB.get('bike_pref','weather');
+  return`<div class="sec-hdr">🚴 Ride preference</div>
+<div class="card">
+  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should your week be structured when cycling is in your activities?</div>
+  <div style="display:flex;flex-direction:column;gap:8px">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="weather" ${p==='weather'?'checked':''} onchange="DB.set('bike_pref','weather');render()" style="accent-color:var(--acc)">
+      <div>
+        <div style="font-weight:700;font-size:13px">🌤️ Outdoor + Gym</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Outdoor cardio on good weather days · gym on the rest</div>
+      </div>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='indoor'?'var(--acc)':'var(--bord)'};background:${p==='indoor'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="indoor" ${p==='indoor'?'checked':''} onchange="DB.set('bike_pref','indoor');render()" style="accent-color:var(--acc)">
+      <div>
+        <div style="font-weight:700;font-size:13px">🏠 Indoor + Gym</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Indoor bike rides · gym on the rest · weather ignored</div>
+      </div>
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='none'?'var(--acc)':'var(--bord)'};background:${p==='none'?'rgba(124,58,237,.08)':'transparent'}">
+      <input type="radio" name="bike_pref" value="none" ${p==='none'?'checked':''} onchange="DB.set('bike_pref','none');render()" style="accent-color:var(--acc)">
+      <div>
+        <div style="font-weight:700;font-size:13px">🏋️ Gym only</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:1px">Skip cardio entirely — gym sessions fill the week</div>
+      </div>
+    </label>
+  </div>
+</div>`;
+})()}
+
+${(()=>{
+  const _cp=DB.get('user_profile',null);
+  if(!(_cp?.activities||[]).includes('cycling'))return'';
+  return'<div class="sec-hdr">🚴 Cycling Plan Setup</div>';
+})()}
+${(()=>{
+  if(!(DB.get('user_profile',null)?.activities||[]).includes('cycling'))return'';
+  const setup=DB.get('bike_setup',null);
+  const factor=DB.get('bike_adapt_factor',1.0);
+  const checked=DB.get('bike_adapt_check',null);
+  const goalLabel={base:'Build aerobic base',event:'Train for an event',active:'Stay active'}[setup?.goal]||'—';
+  const ev=DB.get('bike_event',null);
+  const evWeeks=ev?.date?Math.round((new Date(ev.date+'T12:00:00')-S.weekStart)/6048e5):null;
+  if(setup)return`<div class="card">
+  <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
+    <div style="flex:1;min-width:80px;background:var(--s2);border-radius:10px;padding:10px;text-align:center">
+      <div style="font-size:20px;font-weight:800">${setup.dur}<span style="font-size:11px;font-weight:600;color:var(--t2)"> min</span></div>
+      <div style="font-size:10px;color:var(--t2);margin-top:2px">Starting ride</div>
+    </div>
+    <div style="flex:2;min-width:120px;background:var(--s2);border-radius:10px;padding:10px">
+      <div style="font-size:13px;font-weight:700">${goalLabel}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">Adapt factor: ${factor.toFixed(2)}${factor>1?'  📈':factor<1?'  📉':''}</div>
+      ${checked?`<div style="font-size:10px;color:var(--t2)">Last checked: ${checked}</div>`:''}
+    </div>
+  </div>
+  ${ev?.date?`<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px">
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--al)">🎯 ${ev.dist}${ev.unit||'km'} · ${new Date(ev.date+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric'})}</div>
+      <div style="font-size:11px;color:var(--t2);margin-top:2px">${evWeeks>2?evWeeks+' weeks away':evWeeks===2?'Peak week next!':evWeeks===1?'Taper week — event is this week!':'🏁 Event week!'}</div>
+    </div>
+    <button onclick="DB.set('bike_event',null);render()" style="border:none;background:transparent;color:var(--t2);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
+  </div>`:''}
+  <button onclick="openBikeSetup()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--al);font-size:13px;font-weight:700;padding:10px;cursor:pointer">✏️ Edit cycling setup</button>
+</div>`;
+  return`<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Set up your cycling plan</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Takes 30 seconds. Personalises your ride durations and progression to your current fitness.</div>
+  <button onclick="openBikeSetup()" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:13px;cursor:pointer">🚴 Set up my plan</button>
+</div>`;
+})()}
+
+${rRideSyncSection()}
+
+<div class="set-grp">⌚ Watches</div>
+${rWatchSection()}
+
+<div class="set-grp">👤 Account</div>
+<div class="sec-hdr">${_T('account')}</div>
+${S.fbUser
+  ?(()=>{
+    const lastSyncErr=DB.get('fb_last_sync_err',null);
+    const lastPullErr=DB.get('fb_last_pull_err',null);
+    const syncErr=lastSyncErr||lastPullErr;
+    const fmt=t=>t?new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'Never';
+    const lastPull=DB.get('fb_last_pull',null);
+    return`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
+      <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span>
+      <div onclick="manualSync()" style="margin-top:10px;padding:10px;border-top:1px solid rgba(16,185,129,.2);margin:10px -15px -13px -15px;padding:10px 15px 13px;cursor:pointer;border-bottom-left-radius:14px;border-bottom-right-radius:14px;transition:background .15s ease" onmouseover="this.style.background='rgba(16,185,129,.06)'" onmouseout="this.style.background='transparent'">
+        <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--t2);line-height:1.6">
+          <div>
+            <div><span class="sync-dot"></span>☁️ Auto-sync ${syncErr?'<span style="color:var(--red)">— issue detected</span>':'active'}${syncAge===null?' · never backed up':syncAge<2?' · just now':syncAge<60?` · ${syncAge}m ago`:` · ${Math.round(syncAge/60)}h ago`}</div>
+            ${syncErr?`<div style="color:var(--red);margin-top:4px;font-size:10px">Error: ${syncErr}</div>`:''}
+            ${lastPull?`<div style="font-size:10px;margin-top:2px;opacity:.8">Last pulled: ${fmt(lastPull)}</div>`:''}
+          </div>
+          <span style="color:var(--al);font-size:11px;font-weight:700;white-space:nowrap;padding-left:10px">🔄 Sync now</span>
+        </div>
+      </div>
+    </div>
+    <div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin:10px 0 8px">
+      <div style="font-size:12px;font-weight:700;margin-bottom:4px">💾 Backup &amp; restore</div>
+      <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Save a complete copy of your training data — workouts, rides, PRs, weight and settings — to a file you keep. Restoring merges it back in.</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-s" onclick="exportData()" style="flex:1 1 130px;font-size:12px;padding:8px">⬇️ Full backup (JSON)</button>
+        <button class="btn btn-s" onclick="importData()" style="flex:1 1 110px;font-size:12px;padding:8px">⬆️ Restore</button>
+      </div>
+    </div>
+    <div class="data-btns">
+      <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
+      ${hasPIN?`<button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>`:`<button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>`}
+    </div>
+    ${hasPIN?`<div class="data-btns" style="margin-top:8px;grid-template-columns:1fr">
+      <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
+    </div>`:''}`;
+  })()
+  :`<div class="card">
+      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
+      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Sign in to save your workouts, PRs, and plan to the cloud — accessible on any device.</div>
+      <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
+    </div>
+    <div class="data-btns" style="grid-template-columns:1fr">
+      <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
+    </div>`}
+
+<div class="sec-hdr">👥 Friends</div>
+${rFriendsSection()}
+
+<div class="sec-hdr">${_T('language')}</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:6px;margin-bottom:10px;display:flex;gap:4px">
+  <button onclick="DB.set('lang','en');syncUp();render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='en'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='en'?'#fff':'var(--t2)'}">English</button>
+  <button onclick="DB.set('lang','zh');syncUp();render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='zh'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='zh'?'#fff':'var(--t2)'}">繁體中文</button>
+</div>
+
+<div class="set-grp">📖 About</div>
+<div class="sec-hdr">📖 About the app</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">A quick tour of what Training Brain does and how to use it.</div>
+  <button onclick="openWelcomeSheet('manual')" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer">🧠 View intro again</button>
+</div>
+
+<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
+  <span>${_T('whats_new')}</span>
+  <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
+</div>
+<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
+  <div style="padding:13px 15px;cursor:pointer" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <div style="flex:1">
+        <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
+        <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
+      </div>
+      <span id="changelog-arr" style="color:var(--t2);font-size:12px;margin-left:8px">▼</span>
+    </div>
+    ${CHANGELOG[0].det?`<div style="font-size:12px;color:var(--t2);line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px solid var(--bord)">${CHANGELOG[0].det}</div>`:''}
+  </div>
+  <div id="changelog-list" style="display:none;border-top:1px solid var(--bord)">
+    ${CHANGELOG.slice(1).map(_clRow).join('')}
+    <div id="changelog-older"><button class="add-set" style="margin:10px 15px;width:calc(100% - 30px)" onclick="loadOlderChangelog()">Show older versions</button></div>
+  </div>
+</div>
+
+<details class="set-adv" ${S._advOpen?'open':''} ontoggle="S._advOpen=this.open">
+<summary><span>⚙️ Advanced</span><span class="set-adv-sub">AI usage · weekly email · Vitruvian bridge · diagnostics</span></summary>
+
 <div class="sec-hdr">${_T('ai_coach')}</div>
 <div class="card">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
     <div style="font-size:13px;font-weight:700">Gemini AI</div>
     <div style="font-size:11px;font-weight:700;color:var(--grn);background:rgba(16,185,129,.12);padding:2px 8px;border-radius:100px">✓ Active</div>
   </div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.5">Gives you a personalised pre-workout note each day based on your logged sets, PRs, and how you're feeling. Powered by Gemini 2.5 Flash.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5">Gives you a personalised pre-workout note each day based on your logged sets, PRs, and how you're feeling. Runs on Gemini, with DeepSeek stepping in when Gemini is busy.</div>
 </div>
 
 ${(()=>{
@@ -14009,118 +14411,6 @@ ${(()=>{
 <div class="sec-hdr">${_T('wr_settings_hdr')}</div>
 ${rSettingsWeeklyReview()}
 
-<div class="sec-hdr">${_T('gym_profile')}</div>
-${(()=>{
-  const gid=DB.get('gym_profile',null);
-  const isHome=gid==='home';
-  const homeEquip=DB.get('home_equip',[]);
-  const curGym=gid!=='home'?GYMS_BUILTIN[gid]:null;
-  return`<div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:${isHome?'12px':'0'}">
-    <div style="flex:1;min-width:0">
-      <div style="font-size:13px;font-weight:700;color:${!gid?'var(--t2)':'var(--txt)'};margin-bottom:2px">${curGym?curGym.area:isHome?'🏠 Home Gym':'No gym selected'}</div>
-      <div style="font-size:11px;color:var(--t2)">${curGym?`${curGym.chain} · ${curGym.city}`:isHome?'Custom equipment':'Tap Change to set your gym'}</div>
-    </div>
-    <button onclick="openGymPicker()" style="background:var(--acc);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;flex-shrink:0">Change</button>
-  </div>
-  ${isHome?`<div style="border-top:1px solid var(--bord);padding-top:12px">
-    <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:10px">Your equipment:</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      ${EQUIP_ALL.map(e=>`<label style="display:flex;align-items:center;gap:10px;cursor:pointer">
-        <input type="checkbox" value="${e.id}" ${homeEquip.includes(e.id)?'checked':''} onchange="(()=>{const h=DB.get('home_equip',[]);const v='${e.id}';if(this.checked){if(!h.includes(v))h.push(v);}else{const i=h.indexOf(v);if(i>-1)h.splice(i,1);}DB.set('home_equip',h);})()" style="accent-color:var(--acc);width:16px;height:16px">
-        <span style="font-size:13px;color:var(--txt)">${e.label}</span>
-      </label>`).join('')}
-    </div>
-  </div>`:''}
-</div>`;})()}
-
-${(()=>{
-  const profile=DB.get('user_profile',null);
-  const hasCycling=(profile?.activities||[]).includes('cycling');
-  if(!hasCycling)return'';
-  const p=DB.get('bike_pref','weather');
-  return`<div class="sec-hdr">🚴 Ride preference</div>
-<div class="card">
-  <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">How should your week be structured when cycling is in your activities?</div>
-  <div style="display:flex;flex-direction:column;gap:8px">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='weather'?'var(--acc)':'var(--bord)'};background:${p==='weather'?'rgba(124,58,237,.08)':'transparent'}">
-      <input type="radio" name="bike_pref" value="weather" ${p==='weather'?'checked':''} onchange="DB.set('bike_pref','weather');render()" style="accent-color:var(--acc)">
-      <div>
-        <div style="font-weight:700;font-size:13px">🌤️ Outdoor + Gym</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:1px">Outdoor cardio on good weather days · gym on the rest</div>
-      </div>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='indoor'?'var(--acc)':'var(--bord)'};background:${p==='indoor'?'rgba(124,58,237,.08)':'transparent'}">
-      <input type="radio" name="bike_pref" value="indoor" ${p==='indoor'?'checked':''} onchange="DB.set('bike_pref','indoor');render()" style="accent-color:var(--acc)">
-      <div>
-        <div style="font-weight:700;font-size:13px">🏠 Indoor + Gym</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:1px">Trainer / Zwift cardio · gym on the rest · weather ignored</div>
-      </div>
-    </label>
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:11px 13px;border-radius:11px;border:2px solid ${p==='none'?'var(--acc)':'var(--bord)'};background:${p==='none'?'rgba(124,58,237,.08)':'transparent'}">
-      <input type="radio" name="bike_pref" value="none" ${p==='none'?'checked':''} onchange="DB.set('bike_pref','none');render()" style="accent-color:var(--acc)">
-      <div>
-        <div style="font-weight:700;font-size:13px">🏋️ Gym only</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:1px">Skip cardio entirely — gym sessions fill the week</div>
-      </div>
-    </label>
-  </div>
-</div>`;
-})()}
-
-${(()=>{
-  const _cp=DB.get('user_profile',null);
-  if(!(_cp?.activities||[]).includes('cycling'))return'';
-  return'<div class="sec-hdr">🚴 Cycling Plan Setup</div>';
-})()}
-${(()=>{
-  if(!(DB.get('user_profile',null)?.activities||[]).includes('cycling'))return'';
-  const setup=DB.get('bike_setup',null);
-  const factor=DB.get('bike_adapt_factor',1.0);
-  const checked=DB.get('bike_adapt_check',null);
-  const goalLabel={base:'Build aerobic base',event:'Train for an event',active:'Stay active'}[setup?.goal]||'—';
-  const ev=DB.get('bike_event',null);
-  const evWeeks=ev?.date?Math.round((new Date(ev.date+'T12:00:00')-S.weekStart)/6048e5):null;
-  if(setup)return`<div class="card">
-  <div style="display:flex;gap:16px;margin-bottom:12px;flex-wrap:wrap">
-    <div style="flex:1;min-width:80px;background:var(--s2);border-radius:10px;padding:10px;text-align:center">
-      <div style="font-size:20px;font-weight:800">${setup.dur}<span style="font-size:11px;font-weight:600;color:var(--t2)"> min</span></div>
-      <div style="font-size:10px;color:var(--t2);margin-top:2px">Starting ride</div>
-    </div>
-    <div style="flex:2;min-width:120px;background:var(--s2);border-radius:10px;padding:10px">
-      <div style="font-size:13px;font-weight:700">${goalLabel}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">Adapt factor: ${factor.toFixed(2)}${factor>1?'  📈':factor<1?'  📉':''}</div>
-      ${checked?`<div style="font-size:10px;color:var(--t2)">Last checked: ${checked}</div>`:''}
-    </div>
-  </div>
-  ${ev?.date?`<div style="display:flex;align-items:center;justify-content:space-between;background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.25);border-radius:10px;padding:10px 12px;margin-bottom:10px">
-    <div>
-      <div style="font-size:13px;font-weight:700;color:var(--al)">🎯 ${ev.dist}${ev.unit||'km'} · ${new Date(ev.date+'T12:00:00').toLocaleDateString('en',{month:'short',day:'numeric'})}</div>
-      <div style="font-size:11px;color:var(--t2);margin-top:2px">${evWeeks>2?evWeeks+' weeks away':evWeeks===2?'Peak week next!':evWeeks===1?'Taper week — event is this week!':'🏁 Event week!'}</div>
-    </div>
-    <button onclick="DB.set('bike_event',null);render()" style="border:none;background:transparent;color:var(--t2);font-size:18px;cursor:pointer;padding:4px 6px;line-height:1">✕</button>
-  </div>`:''}
-  <button onclick="openBikeSetup()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:11px;color:var(--al);font-size:13px;font-weight:700;padding:10px;cursor:pointer">✏️ Edit cycling setup</button>
-</div>`;
-  return`<div class="card">
-  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Set up your cycling plan</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Takes 30 seconds. Personalises your ride durations and progression to your current fitness.</div>
-  <button onclick="openBikeSetup()" style="width:100%;background:var(--acc);border:none;border-radius:11px;color:#fff;font-size:14px;font-weight:700;padding:13px;cursor:pointer">🚴 Set up my plan</button>
-</div>`;
-})()}
-
-${rRideSyncSection()}
-
-${rWatchSection()}
-
-<div class="sec-hdr">🔬 Diagnostics</div>
-<div class="card">
-  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Inspect intervals.icu data</div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Shows the raw data intervals.icu holds for your newest strength session and newest ride. Read-only — it changes nothing. Use it to check whether your Garmin sends per-set reps and weight, and how indoor rides are labelled.</div>
-  <button class="btn btn-s" onclick="icuInspect()" ${DB.get('icu_key',null)?'':'disabled style="opacity:.5"'}>🔬 Inspect</button>
-  ${DB.get('icu_key',null)?'':'<div style="font-size:11px;color:var(--t2);margin-top:8px">Connect intervals.icu first.</div>'}
-</div>
-
 <div class="sec-hdr">💪 Vitruvian auto-log</div>
 ${(()=>{
   const tok=DB.get('vitruvian_token',null);
@@ -14161,87 +14451,15 @@ ${(()=>{
 </div>`;
 })()}
 
-<div class="sec-hdr">📖 About the app</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:10px">
-  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">A quick tour of what Training Brain does and how to use it.</div>
-  <button onclick="openWelcomeSheet('manual')" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--al);font-size:13px;font-weight:700;padding:9px 14px;cursor:pointer">🧠 View intro again</button>
+<div class="sec-hdr">🔬 Diagnostics</div>
+<div class="card">
+  <div style="font-size:13px;font-weight:700;margin-bottom:6px">Inspect intervals.icu data</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.6;margin-bottom:12px">Shows the raw data intervals.icu holds for your newest strength session and newest ride. Read-only — it changes nothing. Use it to check whether your Garmin sends per-set reps and weight, and how indoor rides are labelled.</div>
+  <button class="btn btn-s" onclick="icuInspect()" ${DB.get('icu_key',null)?'':'disabled style="opacity:.5"'}>🔬 Inspect</button>
+  ${DB.get('icu_key',null)?'':'<div style="font-size:11px;color:var(--t2);margin-top:8px">Connect intervals.icu first.</div>'}
 </div>
 
-<div class="sec-hdr">👥 Friends</div>
-${rFriendsSection()}
-
-<div class="sec-hdr">${_T('account')}</div>
-${S.fbUser
-  ?(()=>{
-    const lastSyncErr=DB.get('fb_last_sync_err',null);
-    const lastPullErr=DB.get('fb_last_pull_err',null);
-    const syncErr=lastSyncErr||lastPullErr;
-    const fmt=t=>t?new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}):'Never';
-    const lastPull=DB.get('fb_last_pull',null);
-    return`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.2);border-radius:14px;padding:13px 15px;margin-bottom:10px;font-size:13px">
-      <span style="color:var(--grn);font-weight:700">✓ Signed in as ${S.fbUser.username||S.fbUser.name||S.fbUser.email}</span>
-      <div onclick="manualSync()" style="margin-top:10px;padding:10px;border-top:1px solid rgba(16,185,129,.2);margin:10px -15px -13px -15px;padding:10px 15px 13px;cursor:pointer;border-bottom-left-radius:14px;border-bottom-right-radius:14px;transition:background .15s ease" onmouseover="this.style.background='rgba(16,185,129,.06)'" onmouseout="this.style.background='transparent'">
-        <div style="display:flex;align-items:center;justify-content:space-between;font-size:11px;color:var(--t2);line-height:1.6">
-          <div>
-            <div><span class="sync-dot"></span>☁️ Auto-sync ${syncErr?'<span style="color:var(--red)">— issue detected</span>':'active'}${syncAge===null?' · never backed up':syncAge<2?' · just now':syncAge<60?` · ${syncAge}m ago`:` · ${Math.round(syncAge/60)}h ago`}</div>
-            ${syncErr?`<div style="color:var(--red);margin-top:4px;font-size:10px">Error: ${syncErr}</div>`:''}
-            ${lastPull?`<div style="font-size:10px;margin-top:2px;opacity:.8">Last pulled: ${fmt(lastPull)}</div>`:''}
-          </div>
-          <span style="color:var(--al);font-size:11px;font-weight:700;white-space:nowrap;padding-left:10px">🔄 Sync now</span>
-        </div>
-      </div>
-    </div>
-    <div style="background:var(--s2);border:1px solid var(--bord);border-radius:12px;padding:11px 13px;margin:10px 0 8px">
-      <div style="font-size:12px;font-weight:700;margin-bottom:4px">💾 Backup &amp; restore</div>
-      <div style="font-size:11px;color:var(--t2);line-height:1.55;margin-bottom:9px">Save a complete copy of your training data — workouts, rides, PRs, weight and settings — to a file you keep. Restoring merges it back in.</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap">
-        <button class="btn btn-s" onclick="exportData()" style="flex:1 1 130px;font-size:12px;padding:8px">⬇️ Full backup (JSON)</button>
-        <button class="btn btn-s" onclick="importData()" style="flex:1 1 110px;font-size:12px;padding:8px">⬆️ Restore</button>
-      </div>
-    </div>
-    <div class="data-btns">
-      <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
-      ${hasPIN?`<button class="btn btn-s" onclick="changePIN()">🔑 Reset PIN</button>`:`<button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>`}
-    </div>
-    ${hasPIN?`<div class="data-btns" style="margin-top:8px;grid-template-columns:1fr">
-      <button class="btn btn-s" onclick="signOut()">🚪 Sign out</button>
-    </div>`:''}`;
-  })()
-  :`<div class="card">
-      <div style="font-size:14px;font-weight:700;margin-bottom:5px">Not signed in</div>
-      <div style="font-size:12px;color:var(--t2);margin-bottom:12px;line-height:1.6">Sign in to save your workouts, PRs, and plan to the cloud — accessible on any device.</div>
-      <button class="btn btn-p" onclick="lockApp()">Sign In / Create Account</button>
-    </div>
-    <div class="data-btns" style="grid-template-columns:1fr">
-      <button class="btn btn-s" onclick="exportCSV()">⬇️ ${_T('exp_csv')}</button>
-    </div>`}
-
-<div class="sec-hdr">${_T('language')}</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:6px;margin-bottom:10px;display:flex;gap:4px">
-  <button onclick="DB.set('lang','en');syncUp();render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='en'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='en'?'#fff':'var(--t2)'}">English</button>
-  <button onclick="DB.set('lang','zh');syncUp();render()" style="flex:1;padding:10px;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;background:${DB.get('lang','en')==='zh'?'var(--acc)':'transparent'};color:${DB.get('lang','en')==='zh'?'#fff':'var(--t2)'}">繁體中文</button>
-</div>
-
-<div class="sec-hdr" style="display:flex;justify-content:space-between;align-items:center;margin-top:24px">
-  <span>${_T('whats_new')}</span>
-  <span style="font-size:10px;color:var(--t2);font-weight:600">v${APP_VERSION}</span>
-</div>
-<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;overflow:hidden;margin-bottom:10px">
-  <div style="padding:13px 15px;cursor:pointer" onclick="const cl=document.getElementById('changelog-list');const arr=document.getElementById('changelog-arr');if(cl){cl.style.display=cl.style.display==='none'?'block':'none';arr.textContent=cl.style.display==='none'?'▼':'▲'}">
-    <div style="display:flex;justify-content:space-between;align-items:center">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700">${CHANGELOG[0].d}</div>
-        <div style="font-size:11px;color:var(--t2);margin-top:2px">Latest · v${CHANGELOG[0].v}</div>
-      </div>
-      <span id="changelog-arr" style="color:var(--t2);font-size:12px;margin-left:8px">▼</span>
-    </div>
-    ${CHANGELOG[0].det?`<div style="font-size:12px;color:var(--t2);line-height:1.6;margin-top:10px;padding-top:10px;border-top:1px solid var(--bord)">${CHANGELOG[0].det}</div>`:''}
-  </div>
-  <div id="changelog-list" style="display:none;border-top:1px solid var(--bord)">
-    ${CHANGELOG.slice(1).map(_clRow).join('')}
-    <div id="changelog-older"><button class="add-set" style="margin:10px 15px;width:calc(100% - 30px)" onclick="loadOlderChangelog()">Show older versions</button></div>
-  </div>
-</div>
+</details>
 
 <div class="bnav">
   <button class="bnav-btn" onclick="go('week')"><span>${_icon('plan-tab.png','📅',22)}</span><span>${_T('nav_plan')}</span></button>
