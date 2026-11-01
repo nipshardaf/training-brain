@@ -53,6 +53,8 @@ html{height:-webkit-fill-available}
 body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;min-height:100vh;min-height:-webkit-fill-available;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 .screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) calc(16px + var(--sr)) calc(var(--sb) + 88px) calc(16px + var(--sl));background:var(--bg)}
 /* v3.51 Ride screen: big tiles in portrait; on a phone on its side the numbers go across the top and the controls into a column on the right */
+/* v3.93: a toast over an open bottom sheet covered its buttons; move it to the top */
+body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!important;bottom:auto!important}
 .rd-a{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .rd-b{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .rd-t{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
@@ -1043,10 +1045,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.92';
+const APP_VERSION='3.93';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.93',d:'Full Body days work from the day screen again, and no more made-up weather',det:'Three fixes from a full review of the app. (1) A Full Body day showed only its title card: no exercises and no way to start logging from the day screen. The app decided whether a day is a gym day from a list that had been copied about 15 times, and half the copies were older than Full Body. That also meant a missed Full Body day was not counted as missed, was skipped when sessions moved around a ride day, and got the rest-day coach note. It is now one shared list. Full Body days matter because the app makes them itself when you miss sessions. (2) With no forecast (location off or offline), every day showed a made-up ⛅ 15°, and ride days got a red Gym day badge because the stand-in weather scored zero for riding. Even indoor rides got it. Now no weather is shown when there is none, the riding badge only appears on outdoor rides with a real forecast, and the AI is no longer told about weather that does not exist. (3) A message such as No location access was drawn on top of the weekly which-days sheet, covering its buttons. While a sheet is open, messages now appear at the top of the screen.'},
   {v:'3.92',d:'Ride screen walks you through it: connect, pick, start',det:'Opening Ride used to show everything at once before you had done anything: connect buttons, the workout picker, a dashboard full of dashes, a resistance control that did nothing yet, and a Start button that would start without a bike. Now it reads as three steps. 1 Connect your bike (heart rate is optional), 2 What are you riding, then a button that says what it starts, like Start Brisk Ride 60 min. Until the bike is connected that button connects it instead, and the dashboard and resistance controls stay hidden. Once connected they appear, so you can spin and check the numbers before starting. You can still start without the bike from the small link under the button.'},
   {v:'3.91',d:'Ride screen suggests a workout for today, even on days with no ride planned',det:'Opening Ride on a gym or rest day used to land on a bare Free ride, with the real workouts hidden under Pick a different workout. The cycling plan only chose workouts for the days it had marked as ride days. Now the Ride screen opens on a Suggested workout for today, using the same rules as your weekly plan: your goal, which hard session you have gone longest without, how tired you are, legs yesterday, today or tomorrow, and recovery weeks. It also looks at the rest of your week. If you already did your hard session, or your planned hard day is coming up, it suggests an easy ride and tells you why, so an extra ride does not steal from it or stack two hard days. Under the suggestion are one or two alternatives (keep it easy, or a harder one if you feel fresh), each with a one-line reason. The full list is still there as All 8 workouts. The Ride with my bike button on the week screen now shows the workout it will open with. None of this is AI: the bike workouts come from the app\'s own training rules. The AI coach only plans your gym exercises.'},
   {v:'3.90',d:'Machine Lateral Raise, and a Remove set button',det:'Added the Machine Lateral Raise. Swap it in on any day with side delts, and the planner can pick it too. Next to + Add set there is now − Remove set: it takes away the last set you have not ticked yet (it asks first if they are all ticked), and the message has an Undo in case you tapped it by mistake.'},
@@ -1484,7 +1487,7 @@ async function getAICoach(energy,ct,dp){
     // session, and today's weather. v2.96.
     const _ftpLine=profile2?.ftp?`FTP: ${profile2.ftp}W${profile2.weight?` (${(profile2.ftp/profile2.weight).toFixed(2)} W/kg)`:''} — Zone 2 ≈ ${Math.round(profile2.ftp*0.56)}-${Math.round(profile2.ftp*0.75)}W, threshold ≈ ${Math.round(profile2.ftp*0.91)}-${Math.round(profile2.ftp*1.05)}W`:'FTP not set — give HR/RPE-based targets, not watts';
     const _sess2=(()=>{try{const s=getRideSession(dp?.type||ct,dp?.date);return s?`Planned session: ${s.name} (${BIKE_CATS[s.cat].name}, level ${s.lvl}) — ~${s.total} min`:'';}catch(_){return'';}})();
-    const _wx2=dp?.weather?`Weather today: ${dp.weather.tmin}–${dp.weather.tmax}°C · wind ${dp.weather.wind}km/h · rain ${dp.weather.rain}mm`:'';
+    const _wx2=dp?.weather&&!_wxFake(dp.weather)?`Weather today: ${dp.weather.tmin}–${dp.weather.tmax}°C · wind ${dp.weather.wind}km/h · rain ${dp.weather.rain}mm`:'';
     const _fit2=_fitnessLine();
     const ridePrompt=`You are a cycling coach. Write 4 pre-ride coaching notes for today's ${isLong?'long':'short'} ride. Each note is 2 sentences max — specific, data-driven, actionable. Reference actual numbers from the athlete's ride history and give power/HR targets consistent with their FTP and current form.${_layoffNote()}${_dailyLangNote}
 
@@ -5207,11 +5210,15 @@ async function fetchWeather(lat,lon,startStr,force=false){
     };
     // Past day — preserve existing plan entry weather if available, else use placeholder
     const existing=DB.get(DB.pk(S.weekStart),null)?.find(x=>x.date===dateStr);
-    return existing?.weather||{date:dateStr,tmax:15,tmin:5,rain:0,wind:10,code:1,score:0};
+    return existing?.weather||{date:dateStr,tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true};
   });
   DB.set(ck,{t:Date.now(),d:result});
   return result;
 }
+// v3.93: placeholder weather (no location / offline) used to be shown as a real ⛅ 15°
+// forecast and scored 0, so ride days said "Gym day". Older saved weeks carry the
+// same values without the flag, hence the value check.
+function _wxFake(w){return!w||!!w.nowx||(w.tmax===15&&w.tmin===5&&w.rain===0&&w.wind===10&&w.code===1&&w.score===0);}
 function bikeScore(rain,wind,tmax){
   let s=100;
   if(rain>10)return 0;
@@ -5341,6 +5348,11 @@ function getLastGymType(){
 // weeks had no legs and chest/back/arms three times, and a "missed" Upper counted
 // even after Push and Pull were done. Now each week gets a set of sessions for its
 // number of gym days that trains every group, most-needed first, spaced out.
+// v3.93: the one list of gym session types. It used to be copied ~15 times and about
+// half the copies predated FULL_BODY, so Full Body days showed no exercises on the day screen,
+// weren't counted as missed, and were skipped when sessions shifted around a ride day.
+const GYM_TYPES=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
+const _isGym=t=>GYM_TYPES.includes(t);
 const _MUSC={PUSH:['chest','delts','triceps'],PULL:['back','biceps'],LEGS:['legs'],
   UPPER_PUMP:['chest','back','delts','biceps','triceps'],SHOULDERS_ARMS:['delts','biceps','triceps'],
   FULL_BODY:['chest','back','delts','biceps','triceps','legs']};
@@ -5459,7 +5471,7 @@ function getMissedLastWeek(){
   const lastMon=getMon(addDays(S.weekStart,-7));
   const lastPlan=DB.get(DB.pk(lastMon),null);
   if(!lastPlan)return{gym:[],rides:0,total:0};
-  const gymTypes=new Set(['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS']);
+  const gymTypes=new Set(GYM_TYPES);
   const rideTypes=new Set(['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR']);
   const today=fd(new Date());
   const missedGym=[];let missedRides=0;
@@ -5809,7 +5821,7 @@ function buildWeek(wdays){
     const i=wdays.length;
     const dateStr=fd(addDays(S.weekStart,i));
     const existing=DB.get(DB.pk(S.weekStart),null)?.find(x=>x.date===dateStr);
-    wdays.push(existing?.weather||{date:dateStr,tmax:15,tmin:5,rain:0,wind:10,code:1,score:0});
+    wdays.push(existing?.weather||{date:dateStr,tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true});
   }
   const ranked=[...wdays].map((d,i)=>({i,s:d.score})).sort((a,b)=>b.s-a.s);
   const rankedAsc=[...ranked].reverse(); // worst weather first — used to pick rest days
@@ -9436,7 +9448,7 @@ ${rRecoveryMap()}
       const _rows=[..._allDates].sort().map(ds=>{
         const d=new Date(ds+'T12:00:00');
         const log=DB.get(DB.lk(d),null);
-        const fakeDay={date:ds,type:log?.type||'REST',weather:{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0},exercises:log?.exercises||[]};
+        const fakeDay={date:ds,type:log?.type||'REST',weather:{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true},exercises:log?.exercises||[]};
         return rDayRow(fakeDay,today);
       }).join('');
       return`<div class="day-list">${_rows}</div><button class="btn btn-s" onclick="genPlan()">🔄 Generate plan for this week</button>`;
@@ -9496,8 +9508,8 @@ function rDayRow(day,today){
   ${rideOnGymDay?`<div style="font-size:11px;color:#fc4c02;font-weight:600;margin-top:3px">+ 🚴 ${distStr?distStr+' km · ':''}${durStr} min logged</div>`:''}
 </div>
 <div class="dr-r">
-  <div class="dr-weather">${wIcon(w.code,w.rain)} ${w.tmax}°${w.rain>0?`<span class="dr-rain">${w.rain}mm</span>`:''}</div>
-  ${isRide&&!stravaRide?`<div class="vtag ${v.c}">${v.t}</div>`:''}
+  ${_wxFake(w)?'':`<div class="dr-weather">${wIcon(w.code,w.rain)} ${w.tmax}°${w.rain>0?`<span class="dr-rain">${w.rain}mm</span>`:''}</div>`}
+  ${isRide&&!stravaRide&&/OUTDOOR/.test(day.type)&&!_wxFake(w)?`<div class="vtag ${v.c}">${v.t}</div>`:''}
   ${stravaRide?`<div class="done-tag" style="background:rgba(252,76,2,.12);color:#fc4c02;border:1px solid rgba(252,76,2,.3)">${rideSourceIcon(stravaRide)} Logged · ${rideSourceLabel(stravaRide)}</div>`:gymDone?'<div class="done-tag">✓ Done</div>':''}
   ${_runTag(day.date)}
   ${isToday&&!done?'<div class="today-tag">Today</div>':''}
@@ -9517,7 +9529,7 @@ function rDay(){
   const wi=WI[dp.type]||WI.REST;
   const w=dp.weather;
   const isRide=['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
-  const isGym=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'].includes(dp.type);
+  const isGym=_isGym(dp.type);
   const ct=isRide?'ride':isGym?'gym':'rest';
   const log=DB.get(DB.lk(S.viewDate),null);
   const v=verdict(w.score);
@@ -9540,8 +9552,8 @@ function rDay(){
 <div class="day-hero" style="border-color:${wi.c}33">
   <div class="hero-tag" style="background:${wi.c}22;color:${wi.c}">${(typeof wi.l==='function'?wi.l():wi.l).toUpperCase()}</div>
   <div class="hero-name">${dp&&dp.why?_esc(dp.why):typeof wi.d==='function'?wi.d():wi.d}</div>
-  <div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>
-  ${isRide?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
+  ${_wxFake(w)?'':`<div class="hero-weather">${wIcon(w.code,w.rain)} ${w.tmin}°–${w.tmax}° · 💨${w.wind}km/h · 🌧${w.rain}mm</div>`}
+  ${isRide&&/OUTDOOR/.test(dp.type)&&!_wxFake(w)?`<div class="vtag ${v.c}" style="margin-top:8px">${v.t}</div>`:''}
   ${DB.get('home_day_'+ds,false)&&isGym?`<div class="vtag" style="background:rgba(124,58,237,.15);color:var(--al);margin-top:8px">🏠 At home today</div>`:''}
 </div>
 ${rideAlongsideAck?(()=>{
@@ -10459,7 +10471,7 @@ function buildAskPrompt(question){
   const ydayRide=stravaRideOnDate(ydayStr);
   // Format today's plan + weather
   const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full body',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest',SKIPPED:'Skipped'};
-  const todayPlanStr=todayPlan?`${_typeLabel[todayPlan.type]||todayPlan.type}${todayPlan.weather?` · weather ${todayPlan.weather.tmin}-${todayPlan.weather.tmax}°C, rain ${todayPlan.weather.rain}mm`:''}`:'no plan';
+  const todayPlanStr=todayPlan?`${_typeLabel[todayPlan.type]||todayPlan.type}${todayPlan.weather&&!_wxFake(todayPlan.weather)?` · weather ${todayPlan.weather.tmin}-${todayPlan.weather.tmax}°C, rain ${todayPlan.weather.rain}mm`:''}`:'no plan';
   const todayDoneStr=todayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?'GYM ALREADY DONE TODAY':todayRide?`RIDE ALREADY LOGGED TODAY: ${+((todayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((todayRide.moving_time||0)/60)}min`:'nothing logged yet';
   const ydayStr2=ydayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?`Yesterday: gym (${ydayLog.type})`:ydayRide?`Yesterday: rode ${+((ydayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((ydayRide.moving_time||0)/60)}min`:'Yesterday: rest';
   const fitTxt=d.fitness?`CTL ${d.fitness.ctl} (fitness) / ATL ${d.fitness.atl} (fatigue) / TSB ${d.fitness.tsb>0?'+':''}${d.fitness.tsb} (form). 7-day CTL change: ${d.fitness.ctl_7d_delta!=null?(d.fitness.ctl_7d_delta>0?'+':'')+d.fitness.ctl_7d_delta:'n/a'}.`:'No fitness curve available.';
@@ -10467,7 +10479,7 @@ function buildAskPrompt(question){
   // Full current week plan — important for "swap day X" type questions so AI sees
   // what's on each day. v2.73: gym days also list their exercises (with prescribed
   // sets×reps) so the AI can swap exercises and set targets by name.
-  const _gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY']; // v3.87: Full Body days had no exercises listed
+  const _gymTypes=GYM_TYPES; // v3.87: Full Body days had no exercises listed
   const weekPlanLines=[];
   if(wPlan){
     for(const day of [...wPlan].sort((a,b)=>a.date.localeCompare(b.date))){
@@ -11063,7 +11075,7 @@ const COACH_TOOL_HANDLERS={
       plan.forEach(d=>{if(d.date<from_date)d.locked=true;});
       DB.set(pk,plan);
       // Rebuild using cached weather from the existing plan
-      const wdays=plan.map(d=>({date:d.date,...(d.weather||{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0})}));
+      const wdays=plan.map(d=>({date:d.date,...(d.weather||{tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true})}));
       try{
         const newPlan=buildWeek(wdays);
         // Restore original lock state on the regenerated week
@@ -11770,7 +11782,7 @@ ${sec(_T('wr_s_sequence'),review.sequence)}
 /* ── END-OF-WEEK + NEXT WEEK AI PLAN ── */
 function checkWeekCompletion(){
   if(!S.activeLog||S.guest)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
+  const gymTypes=GYM_TYPES;
   const today=S.activeLog.date;
   const plan=DB.get(DB.pk(S.weekStart),null);
   if(!plan)return;
@@ -11810,7 +11822,7 @@ async function generateNextWeekWithAI(){
   // Build next week's plan if it doesn't exist yet
   let nextPlan=DB.get(DB.pk(nextMon),null);
   if(!nextPlan){
-    const wdays=Array.from({length:7},(_,i)=>({date:fd(addDays(nextMon,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0}));
+    const wdays=Array.from({length:7},(_,i)=>({date:fd(addDays(nextMon,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true}));
     const savedWS=S.weekStart;S.weekStart=nextMon;
     nextPlan=buildWeek(wdays);
     _setFreshWeek(DB.pk(nextMon),nextPlan);
@@ -11819,7 +11831,7 @@ async function generateNextWeekWithAI(){
     S.weekStart=savedWS;
   }
   // Collect this week's gym sessions
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
+  const gymTypes=GYM_TYPES;
   const thisPlan=DB.get(DB.pk(S.weekStart),null)||[];
   const weekSessions=[];
   for(const day of thisPlan){
@@ -14368,7 +14380,7 @@ function setShortWeek(n){
 // Past days, locked days, and days with logged work are never touched.
 // Shared by openSwap (preview) and doSwap (apply) so they can't disagree.
 function _swapCounterpart(plan,ds,newType){
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
+  const gymTypes=GYM_TYPES;
   const cur=plan&&plan.find(d=>d.date===ds);
   if(!cur)return null;
   const oldType=cur.type;
@@ -14417,7 +14429,7 @@ function doSwap(ds,newType){
   const plan=DB.get(pk,null);if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);if(di===-1)return;
   const oldType=plan[di].type;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
+  const gymTypes=GYM_TYPES;
   const wasGym=gymTypes.includes(oldType);
   const goingToRest=newType==='REST';
   const goingToGym=gymTypes.includes(newType);
@@ -14524,8 +14536,8 @@ function openAddGymSheet(ds){
   if(!plan)return;
   const di=plan.findIndex(d=>d.date===ds);
   if(di<0)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
-  const TL={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',REST:'Rest'};
+  const gymTypes=GYM_TYPES;
+  const TL={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body',REST:'Rest'};
   const dN=dt=>{const dn=new Date(dt+'T12:00:00').getDay();return['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][dn];};
   // Next scheduled gym day and the full chain after the ride day
   const gymChain=plan.filter((d,i)=>i>di&&gymTypes.includes(d.type)&&!d.locked);
@@ -14564,7 +14576,7 @@ function addGymToRideDay(dateStr,gymType,shift){
   if(!plan)return;
   const di=plan.findIndex(d=>d.date===dateStr);
   if(di<0)return;
-  const gymTypes=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
+  const gymTypes=GYM_TYPES;
   // Attach the extra gym session to this ride day
   plan[di].extraGym={type:gymType,exercises:genSession(gymType)};
   if(shift){
@@ -15115,7 +15127,7 @@ function bindEnergy(){
       const ds=S.viewDate?fd(S.viewDate):null;
       const dp=plan?.find(d=>d.date===ds);
       const isRide=dp&&['LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR'].includes(dp.type);
-      const isGym=dp&&['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'].includes(dp.type);
+      const isGym=dp&&_isGym(dp.type);
       const ct=isRide?'ride':isGym?'gym':'rest';
       // Update coach message — show default immediately, upgrade to AI quietly
       const card=document.getElementById('coach-card');
@@ -15335,7 +15347,7 @@ async function genPlan(quiet=false){
   const ws=S.weekStart; // the week asked for, even if you move to another one while it builds
   // Placeholder weather: no location needed, and the fallback when there's no forecast.
   const neutral=()=>Array.from({length:7},(_,i)=>({
-    date:fd(addDays(ws,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0
+    date:fd(addDays(ws,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true
   }));
   const save=wdays=>{
     const keep=S.weekStart;S.weekStart=ws; // buildWeek reads S.weekStart
@@ -15410,7 +15422,7 @@ function openWeekPicker(auto=false){
   if(Array.isArray(saved))sel=saved;
   else{
     let base=DB.get(DB.pk(ws),null);
-    if(!base){try{base=buildWeek([...Array(7)].map((_,i)=>({date:fd(addDays(ws,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0})));}catch(_){base=[];}}
+    if(!base){try{base=buildWeek([...Array(7)].map((_,i)=>({date:fd(addDays(ws,i)),tmax:15,tmin:5,rain:0,wind:10,code:1,score:0,nowx:true})));}catch(_){base=[];}}
     sel=(base||[]).filter(d=>_MUSC[d.type]).map(d=>d.date);
   }
   S._wp={sel:new Set(sel.filter(ds=>ds>=todayStr)),auto};
