@@ -1315,10 +1315,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.97';
+const APP_VERSION='3.98';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.98',d:'Your week comes first, and the full backup includes your rides again',det:'The week screen now shows the days of your week right after the check-in and the ride card; the AI Coach review and Ask the Coach moved below the plan and the recovery map, so today is visible without scrolling. The full backup (Settings, Account) had stopped including your ride history when rides moved to their own cloud list in 3.60; it now includes your rides and any ride still waiting to upload, and Restore brings them back. On a phone the backup opens the share sheet (Save to Files, AirDrop, Mail) instead of a download, which the Training Brain iPhone app could not save at all.'},
   {v:'3.97',d:'A daily check-in that eases the day off, and a rest timer between sets',det:'Check-in: on a gym or ride day the week screen asks how you are today. Good keeps the plan. Tired or Sore eases the day off: on a gym day you get the lighter exercise swaps and lighter, higher-rep targets (the same as the Tired and Sore buttons on the day screen, which now remember your answer for today), and a hard ride becomes an easy spin. Change your answer any time. Rest timer: ticking a set starts a countdown for the next one (2 min after big lifts, 75 s after smaller ones, 45 s after core) with −15, +15 and Skip, and a beep when rest is up. It keeps time while you are in another app and shows the right time when you come back. In the Training Brain iPhone app it also sends a notification when rest is up, even while you are in another app or the phone is locked (update the app in SideStore to get this). You can turn it off in Settings, Gym.'},
   {v:'3.96',d:'65 more gym machines and exercises, and a planner that only plans what your gym has',det:'The exercise list grew from 120 to 185, all built in like the rest. Smith machine: bench, incline, shoulder press, row, squat, split squat, hip thrust and calf raise. Plate-loaded and pin-loaded machines: iso-lateral chest press, shoulder press, row and pulldown, incline and decline machine press, high row, seated row machine, pendulum squat, belt squat, V-squat, seated leg press, standing leg curl, glute kickback machine, pullover, rotary torso, back extension, machine triceps extension, seated dip and machine preacher curl. Cable and functional trainer: rope pushdown, Y-raise, rear delt fly, front raise, upright row, single-arm pulldown and row, Bayesian curl, rope hammer curl, chest press, low-to-high fly, Pallof press and woodchop. Also trap bar and sumo deadlift, rack pull, landmine press, kettlebell swing, farmers walk, and more dumbbell options for home days. Every exercise now has a form cue, and search knows gym words like Hammer Strength, Smith, hex bar or captains chair. The AI coach can plan any of them. Your usual rotation is the same: the new ones are extra options for each slot, used when your gym lacks the usual equipment and listed under Same movement slot when you swap. Fixes from a full review: (1) a gym without barbells could still be planned Barbell Row; the planner now only plans what your equipment allows. (2) Ticking a set you left blank saved it with no reps, so progress, PRs and the debrief ignored it; it now logs the suggested reps, and the suggested weight when there is one. (3) The app kept copies of intervals.icu and weather replies, so a sync could show the previous fetch; now only app files and exercise photos are kept, and the photos also show with no signal at the gym. (4) Cable Glute Kickback was listed twice. (5) Swap suggestions could offer an exercise already in that day. (6) Settings, Advanced, Diagnostics now tells you if the cloud refuses your rides.'},
   {v:'3.95',d:'Fewer, better AI moments: one weekly coach card, and the daily note only when it matters',det:'The week screen had three AI cards doing overlapping jobs: the AI Coach card, the Weekly Advisor and the Weekly Review. It now has just the AI Coach card, which already covers what is progressing, what has stalled, sets per muscle and suggestions, and it is the one that plans your week. The daily coach note (shown when you tap Fresh, Okay, Tired or Sore on a day) now only asks the AI when there is something worth saying: you are tired or sore, the day was re-planned, a lift on today\'s list has stalled for three sessions, you are back after a week or more off, or your fatigue is high. Otherwise you get the short built-in tip, with a line saying so. The "Email me this summary" button moved to the AI Coach card; it appears once the weekly email is set up in Settings → Advanced, and it now sends the coach\'s review.'},
@@ -9761,10 +9762,8 @@ ${rGymDaysBar(plan)}
 ${plan&&+S.weekStart===+getMon(new Date())?_checkinCard(plan):''}
 ${+S.weekStart===+getMon(new Date())?_weekDebriefs():''}
 ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
-${rAskCoach()}
 ${rRideOnGymDayBanner()}
 ${rComebackBanner()}
-${rCoachCard()}
 ${(()=>{const p=DB.get('bike_pref','weather');
 return plan?`
 ${rCatchUpBanner()}
@@ -9833,6 +9832,8 @@ ${rRecoveryMap()}
   <button class="btn btn-p" onclick="openWeekPicker()">${p==='weather'?'🌤️ Generate (outdoor + gym)':p==='indoor'?'🏠 Generate (indoor + gym)':'🏋️ Generate (gym only)'}</button>
 </div>`;
 })();})()}
+${rCoachCard()}
+${rAskCoach()}
 ${(()=>{
   if(S.guest||!S.fbUser)return'';
   const ls=DB.get('fb_last_sync',null)||DB.get('fb_last_pull',null);
@@ -15901,15 +15902,27 @@ function exportData(){
   const data={_exported:new Date().toISOString(),_version:APP_VERSION};
   for(let i=0;i<localStorage.length;i++){
     const k=localStorage.key(i);
-    if(_isSyncKey(k))data[k]=DB.get(k);
+    if(_isSyncKey(k)||BACKUP_EXTRA.includes(k))data[k]=DB.get(k);
   }
-  const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const name=`training-brain-${fd(new Date())}.json`,text=JSON.stringify(data,null,2);
+  // v3.98: phones get the share sheet (Save to Files, AirDrop, Mail…). The iPhone app can't
+  // save a download at all, so its native side opens the sheet; Safari shares the file.
+  if(_tbNative({op:'share',name,text}))return;
+  if(/iPhone|iPad|Android/i.test(navigator.userAgent)&&navigator.canShare){
+    try{const f=new File([text],name,{type:'application/json'});
+      if(navigator.canShare({files:[f]})){navigator.share({files:[f],title:'Training Brain backup'}).catch(()=>{});return;}}catch(_){}
+  }
+  const blob=new Blob([text],{type:'application/json'});
   const url=URL.createObjectURL(blob);
   const a=document.createElement('a');
-  a.href=url;a.download=`training-brain-${fd(new Date())}.json`;
+  a.href=url;a.download=name;
   document.body.appendChild(a);a.click();
   document.body.removeChild(a);URL.revokeObjectURL(url);
 }
+// v3.98: kept on this device only (not synced one key at a time), but part of your data: the ride
+// list (synced per ride since v3.60, so the backup had stopped including it) and a ride still
+// waiting to upload.
+const BACKUP_EXTRA=['strava_activities','ride_pending'];
 
 /* ── CSV EXPORT — human-readable training records ── */
 function exportCSV(){
@@ -15964,8 +15977,8 @@ function importData(){
         // this overwrites whatever is currently there, including on your other
         // devices once it syncs. Previously it wrote every key in the file
         // unchecked, with no warning. v3.12.
-        const keys=Object.keys(data).filter(k=>!k.startsWith('_')&&_isSyncKey(k));
-        const skipped=Object.keys(data).filter(k=>!k.startsWith('_')&&!_isSyncKey(k)).length;
+        const keys=Object.keys(data).filter(k=>!k.startsWith('_')&&(_isSyncKey(k)||BACKUP_EXTRA.includes(k)));
+        const skipped=Object.keys(data).filter(k=>!k.startsWith('_')&&!_isSyncKey(k)&&!BACKUP_EXTRA.includes(k)).length;
         if(!keys.length){alert('❌ No Training Brain data found in that file.');return;}
         const when=data._exported?data._exported.slice(0,10):'unknown date';
         if(!confirm(`Restore ${keys.length} item${keys.length!==1?'s':''} from a backup taken ${when}?\n\nThis replaces matching data on this device and syncs to your other devices.`))return;
