@@ -20,6 +20,12 @@ Two Claude chats work on this repo, and this section is how they stay in sync:
 Rules for both: `git pull --rebase` before editing; after shipping, update this section
 (version, what changed, open items) in the same push. Never put secrets in the repo.
 
+Project skills (`.claude/skills/`, 2026-11): **tb-ship** (version bump, changelog, syntax
+check, this section, push, verify), **tb-browser-test** (Playwright harness: `scripts/seed.js`
+fixture + `scripts/smoke.cjs` all-screens run), **tb-exercise-library** (EX tables, slots,
+equipment, photos; `scripts/refcheck.cjs`), **tb-iphone-bridge** (native ops in
+`NativeBridge.swift`, watching the iPhone CI). Use them; improve them when you learn something.
+
 ### iPhone app (`iphone/`, added 2026-10-03)
 - WKWebView of the live site + `bridge.js` (Web Bluetooth subset → `BLEBridge.swift` / CoreBluetooth). Replaces Bluefy for
   the bike + HR strap. Remembers picked devices; keeps the screen on while connected; alerts/confirms; Google popup sheet.
