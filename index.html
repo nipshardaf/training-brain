@@ -1315,10 +1315,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.98';
+const APP_VERSION='3.99';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.99',d:'Muscle-building rules for when the AI coach is not available',det:'The planner that runs without the AI now follows standard muscle-building practice. (1) Your main lifts stay the same while they are going up, so you can keep adding weight; a main lift changes after 3 sessions with no gain or after about 6 weeks, while the smaller exercises keep rotating for variety. (2) Isolation and core exercises climb through their own rep range (for example 12 to 15) before the weight goes up, instead of jumping weight at 12 reps. (3) Leg days always include a leg curl, because squats barely train the hamstrings. (4) Isolation picks favour exercises that work the muscle at full stretch, like incline curls, overhead triceps extensions and seated leg curls. (5) After 5 hard weeks in a row, or 3 with two main lifts stalled, the week screen offers a lighter week: one set fewer per exercise and about 10% less weight. You choose, and the AI coach is told when you take it.'},
   {v:'3.98',d:'Your week comes first, and the full backup includes your rides again',det:'The week screen now shows the days of your week right after the check-in and the ride card; the AI Coach review and Ask the Coach moved below the plan and the recovery map, so today is visible without scrolling. The full backup (Settings, Account) had stopped including your ride history when rides moved to their own cloud list in 3.60; it now includes your rides and any ride still waiting to upload, and Restore brings them back. On a phone the backup opens the share sheet (Save to Files, AirDrop, Mail) instead of a download, which the Training Brain iPhone app could not save at all.'},
   {v:'3.97',d:'A daily check-in that eases the day off, and a rest timer between sets',det:'Check-in: on a gym or ride day the week screen asks how you are today. Good keeps the plan. Tired or Sore eases the day off: on a gym day you get the lighter exercise swaps and lighter, higher-rep targets (the same as the Tired and Sore buttons on the day screen, which now remember your answer for today), and a hard ride becomes an easy spin. Change your answer any time. Rest timer: ticking a set starts a countdown for the next one (2 min after big lifts, 75 s after smaller ones, 45 s after core) with −15, +15 and Skip, and a beep when rest is up. It keeps time while you are in another app and shows the right time when you come back. In the Training Brain iPhone app it also sends a notification when rest is up, even while you are in another app or the phone is locked (update the app in SideStore to get this). You can turn it off in Settings, Gym.'},
   {v:'3.96',d:'65 more gym machines and exercises, and a planner that only plans what your gym has',det:'The exercise list grew from 120 to 185, all built in like the rest. Smith machine: bench, incline, shoulder press, row, squat, split squat, hip thrust and calf raise. Plate-loaded and pin-loaded machines: iso-lateral chest press, shoulder press, row and pulldown, incline and decline machine press, high row, seated row machine, pendulum squat, belt squat, V-squat, seated leg press, standing leg curl, glute kickback machine, pullover, rotary torso, back extension, machine triceps extension, seated dip and machine preacher curl. Cable and functional trainer: rope pushdown, Y-raise, rear delt fly, front raise, upright row, single-arm pulldown and row, Bayesian curl, rope hammer curl, chest press, low-to-high fly, Pallof press and woodchop. Also trap bar and sumo deadlift, rack pull, landmine press, kettlebell swing, farmers walk, and more dumbbell options for home days. Every exercise now has a form cue, and search knows gym words like Hammer Strength, Smith, hex bar or captains chair. The AI coach can plan any of them. Your usual rotation is the same: the new ones are extra options for each slot, used when your gym lacks the usual equipment and listed under Same movement slot when you swap. Fixes from a full review: (1) a gym without barbells could still be planned Barbell Row; the planner now only plans what your equipment allows. (2) Ticking a set you left blank saved it with no reps, so progress, PRs and the debrief ignored it; it now logs the suggested reps, and the suggested weight when there is one. (3) The app kept copies of intervals.icu and weather replies, so a sync could show the previous fetch; now only app files and exercise photos are kept, and the photos also show with no signal at the gym. (4) Cable Glute Kickback was listed twice. (5) Swap suggestions could offer an exercise already in that day. (6) Settings, Advanced, Diagnostics now tells you if the cloud refuses your rides.'},
@@ -5307,9 +5308,11 @@ const ENERGY_PROFILE={
 function energyTargets(exId,energy){
   const prof=ENERGY_PROFILE[energy]||ENERGY_PROFILE.okay;
   const ex=EX[exId];if(!ex)return{sets:3,reps:'8–12',rpe:'7',sugW:null};
-  const sets=prof.sets??ex.sets;
+  let sets=prof.sets??ex.sets;
   const reps=prof.reps??ex.reps;
-  const rpe=prof.rpe??ex.rpe;
+  let rpe=prof.rpe??ex.rpe;
+  const dl=_deloadNow(); // v3.99: lighter week
+  if(dl){sets=Math.max(2,(+sets||3)-1);rpe='6–7';}
   const pr=DB.get('prs',{})[exId];
   // Assisted machines (ex.assist): the weight is machine HELP, so lower = harder.
   // The normal multiplier must invert — less energy should mean MORE assistance,
@@ -5322,6 +5325,7 @@ function energyTargets(exId,energy){
   // (and give assisted lifts correspondingly MORE help) until the block ends. v2.94.
   const _cb=_comebackState();
   if(_cb&&_cb.factor)mult=ex.assist?mult*(2-_cb.factor):mult*_cb.factor;
+  if(dl)mult=ex.assist?mult*1.1:mult*0.9;
   const sugW=pr?.w?Math.round(_wToCurrentUnit(pr.w,pr.u)*mult/2.5)*2.5:null;
   return{sets,reps,rpe,sugW};
 }
@@ -5466,7 +5470,7 @@ const SYNC_KEYS=['checkins','rest_off','ride_debriefs','debrief_next','prs','rec
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
-function _isSyncKey(k){return k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||k.startsWith('coachweek_')||SYNC_KEYS.includes(k);}
+function _isSyncKey(k){return k.startsWith('deload_')||k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||k.startsWith('coachweek_')||SYNC_KEYS.includes(k);}
 // v3.33: the dirty set is persisted (_sync_dirty). It used to live only in memory,
 // so sets logged with no signal were forgotten when the app closed — and the next
 // open's pull (cloud wins) replaced them with the cloud's older copy of that day.
@@ -6440,6 +6444,66 @@ function buildWeek(wdays){
 }
 
 /* ── SESSION GENERATION ── */
+/* ── v3.99 MUSCLE-BUILDING RULES (what the planner does without the AI) ──
+   1. Main lifts (SLOT_ANCHOR) stay the same while they progress, so you can add weight to
+      them week after week; they change after 3 sessions with no gain, or after ~6 weeks.
+      Accessories keep rotating for variety.
+   2. Isolation and core work through their own, higher rep range before adding weight.
+   3. Leg days always get a leg curl: squats barely train the hamstrings' knee-bending job.
+   4. Isolation picks favour exercises that load the muscle at full stretch (LEN_BIAS).
+   5. A lighter week is offered after 5 hard weeks in a row, or 3 with two main lifts stalled. */
+const SLOT_ANCHOR={PUSH:[0,1],PULL:[0,1],LEGS:[0,1],UPPER_PUMP:[0,1],SHOULDERS_ARMS:[0],FULL_BODY:[0,1,2,3]};
+const LEG_CURLS=['seated_leg_curl','leg_curl','standing_leg_curl'];
+const LEN_BIAS=new Set(['incline_curl','bayesian_curl','preacher','mach_preacher','spider_curl','tri_oh','db_oh_ext','skull','cable_tri_1arm',
+  'seated_leg_curl','cable_fly','db_fly','incline_db_fly','low_cable_fly','incline_cable_fly','cable_crossover','cable_lat','cable_y_raise',
+  'db_pullover','mach_pullover','straight_arm_pull','calf_raise','leg_press_calf']);
+// Days an exercise was done (done sets, newest first) within the last n days.
+function _exDays(id,n){const out=[];for(let i=1;i<=n;i++){const ds=fd(addDays(new Date(),-i));
+  for(const k of ['log_'+ds,'extralog_'+ds]){const lg=DB.get(k,null);if((lg&&lg.exercises||[]).some(e=>e.id===id&&(e.sets||[]).some(s=>s.done))){out.push(ds);break;}}}return out;}
+function _stalled3(id){const h=_dbHist(id,fd(new Date()),'',3);return h.length>=3&&Math.max(h[0].e,h[1].e)<=h[2].e+0.01;}
+// The main lift to keep for this slot: the one you've done most in the last 3 weeks, unless
+// it has stalled or you've been on it for more than 6 weeks (sessions no more than 3 weeks apart).
+function _anchorKeep(avail){
+  const used=avail.map(id=>[id,_exDays(id,21).length]).filter(x=>x[1]>0).sort((a,b)=>b[1]-a[1]);
+  for(const [id] of used){
+    if(_stalled3(id))continue;
+    const days=_exDays(id,70);let first=days[0];
+    for(let i=1;i<days.length;i++){if((new Date(days[i-1])-new Date(days[i]))/864e5>21)break;first=days[i];}
+    if(first&&(new Date(fd(new Date()))-new Date(first))/864e5>42)continue;
+    return id;
+  }
+  return null;
+}
+// A lighter week: chosen per week (synced deload_<monday>: true, or false = not now).
+function _deloadNow(){return DB.get('deload_'+fd(getMon(new Date())),null)===true;}
+function setDeload(v){DB.set('deload_'+fd(getMon(new Date())),!!v);debouncedSync();render();}
+function _deloadInfo(){
+  const mon=getMon(new Date());let weeks=0;
+  for(let w=1;w<=12;w++){
+    const m=addDays(mon,-7*w);if(DB.get('deload_'+fd(m),null)===true)break;
+    let n=0;for(let i=0;i<7;i++){const lg=DB.get('log_'+fd(addDays(m,i)),null);if(lg&&(lg.exercises||[]).some(e=>(e.sets||[]).some(x=>x.done)))n++;}
+    if(n<2)break;weeks++;
+  }
+  const seen=new Set(),stalled=[];
+  for(let i=1;i<=14;i++){const lg=DB.get('log_'+fd(addDays(new Date(),-i)),null);
+    for(const e of (lg&&lg.exercises)||[]){if(seen.has(e.id)||!EX[e.id]||_exTier(e.id)!==0)continue;seen.add(e.id);if(_stalled3(e.id))stalled.push(EX[e.id].n);}}
+  return weeks>=5||(weeks>=3&&stalled.length>=2)?{weeks,stalled}:null;
+}
+function _deloadCard(){
+  const d=DB.get('deload_'+fd(getMon(new Date())),null);
+  const bs='border-radius:10px;font-size:12px;font-weight:700;padding:8px 12px;cursor:pointer;font-family:inherit';
+  if(d===true)return`<div class="card" style="display:flex;align-items:center;gap:10px;padding:11px 14px"><div style="font-size:20px">🧘</div>
+  <div style="flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--t2)"><b style="color:var(--txt)">Lighter week.</b> One set fewer per exercise and about 10% less weight, so you recover and come back stronger.</div>
+  <button onclick="setDeload(false)" style="background:none;border:1px solid var(--bord);color:var(--al);${bs}">Undo</button></div>`;
+  if(d===false)return'';
+  const info=_deloadInfo();if(!info)return'';
+  return`<div class="card" style="padding:12px 14px">
+  <div style="font-size:13px;font-weight:800;margin-bottom:5px">🧘 Time for a lighter week?</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">You've trained hard ${info.weeks} weeks in a row${info.stalled.length?`, and ${_esc(info.stalled.slice(0,2).join(' and '))} ${info.stalled.length>1?'have':'has'} stopped going up`:''}. One easier week (a set fewer per exercise, about 10% less weight) lets you recover and come back stronger.</div>
+  <div style="display:flex;gap:7px"><button onclick="setDeload(true)" style="flex:1;background:var(--acc);border:none;color:#fff;${bs}">Make this week lighter</button>
+  <button onclick="setDeload(false)" style="background:var(--s2);border:1px solid var(--bord);color:var(--t2);${bs}">Not now</button></div>
+</div>`;
+}
 function genSession(type,energy='okay',bwOnly=false,seed=''){
   const slots=SLOTS[type];
   const recent=DB.get('recent_ex',[]);
@@ -6465,9 +6529,12 @@ function genSession(type,energy='okay',bwOnly=false,seed=''){
       if(comp.length>=1)avail=comp;
     }
     // 'balanced' = no additional filtering
+    // v3.99: keep the main lift you're progressing on; leg days get a leg curl
+    if((SLOT_ANCHOR[type]||[]).includes(si)){const keep=_anchorKeep(avail);if(keep){picked.push(keep);continue;}}
+    if(type==='LEGS'&&si===3){const curl=avail.filter(id=>LEG_CURLS.includes(id));if(curl.length)avail=curl;}
     const sorted=[...avail].sort((a,b)=>{
       const ai=recent.indexOf(a),bi=recent.indexOf(b);
-      if(ai===-1&&bi===-1)return seed?_hash(seed+a)-_hash(seed+b):(Math.random()<.5?-1:1); // v3.58: seeded = same pick on every device
+      if(ai===-1&&bi===-1)return(LEN_BIAS.has(b)-LEN_BIAS.has(a))||(seed?_hash(seed+a)-_hash(seed+b):(Math.random()<.5?-1:1)); // v3.58: seeded = same pick on every device; v3.99: full-stretch exercises first
       if(ai===-1)return -1;if(bi===-1)return 1;
       return bi-ai;
     });
@@ -6741,7 +6808,7 @@ RECOVERY NOW (still worked or recovering): ${D.rec||'everything fresh'}
 DAYS TO PLAN (session type and the muscles it covers):
 ${dayList}
 
-AVAILABLE EXERCISES at their gym (id | name | muscle | type). Use ONLY these ids:
+${_deloadNow()?'THIS IS A LIGHTER (DELOAD) WEEK they chose: about one set fewer per exercise and roughly 10% lighter weights than usual.\n\n':''}AVAILABLE EXERCISES at their gym (id | name | muscle | type). Use ONLY these ids:
 ${exList}
 
 HOW TO PLAN EACH DAY:
@@ -9760,6 +9827,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
 </div>
 ${rGymDaysBar(plan)}
 ${plan&&+S.weekStart===+getMon(new Date())?_checkinCard(plan):''}
+${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_deloadCard():''}
 ${+S.weekStart===+getMon(new Date())?_weekDebriefs():''}
 ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
 ${rRideOnGymDayBanner()}
@@ -12348,8 +12416,11 @@ function computeProgressionTarget(exId,lastSets,mach){
   if(!EX[exId])return null;
   const u=unit();
   const step=u==='lbs'?goalProfile.progression_step_lb:goalProfile.progression_step_kg;
-  const repLow=goalProfile.rep_low;
-  const repHigh=goalProfile.rep_high;
+  let repLow=goalProfile.rep_low;
+  let repHigh=goalProfile.rep_high;
+  // v3.99: isolation and core move up through their own (higher) rep range before adding
+  // weight; a full jump at 12 reps is ~30% on a lateral raise.
+  if(EX[exId]&&EX[exId].t==='I'){const m=String(EX[exId].reps||'').match(/^(\d+)\D+(\d+)$/);if(m&&+m[1]>=repLow){repLow=+m[1];repHigh=Math.max(+m[2],repLow+2);}}
   // No usable history → use PR or empty starter
   const done=(lastSets||[]).filter(s=>s.done&&s.w&&s.r);
   if(!done.length){
@@ -12408,7 +12479,8 @@ function makeSets(exId,energy,last,mach){
   const hasTgt=tgt&&tgt.w!==''&&tgt.w!=null;
   const hasLastData=last&&last.some(s=>s.w);
   const aiSugg=hasLastData?null:(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[exId]||null;
-  const prefillW=hasTgt?String(tgt.w):(aiSugg?.w||'');
+  let prefillW=hasTgt?String(tgt.w):(aiSugg?.w||'');
+  if(hasTgt&&_deloadNow()){const w=parseFloat(tgt.w);if(w>0)prefillW=String(Math.round(w*(ex.assist?1.1:0.9)/2.5)*2.5);} // v3.99 lighter week
   const prefillR=hasTgt?String(tgt.r):(aiSugg?.r||'');
   const isAi=!hasTgt&&!!aiSugg;
   const isTgt=!!hasTgt;
