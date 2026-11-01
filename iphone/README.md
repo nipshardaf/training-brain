@@ -8,6 +8,8 @@ Renpho bike and a heart-rate strap — which Safari can't do. It replaces Bluefy
 - Ride mode's **Connect** buttons show a native device list. A device you picked
   before is taken automatically next time.
 - The screen stays on while the bike or strap is connected.
+- The gym rest timer sends a notification when rest is up, even while you're in
+  another app or the phone is locked (allow notifications the first time it asks).
 - Sign in inside the app (username + password, same account as your other phone).
 
 GitHub builds a ready-to-install **TrainingBrain.ipa** after every change:

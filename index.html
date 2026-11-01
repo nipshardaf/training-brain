@@ -1315,10 +1315,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.96';
+const APP_VERSION='3.97';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.97',d:'A daily check-in that eases the day off, and a rest timer between sets',det:'Check-in: on a gym or ride day the week screen asks how you are today. Good keeps the plan. Tired or Sore eases the day off: on a gym day you get the lighter exercise swaps and lighter, higher-rep targets (the same as the Tired and Sore buttons on the day screen, which now remember your answer for today), and a hard ride becomes an easy spin. Change your answer any time. Rest timer: ticking a set starts a countdown for the next one (2 min after big lifts, 75 s after smaller ones, 45 s after core) with −15, +15 and Skip, and a beep when rest is up. It keeps time while you are in another app and shows the right time when you come back. In the Training Brain iPhone app it also sends a notification when rest is up, even while you are in another app or the phone is locked (update the app in SideStore to get this). You can turn it off in Settings, Gym.'},
   {v:'3.96',d:'65 more gym machines and exercises, and a planner that only plans what your gym has',det:'The exercise list grew from 120 to 185, all built in like the rest. Smith machine: bench, incline, shoulder press, row, squat, split squat, hip thrust and calf raise. Plate-loaded and pin-loaded machines: iso-lateral chest press, shoulder press, row and pulldown, incline and decline machine press, high row, seated row machine, pendulum squat, belt squat, V-squat, seated leg press, standing leg curl, glute kickback machine, pullover, rotary torso, back extension, machine triceps extension, seated dip and machine preacher curl. Cable and functional trainer: rope pushdown, Y-raise, rear delt fly, front raise, upright row, single-arm pulldown and row, Bayesian curl, rope hammer curl, chest press, low-to-high fly, Pallof press and woodchop. Also trap bar and sumo deadlift, rack pull, landmine press, kettlebell swing, farmers walk, and more dumbbell options for home days. Every exercise now has a form cue, and search knows gym words like Hammer Strength, Smith, hex bar or captains chair. The AI coach can plan any of them. Your usual rotation is the same: the new ones are extra options for each slot, used when your gym lacks the usual equipment and listed under Same movement slot when you swap. Fixes from a full review: (1) a gym without barbells could still be planned Barbell Row; the planner now only plans what your equipment allows. (2) Ticking a set you left blank saved it with no reps, so progress, PRs and the debrief ignored it; it now logs the suggested reps, and the suggested weight when there is one. (3) The app kept copies of intervals.icu and weather replies, so a sync could show the previous fetch; now only app files and exercise photos are kept, and the photos also show with no signal at the gym. (4) Cable Glute Kickback was listed twice. (5) Swap suggestions could offer an exercise already in that day. (6) Settings, Advanced, Diagnostics now tells you if the cloud refuses your rides.'},
   {v:'3.95',d:'Fewer, better AI moments: one weekly coach card, and the daily note only when it matters',det:'The week screen had three AI cards doing overlapping jobs: the AI Coach card, the Weekly Advisor and the Weekly Review. It now has just the AI Coach card, which already covers what is progressing, what has stalled, sets per muscle and suggestions, and it is the one that plans your week. The daily coach note (shown when you tap Fresh, Okay, Tired or Sore on a day) now only asks the AI when there is something worth saying: you are tired or sore, the day was re-planned, a lift on today\'s list has stalled for three sessions, you are back after a week or more off, or your fatigue is high. Otherwise you get the short built-in tip, with a line saying so. The "Email me this summary" button moved to the AI Coach card; it appears once the weekly email is set up in Settings → Advanced, and it now sends the coach\'s review.'},
   {v:'3.94',d:'A coach debrief after every workout and ride, and a tidier Settings',det:'When you finish a gym session (on the phone or the watch) or a ride in Ride mode, the app writes a short debrief. The facts come from your own logs, worked out with plain rules: a new best, lifts that beat last time, any lift with no progress for three sessions, and total sets and weight lifted. For rides: time, watts and heart rate, how today compares with your past rides at a similar heart rate, whether your heart rate crept up for the same watts in the second half, and time in your heart-rate zone. The coach (Gemini, with DeepSeek as backup) then puts that into a sentence or two and suggests what to aim for next time. For lifts, those targets show up on the exercise card the next time that exercise comes up, e.g. Aim for 95 lb x 11. The debrief shows on the week screen until you close it, on that day, and at the end of the ride. If the coach can not be reached you still get the facts, with a Try again link. Settings is now grouped into Gym, Bike, Watches, Account and About. The older and technical parts (AI usage, the weekly email, the Vitruvian bridge, diagnostics) are folded under Advanced at the bottom.'},
@@ -5095,6 +5096,13 @@ function getRideSession(type,ds){
     pick=d?wk[d.date]:type.startsWith('LONG')?{cat:'endurance',lvl:_bikeLevels().endurance,mins:_bikeLongMins(type.includes('INDOOR'),false,mon),kind:'long',why:''}
       :{cat:'endurance',lvl:_bikeLevels().endurance,mins:50,kind:'endurance',why:''};
   }
+  // v3.97: tired or sore at today's check-in: a hard ride becomes an easy spin, a long one shorter
+  if(ds&&ds===fd(new Date())&&_ciLow(ds)){
+    const c=_checkin(ds);
+    if(pick.kind==='quality'||!['recovery','endurance'].includes(pick.cat))
+      pick={cat:'recovery',lvl:1,mins:Math.min(40,pick.mins||40),kind:'recovery',why:`You said you're ${c} today, so ${BIKE_CATS[pick.cat]?BIKE_CATS[pick.cat].name:'the hard ride'} became an easy spin.`};
+    else if(pick.mins>60)pick={...pick,mins:60,why:`You said you're ${c} today, so the ride is shorter.`};
+  }
   const rw=getRideWeek(mon);
   const w=_bikeWorkout(pick.cat,pick.lvl,pick.mins,type.includes('INDOOR'));
   if(pick.kind==='long'&&!/^Long/.test(w.name))w.name='Long '+w.name;
@@ -5149,7 +5157,9 @@ function _bikeTodayPicks(){
   const easy=(mins,why,tag,drop)=>({cat:'endurance',lvl:Math.max(1,lv.endurance-(drop?1:0)),mins,why,tag});
   const spin=(why,tag)=>({cat:'recovery',lvl:1,mins:35,why,tag});
   // The one reason (if any) today should stay easy — first match wins.
-  const hold=tsb!=null&&tsb<-30?`Your fatigue is high (form ${Math.round(tsb)}) — an easy spin today.`
+  const ci=_checkin(today),ciLow=ci==='tired'||ci==='sore'; // v3.97
+  const hold=ciLow?`You said you're ${ci} today, so an easy spin.`
+    :tsb!=null&&tsb<-30?`Your fatigue is high (form ${Math.round(tsb)}) — an easy spin today.`
     :easyWeek?'Recovery week — easier on purpose so the last three weeks sink in.'
     :legsY?`Yesterday was ${lg(gY)} — kept easy so your legs recover.`
     :hardYday?'You rode hard yesterday — never two hard days in a row.'
@@ -5162,14 +5172,14 @@ function _bikeTodayPicks(){
   if(hold){
     // A level down only when your body is the reason (as the weekly plan does), not the calendar.
     const sore=legsY||legsT||hardYday||easyWeek;
-    const top=tsb!=null&&tsb<-30?spin(hold,'Suggested'):easy(legsY||legsT?45:50,hold,'Suggested',sore);
+    const top=ciLow||(tsb!=null&&tsb<-30)?spin(hold,'Suggested'):easy(legsY||legsT?45:50,hold,'Suggested',sore);
     out=[top];
     if(top.cat==='endurance')out.push(spin('Even easier — just loosen the legs.','Keep it light'));
     else out.push(easy(45,'A comfortable pace, if a spin feels too little.','A bit more',true));
     // A hard option only when the only reason to hold back is this week's count of hard
     // sessions — never with tired legs, and never the day before a planned hard day or
     // on a legs day (that would be two hard days in a row, which the weekly plan forbids).
-    if(order.length&&!(tsb!=null&&tsb<-20)&&!legsY&&!legsT&&!hardYday&&!easyWeek&&!qTomorrow)
+    if(order.length&&!ciLow&&!(tsb!=null&&tsb<-20)&&!legsY&&!legsT&&!hardYday&&!easyWeek&&!qTomorrow)
       out.push(q(order[0],`If you feel fresh: ${BIKE_CATS[order[0]].name} is your most-needed hard session (${ago(order[0])}).`,'Feeling fresh?'));
   }else{
     const c=order[0]||'sweetspot';
@@ -5222,6 +5232,53 @@ const SWAP_HEAVY={
   cable_row:['bb_row','tbar_row'],      lat_pull:['pullup'],
   cable_curl:['bb_curl'],               db_curl:['bb_curl'],
 };
+// v3.97 CHECK-IN: one tap a day on the phone (Good / Tired / Sore), synced as 'checkins'
+// {date: energy}. Tired or Sore eases today off: lighter exercise swaps and targets on a gym
+// day, an easy spin instead of a hard ride. Good keeps the plan. The day screen's energy
+// buttons read and write the same answer for today.
+function _checkin(ds){return(DB.get('checkins',{})||{})[ds||fd(new Date())]||null;}
+function _ciLow(ds){const c=_checkin(ds);return c==='tired'||c==='sore';}
+function setCheckin(e){
+  const today=fd(new Date()),m=DB.get('checkins',{})||{};
+  if(e)m[today]=e;else delete m[today];
+  const ks=Object.keys(m).sort();while(ks.length>60)delete m[ks.shift()];
+  DB.set('checkins',m);
+  _applyDayEnergy(today,e||'okay');
+  debouncedSync();render();
+}
+// Today's gym exercises for this energy, always worked out from the day's own list
+// (energyBase), so changing your answer swaps back. A session under way keeps its exercises.
+function _applyDayEnergy(ds,e){
+  const pk=DB.pk(getMon(new Date(ds+'T12:00:00'))),plan=DB.get(pk,null);if(!Array.isArray(plan))return;
+  const i=plan.findIndex(d=>d.date===ds),d=plan[i];
+  if(!d||!_isGym(d.type)||_gymSetsLogged(ds))return;
+  const cur=d.exercises||[],base=d.energyBase||cur,next=applyEnergySwap(base,e);
+  const same=next.length===cur.length&&next.every((x,j)=>x===cur[j]);
+  if(same&&(e==='okay'?!d.energyBase:!!d.energyBase))return;
+  plan[i]={...d,exercises:next};
+  if(e==='okay')delete plan[i].energyBase;else plan[i].energyBase=base;
+  DB.set(pk,plan);
+}
+function _checkinCard(plan){
+  const today=fd(new Date()),d=(plan||[]).find(x=>x.date===today);
+  if(!d)return'';
+  const gym=_isGym(d.type),ride=/^(LONG|SHORT)_(IN|OUT)DOOR$/.test(d.type);
+  if(!gym&&!ride)return'';
+  if(_dayWasDone(d)||(gym&&_gymSetsLogged(today)))return'';
+  const ci=_checkin(today);
+  if(ci==='okay'||ci==='fresh')return'';
+  const btn=(e,ic,l)=>`<button onclick="setCheckin('${e}')" style="flex:1;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:13px;font-weight:700;padding:10px 4px;cursor:pointer;font-family:inherit">${ic} ${l}</button>`;
+  if(ci)return`<div class="card" style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+  <div style="font-size:20px">${ci==='sore'?'🤕':'😪'}</div>
+  <div style="flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--t2)"><b style="color:var(--txt)">${ci==='sore'?'Sore':'Tired'} today.</b> ${gym?'Lighter weights, higher reps and easier exercises today.':'Today\'s ride is an easy spin.'}</div>
+  <button onclick="setCheckin(null)" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:6px 10px;cursor:pointer;flex-shrink:0">Change</button>
+</div>`;
+  return`<div class="card" style="padding:12px 14px">
+  <div style="font-size:13px;font-weight:800;margin-bottom:9px">How are you today?</div>
+  <div style="display:flex;gap:7px">${btn('okay','😀','Good')}${btn('tired','😪','Tired')}${btn('sore','🤕','Sore')}</div>
+  <div style="font-size:11px;color:var(--t2);margin-top:8px;line-height:1.45">Tired or sore eases today off: ${gym?'lighter weights and easier exercises':'an easy spin instead'}.</div>
+</div>`;
+}
 function applyEnergySwap(exs,energy){
   if(energy==='okay')return exs;
   const map=energy==='fresh'?SWAP_HEAVY:SWAP_LIGHT;
@@ -5402,7 +5459,7 @@ let _pinBuf='';
 const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
-const SYNC_KEYS=['ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+const SYNC_KEYS=['checkins','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
   'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
@@ -8448,7 +8505,9 @@ function openDay(dateStr){
   S.viewDate=new Date(dateStr+'T12:00:00');
   S.weekStart=getMon(S.viewDate);
   S.baseExercises=null;
-  S.energy=null;
+  // v3.97: today starts from the check-in; Tired or Sore also asks for the coach's note once
+  S.energy=dateStr===fd(new Date())?_checkin(dateStr):null;
+  S._ciAuto=S.energy==='tired'||S.energy==='sore';
   // Reset collapse state for fresh day view
   S.exCollapsed=new Set();S.exExpanded=new Set();
   go('day',{_dir:'fwd'});
@@ -9699,6 +9758,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
   <button class="wnav-btn" onclick="shiftWeek(1)">›</button>
 </div>
 ${rGymDaysBar(plan)}
+${plan&&+S.weekStart===+getMon(new Date())?_checkinCard(plan):''}
 ${+S.weekStart===+getMon(new Date())?_weekDebriefs():''}
 ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
 ${rAskCoach()}
@@ -12547,6 +12607,103 @@ function updSet(ei,si,field,val){
   debouncedSync();
 }
 
+/* ── REST TIMER (v3.97) ──
+   Ticking a set starts a countdown for the next one (_restSecs: 2 min after big lifts,
+   75 s after smaller ones, 45 s after core). It runs off the clock, so it's right when you
+   come back from another app, and it survives the page being reloaded (rest_timer in
+   localStorage). A web page can't run while another app is open; in the Training Brain
+   iPhone app the native side schedules a phone notification for when rest is up (tbnative). */
+const Rest={end:0,total:0,label:'',doneAt:0,iv:null,ac:null};
+function _tbNative(msg){try{const h=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.tbnative;if(h){h.postMessage(msg);return true;}}catch(_){}return false;}
+const _hasNative=()=>!!(window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.tbnative);
+function _restSave(){try{if(Rest.end)localStorage.setItem('rest_timer',JSON.stringify({end:Rest.end,total:Rest.total,label:Rest.label}));else localStorage.removeItem('rest_timer');}catch(_){}}
+function _restAlarm(){const secs=Math.round((Rest.end-Date.now())/1000);if(secs>0)_tbNative({op:'alarm',id:'rest',secs,title:'Rest is up',body:Rest.label||'Time for your next set'});}
+function restStart(secs,label){
+  Rest.total=secs;Rest.end=Date.now()+secs*1000;Rest.label=label;Rest.doneAt=0;
+  try{if(!Rest.ac){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Rest.ac=new AC();}if(Rest.ac&&Rest.ac.state==='suspended')Rest.ac.resume();}catch(_){} // unlocked by the tap
+  _restSave();_restAlarm();_restShow();
+}
+function restAdjust(d){
+  if(!Rest.end)return;
+  Rest.end=Math.max(Date.now()+5000,Rest.end+d*1000);Rest.total=Math.max(5,Rest.total+d);Rest.doneAt=0;
+  _restSave();_restAlarm();_restTick();
+}
+function restStop(){
+  Rest.end=0;Rest.doneAt=0;clearInterval(Rest.iv);Rest.iv=null;
+  _tbNative({op:'cancel',id:'rest'});_restSave();
+  document.getElementById('rest-bar')?.remove();
+}
+function _restBeep(){
+  const ac=Rest.ac;if(!ac)return;
+  try{if(ac.state==='suspended')ac.resume();
+    for(let i=0;i<3;i++){const o=ac.createOscillator(),g=ac.createGain(),t=ac.currentTime+i*0.25;
+      o.frequency.value=988;g.gain.setValueAtTime(0.0001,t);g.gain.exponentialRampToValueAtTime(0.35,t+0.02);g.gain.exponentialRampToValueAtTime(0.0001,t+0.18);
+      o.connect(g);g.connect(ac.destination);o.start(t);o.stop(t+0.2);}
+  }catch(_){}
+}
+function _restShow(){
+  let b=document.getElementById('rest-bar');
+  if(!b){
+    b=document.createElement('div');b.id='rest-bar';
+    b.style.cssText='position:fixed;left:12px;right:12px;z-index:390;background:var(--s1);border:1px solid var(--bord);border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.35);padding:10px 10px 12px 14px;display:flex;align-items:center;gap:8px;overflow:hidden';
+    const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;font-weight:800;padding:8px 9px;cursor:pointer;flex-shrink:0;font-family:inherit';
+    b.innerHTML=`<div id="rest-t" style="font-size:24px;font-weight:900;font-variant-numeric:tabular-nums;min-width:58px">0:00</div>
+      <div style="flex:1;min-width:0"><div id="rest-h" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">Rest</div>
+      <div id="rest-l" style="font-size:12px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div>
+      <button onclick="restAdjust(-15)" style="${sb}">−15</button><button onclick="restAdjust(15)" style="${sb}">+15</button>
+      <button onclick="restStop()" aria-label="Skip rest" style="${sb}">Skip</button>
+      <div id="rest-p" style="position:absolute;left:0;bottom:0;height:3px;background:var(--acc);width:0"></div>`;
+    document.body.appendChild(b);
+  }
+  if(!Rest.iv)Rest.iv=setInterval(_restTick,500);
+  _restTick();
+}
+function _restTick(){
+  const b=document.getElementById('rest-bar');if(!b||!Rest.end){if(b)b.remove();return;}
+  // sit above the bottom navigation when the screen has one
+  const nav=document.querySelector('.bnav'),h=nav?nav.getBoundingClientRect().height:0; // fixed: no offsetParent, so measure it
+  b.style.bottom=h?`${Math.round(h)+10}px`:'calc(env(safe-area-inset-bottom,0px) + var(--kb,0px) + 16px)';
+  const now=Date.now(),left=Math.ceil((Rest.end-now)/1000);
+  const T=document.getElementById('rest-t'),H=document.getElementById('rest-h'),L=document.getElementById('rest-l'),P=document.getElementById('rest-p');
+  if(L)L.textContent=Rest.label||'';
+  if(left>0){
+    if(T)T.textContent=`${Math.floor(left/60)}:${String(left%60).padStart(2,'0')}`;
+    if(H)H.textContent='Rest';
+    if(P)P.style.width=`${Math.min(100,Math.max(0,100*(1-(Rest.end-now)/(Rest.total*1000))))}%`;
+    b.style.borderColor='var(--bord)';
+    return;
+  }
+  if(!Rest.doneAt){
+    Rest.doneAt=now;
+    // only sound it when it ends in front of you (a late return just shows it)
+    if(document.visibilityState==='visible'&&now-Rest.end<3000){_restBeep();try{navigator.vibrate&&navigator.vibrate([250,120,250]);}catch(_){}}
+  }
+  if(T)T.textContent='Go';
+  if(H)H.textContent="Rest's up";
+  if(P)P.style.width='100%';
+  b.style.borderColor='var(--grn)';
+  if(now-Rest.doneAt>15000)restStop();
+}
+// Ticked a set: rest until the next one still to do (none left: no timer).
+function _restAfterTick(ei,si){
+  if(DB.get('rest_off',false)||!S.activeLog)return;
+  const exs=S.activeLog.exercises,le=exs[ei];if(!le)return;
+  let nx=null;
+  for(let j=si+1;j<le.sets.length;j++)if(!le.sets[j].done){nx=[ei,j];break;}
+  for(let k=1;!nx&&k<exs.length;k++){const i=(ei+k)%exs.length,j=(exs[i].sets||[]).findIndex(t=>!t.done);if(j>=0)nx=[i,j];}
+  if(!nx){restStop();return;}
+  const x=exs[nx[0]],st=x.sets[nx[1]],uni=!!(EX[x.id]&&EX[x.id].uni&&st.side);
+  // left side done, right side next on the same set: straight on, no rest
+  if(nx[0]===ei&&uni&&le.sets[si]&&le.sets[si].side&&le.sets[si].side!==st.side&&Math.floor(si/2)===Math.floor(nx[1]/2)){restStop();return;}
+  const no=uni?Math.floor(nx[1]/2)+1:nx[1]+1;
+  restStart(_restSecs(le.id),`Next: ${(EX[x.id]&&EX[x.id].n)||'next exercise'} · set ${no}${uni?' ('+(st.side==='L'?'left':'right')+')':''}`);
+}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&Rest.end)_restShow();});
+// back after the page was reloaded: carry on with a timer that's still running (or just ended)
+setTimeout(()=>{try{const r=JSON.parse(localStorage.getItem('rest_timer')||'null');
+  if(r&&r.end>Date.now()-15000){Rest.end=r.end;Rest.total=r.total||90;Rest.label=r.label||'';Rest.doneAt=r.end<Date.now()?Date.now():0;_restShow();}
+  else if(r)localStorage.removeItem('rest_timer');}catch(_){}},1200);
+
 // v3.96: ticking a set you left blank used to save a set with no weight or reps, which
 // progress, PRs and the debrief all ignore (common on an exercise you've never done). Now it
 // logs what the screen suggested: the low end of the rep range, plus the suggested weight
@@ -12568,6 +12725,7 @@ function togSet(ei,si){
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
   _fillTickedSet(le,set);
+  if(set.done)_restAfterTick(ei,si); // v3.97
   _saveLog();
   if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r),_leMach(le));
   debouncedSync();
@@ -12745,6 +12903,7 @@ function markEdited(ei,si,inp){
 
 function completeWk(){
   if(!S.activeLog)return;
+  restStop(); // v3.97
   S.activeLog.completed=true;
   _saveLog();
   const _dbKey=S.activeLogKey; // v3.94: debrief this session once it's saved
@@ -14508,6 +14667,15 @@ ${(()=>{
   </div>`:''}
 </div>`;})()}
 
+<div class="sec-hdr">⏱️ Rest timer</div>
+<div class="card" style="display:flex;align-items:center;gap:12px">
+  <div style="flex:1;min-width:0">
+    <div style="font-size:13px;font-weight:700;margin-bottom:3px">Start a rest timer when you tick a set</div>
+    <div style="font-size:11px;color:var(--t2);line-height:1.5">2 min after big lifts, 75 s after smaller ones, 45 s after core. ${_hasNative()?'It buzzes even when you\'re in another app.':'In the Training Brain iPhone app it also buzzes while you\'re in another app or the phone is locked.'}</div>
+  </div>
+  <button onclick="DB.set('rest_off',!DB.get('rest_off',false));if(DB.get('rest_off',false))restStop();debouncedSync();render()" style="background:${DB.get('rest_off',false)?'var(--s2)':'var(--acc)'};border:1px solid ${DB.get('rest_off',false)?'var(--bord)':'var(--acc)'};border-radius:10px;color:${DB.get('rest_off',false)?'var(--t2)':'#fff'};font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;flex-shrink:0">${DB.get('rest_off',false)?'Off':'On'}</button>
+</div>
+
 <div class="set-grp">🚴 Bike</div>
 ${(()=>{
   const profile=DB.get('user_profile',null);
@@ -15581,6 +15749,7 @@ function exLogTog(ei,si){
   const set=le?.sets[si];if(!set)return;
   set.done=!set.done;
   _fillTickedSet(le,set);
+  if(set.done)_restAfterTick(ei,si); // v3.97
   _saveLog();
   if(set.done&&set.w&&set.r)checkPR(le.id,parseFloat(set.w),parseInt(set.r),_leMach(le));
   debouncedSync();
@@ -15712,16 +15881,14 @@ function bindEnergy(){
           }
         });
       }
-      // Swap exercises based on energy — gym days only
-      if(isGym&&dp&&ds){
-        if(!S.baseExercises)S.baseExercises=[...dp.exercises];
-        const newExs=applyEnergySwap(S.baseExercises,b.dataset.e);
-        const di=plan.findIndex(d=>d.date===ds);
-        if(di!==-1){plan[di].exercises=newExs;DB.set(pk,plan);}
-        render();
-      }
+      // v3.97: a pick for today is also today's check-in
+      if(ds&&ds===fd(new Date())){const m=DB.get('checkins',{})||{};if(m[ds]!==b.dataset.e){m[ds]=b.dataset.e;DB.set('checkins',m);debouncedSync();}}
+      // Swap exercises based on energy (gym days only), from the day's own list
+      if(isGym&&dp&&ds){_applyDayEnergy(ds,b.dataset.e);render();}
     });
   });
+  // v3.97: opened today after a Tired/Sore check-in: run it like a tap (coach's note, swaps)
+  if(S._ciAuto){S._ciAuto=false;const sel=document.querySelector('.ebtn.sel');if(sel)setTimeout(()=>sel.click(),0);}
 }
 
 /* ── EXPORT / IMPORT ── */

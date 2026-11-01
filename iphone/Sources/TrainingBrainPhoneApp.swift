@@ -1,8 +1,10 @@
 import SwiftUI
+import UserNotifications
 import WebKit
 
 // Training Brain for iPhone: the live web app (so every update arrives as usual)
-// plus native Bluetooth for the bike and heart-rate strap (BLEBridge + bridge.js).
+// plus native Bluetooth for the bike and heart-rate strap (BLEBridge + bridge.js) and
+// phone notifications, e.g. when rest between sets is up (NativeBridge).
 
 let appURL = URL(string: "https://nipshardaf.github.io/training-brain/")!
 
@@ -64,6 +66,8 @@ struct WebView: UIViewRepresentable {
             cfg.userContentController.addUserScript(WKUserScript(source: src, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         }
         cfg.userContentController.add(ble, name: "tbble")
+        cfg.userContentController.add(NativeBridge.shared, name: "tbnative")
+        UNUserNotificationCenter.current().delegate = NativeBridge.shared
         let wv = WKWebView(frame: .zero, configuration: cfg)
         wv.navigationDelegate = context.coordinator
         wv.uiDelegate = context.coordinator
