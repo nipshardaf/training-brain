@@ -1043,10 +1043,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.90';
+const APP_VERSION='3.91';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.91',d:'Ride screen suggests a workout for today, even on days with no ride planned',det:'Opening Ride on a gym or rest day used to land on a bare Free ride, with the real workouts hidden under Pick a different workout. The cycling plan only chose workouts for the days it had marked as ride days. Now the Ride screen opens on a Suggested workout for today, using the same rules as your weekly plan: your goal, which hard session you have gone longest without, how tired you are, legs yesterday, today or tomorrow, and recovery weeks. It also looks at the rest of your week. If you already did your hard session, or your planned hard day is coming up, it suggests an easy ride and tells you why, so an extra ride does not steal from it or stack two hard days. Under the suggestion are one or two alternatives (keep it easy, or a harder one if you feel fresh), each with a one-line reason. The full list is still there as All 8 workouts. The Ride with my bike button on the week screen now shows the workout it will open with. None of this is AI: the bike workouts come from the app\'s own training rules. The AI coach only plans your gym exercises.'},
   {v:'3.90',d:'Machine Lateral Raise, and a Remove set button',det:'Added the Machine Lateral Raise. Swap it in on any day with side delts, and the planner can pick it too. Next to + Add set there is now − Remove set: it takes away the last set you have not ticked yet (it asks first if they are all ticked), and the message has an Undo in case you tapped it by mistake.'},
   {v:'3.89',d:'Name the machine you are on, and its numbers stay separate',det:'The same exercise on two machines can have very different weights (your Dual Pulley Pulldown versus another lat pulldown), and the app mixed them up, so the target said 130 lb while your last set was 100. On an exercise you can now tap Name this machine. From then on, last time, the target and the PR for that exercise come only from sets on that machine. Each gym keeps its own list of machines, and the app picks the one you used last there. Sets logged before this count as Other.'},
   {v:'3.88',d:'Typing in Log sets: the panel moves up above the keyboard',det:'On iPhone the keyboard covered the Log sets panel, so you could only see the first set while typing. The panel now sits just above the keyboard, and the box you tap scrolls into view. The weight and reps boxes also no longer offer to AutoFill a contact.'},
@@ -4801,6 +4802,89 @@ function getRideSession(type,ds){
   if(pick.kind==='long'&&w.total>=90)w.focus=`${w.focus} For a ride this long: drink every 15–20 minutes and eat something (a bar, banana or gel — roughly 30–60 g of carbs an hour) from the first hour on. On hills, shift easy and stay seated and steady rather than surging — that's what keeps 2–3 hours comfortable.`;
   const phase=rw.phase==='taper'?'Taper — event this week':rw.phase==='peak'?'Peak week':rw.phase==='done'?'Post-event recovery':RIDE_PHASE[rw.wk];
   return{...w,kind:pick.kind,why:pick.why,phase};
+}
+
+// v3.91: what to ride TODAY when today isn't a planned ride day. _bikeWeek only picks
+// for the plan's ride days, so any other day used to open on a bare "Free ride" with
+// the real workouts tucked away. Same ingredients as the week: goal priority × days
+// since each type, fatigue, legs either side, recovery weeks — plus what this week
+// already holds, so an extra ride doesn't steal (or stack onto) the planned quality day.
+// Returns [top pick, …alternatives], each {cat,lvl,mins,why,tag}.
+let _bikeTodayMemo={key:null,v:null};
+function _bikeTodayPicks(){
+  const today=fd(new Date()),key=today+'|'+_factsVer;
+  if(_bikeTodayMemo.key===key)return _bikeTodayMemo.v;
+  const now=new Date(),mon=getMon(now),shift=n=>fd(addDays(now,n));
+  const plan=DB.get(DB.pk(mon),null)||[],lv=_bikeLevels(),goal=BIKE_GOALS[_bikeGoal()],P=goal.prio;
+  const gymOn=ds=>{
+    const lg=DB.get('log_'+ds,null);
+    if(lg&&_MUSC[lg.type]&&lg.exercises?.some(e=>e.sets?.some(x=>x.done)))return lg.type;
+    const p=(DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null)||[]).find(d=>d.date===ds);
+    return p&&_MUSC[p.type]?p.type:null;
+  };
+  const legs=t=>t==='LEGS'||t==='FULL_BODY';
+  let tsb=null;
+  const curve=DB.get('bike_fitness_curve',null);
+  if(curve){const ks=Object.keys(curve).filter(k=>k<=today).sort();if(ks.length)tsb=curve[ks[ks.length-1]].tsb;}
+  const rw=getRideWeek(mon),easyWeek=rw.wk===3||rw.phase==='taper'||rw.phase==='done';
+  const logAll=DB.get('bike_level_log',[])||[];
+  const isQ=c=>(P[c]||0)>0;
+  const hardYday=logAll.some(x=>x&&x.date===shift(-1)&&isQ(x.cat));
+  const doneQ=logAll.filter(x=>x&&x.date>=fd(mon)&&x.date<=today&&isQ(x.cat)).length;
+  const wk=_bikeWeek(mon),dayName=ds=>DNAMES[new Date(ds+'T12:00:00').getDay()];
+  const aheadQ=Object.entries(wk).filter(([d,v])=>d>today&&v.kind==='quality').sort((a,b)=>a[0].localeCompare(b[0]));
+  const qTomorrow=wk[shift(1)]&&wk[shift(1)].kind==='quality';
+  const rideDays=plan.filter(d=>/^(LONG|SHORT)_(IN|OUT)DOOR$/.test(d.type)).length;
+  const quota=goal.q(Math.max(1,rideDays));
+  const gY=gymOn(shift(-1)),gT=gymOn(today),gN=gymOn(shift(1)),legsY=legs(gY),legsT=legs(gT),legsN=legs(gN);
+  // Full Body counts as legs, but say which it is: the week may have turned today into Full Body.
+  const lg=t=>t==='FULL_BODY'?'full body':'legs';
+  const last=_bikeLastDone(today),first=logAll.reduce((a,x)=>x&&x.date<a?x.date:a,today);
+  const dd=d=>Math.round((now-new Date(d+'T12:00:00'))/864e5);
+  const since=c=>Math.min(28,last[c]?dd(last[c]):14+dd(first));
+  const ago=c=>last[c]?`last done ${since(c)} day${since(c)===1?'':'s'} ago`:'not done yet';
+  const order=Object.keys(BIKE_CATS).filter(isQ).filter(c=>!(legsN&&(c==='vo2'||c==='hills')))
+    .sort((a,b)=>(P[b]*since(b)-P[a]*since(a))||(since(b)-since(a)));
+  const tired=tsb!=null&&tsb<-20;
+  const q=(c,why,tag)=>({cat:c,lvl:Math.max(1,lv[c]-(tired?1:0)),mins:60,why,tag});
+  const easy=(mins,why,tag,drop)=>({cat:'endurance',lvl:Math.max(1,lv.endurance-(drop?1:0)),mins,why,tag});
+  const spin=(why,tag)=>({cat:'recovery',lvl:1,mins:35,why,tag});
+  // The one reason (if any) today should stay easy — first match wins.
+  const hold=tsb!=null&&tsb<-30?`Your fatigue is high (form ${Math.round(tsb)}) — an easy spin today.`
+    :easyWeek?'Recovery week — easier on purpose so the last three weeks sink in.'
+    :legsY?`Yesterday was ${lg(gY)} — kept easy so your legs recover.`
+    :hardYday?'You rode hard yesterday — never two hard days in a row.'
+    :legsT?`${lg(gT)==='legs'?'Legs':'Full body'} today — an easy ride won't take anything from the lift.`
+    :qTomorrow?`Tomorrow's ${BIKE_CATS[wk[shift(1)].cat].name} is your hard day — save your legs for it.`
+    :doneQ>=quota?`You've done your ${quota>1?quota+' hard sessions':'hard session'} this week — this one's for stamina and calories.`
+    :doneQ+aheadQ.length>=quota&&aheadQ.length?`Your hard session this week is ${dayName(aheadQ[0][0])}'s ${BIKE_CATS[aheadQ[0][1].cat].name} — keep today comfortable.`
+    :null;
+  let out;
+  if(hold){
+    // A level down only when your body is the reason (as the weekly plan does), not the calendar.
+    const sore=legsY||legsT||hardYday||easyWeek;
+    const top=tsb!=null&&tsb<-30?spin(hold,'Suggested'):easy(legsY||legsT?45:50,hold,'Suggested',sore);
+    out=[top];
+    if(top.cat==='endurance')out.push(spin('Even easier — just loosen the legs.','Keep it light'));
+    else out.push(easy(45,'A comfortable pace, if a spin feels too little.','A bit more',true));
+    // A hard option only when the only reason to hold back is this week's count of hard
+    // sessions — never with tired legs, and never the day before a planned hard day or
+    // on a legs day (that would be two hard days in a row, which the weekly plan forbids).
+    if(order.length&&!(tsb!=null&&tsb<-20)&&!legsY&&!legsT&&!hardYday&&!easyWeek&&!qTomorrow)
+      out.push(q(order[0],`If you feel fresh: ${BIKE_CATS[order[0]].name} is your most-needed hard session (${ago(order[0])}).`,'Feeling fresh?'));
+  }else{
+    const c=order[0]||'sweetspot';
+    out=[q(c,`${BIKE_CATS[c].name} is your most-needed hard session (${ago(c)})${tired?' — a level easier while your form is low':''}${legsN?`; nothing too leg-heavy before tomorrow's ${lg(gN)}`:''}.`,'Suggested')];
+    if(order[1])out.push(q(order[1],`Next most-needed (${ago(order[1])}).`,'Or'));
+    out.push(easy(50,'Comfortable pace — stamina and calories without the fatigue.','Keep it easy'));
+  }
+  _bikeTodayMemo={key,v:out};
+  return out;
+}
+function _bikeTodayWorkout(i){
+  const p=_bikeTodayPicks()[i||0];if(!p)return null;
+  const w=_bikeWorkout(p.cat,p.lvl,p.mins,true);
+  return{...w,why:p.why,tag:p.tag,sug:i||0};
 }
 
 const MOBILITY=[
@@ -8726,6 +8810,12 @@ function _rideStepTargets(x){
 }
 // What you're riding: today's workout, any library workout, or a free ride with an
 // optional goal (time, calories, or a heart-rate zone).
+function _rideWorkoutFor(kind,arg){
+  if(kind==='ftp')return _ftpTestProgram();
+  if(kind==='plan')return Ride.plan||null;
+  if(kind==='sug')return _bikeTodayWorkout(+arg||0);
+  return BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
+}
 function ridePick(kind,arg,auto){
   const mid=Ride.state==='riding'||Ride.state==='paused';
   if(mid&&!Ride.changeOpen)return;
@@ -8735,9 +8825,9 @@ function ridePick(kind,arg,auto){
     Ride.auto=!!(arg&&arg.type==='hr');
   }else{
     // v3.62: today's planned workout as is, or any category at your current level.
-    const w=kind==='ftp'?_ftpTestProgram():kind==='plan'&&Ride.plan?Ride.plan:BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
+    const w=_rideWorkoutFor(kind,arg);
     if(!w)return;
-    Ride.prog={name:w.name,steps:w.steps,cat:w.cat,lvl:w.lvl,test:w.test||null};Ride.goal=null;Ride.name=w.name;Ride.auto=true;Ride.testResult=null;Ride.testLowAt=null;
+    Ride.prog={name:w.name,steps:w.steps,cat:w.cat,lvl:w.lvl,test:w.test||null,sug:kind==='sug'?(+arg||0):null};Ride.goal=null;Ride.name=w.name;Ride.auto=true;Ride.testResult=null;Ride.testLowAt=null;
   }
   if(!auto)Ride.picked=true;
   Ride.stepIdx=-1;Ride.bias=0;
@@ -8758,7 +8848,7 @@ function _rideSwitch(kind,arg){
     Ride.auto=!!(arg&&arg.type==='hr');
     if(!wasFree)Ride.name=(Ride.name0||Ride.name)+' → Free ride';
   }else{
-    const w=kind==='ftp'?_ftpTestProgram():kind==='plan'&&Ride.plan?Ride.plan:BIKE_CATS[arg]?_bikeWorkout(arg,_bikeLevels()[arg],arg==='recovery'?35:60,true):null;
+    const w=_rideWorkoutFor(kind,arg);
     if(!w)return;
     let steps=w.steps.map(x=>({...x}));
     if(now>=300&&!w.test&&w.cat!=='recovery'){
@@ -9023,13 +9113,17 @@ function _rideContext(){
   const dp=(DB.get(DB.pk(getMon(new Date())),null)||[]).find(d=>d.date===ds);
   const sess=dp&&/OUTDOOR|INDOOR/.test(dp.type)?getRideSession(dp.type,ds):null;
   Ride.plan=sess||null;
-  if(!Ride.picked&&Ride.state==='idle'){if(sess)ridePick('plan',null,true);else ridePick('free',null,true);}
+  if(!Ride.picked&&Ride.state==='idle'){if(sess)ridePick('plan',null,true);else ridePick('sug',0,true);}
   return sess;
 }
 function _rideEntry(){
   return`<button onclick="go('ride',{_dir:'fwd'})" style="width:100%;display:flex;align-items:center;gap:10px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.4);border-radius:12px;padding:11px 13px;margin-bottom:12px;cursor:pointer;color:var(--txt);text-align:left;-webkit-appearance:none">
   <span style="font-size:20px">🚲</span>
-  <span style="flex:1;min-width:0"><b style="font-size:13px">Ride with my bike</b><br><span style="font-size:11px;color:var(--t2)">Workouts or a free ride · live watts and heart rate · saved automatically</span></span>
+  <span style="flex:1;min-width:0"><b style="font-size:13px">Ride with my bike</b><br><span style="font-size:11px;color:var(--t2)">${(()=>{try{
+    const ds=fd(new Date()),dp=(DB.get(DB.pk(getMon(new Date())),null)||[]).find(d=>d.date===ds);
+    if(dp&&/OUTDOOR|INDOOR/.test(dp.type)){const w=getRideSession(dp.type,ds);return`Today: <b style="color:var(--txt)">${_esc(w.name)}</b> · live watts and heart rate`;}
+    const p=_bikeTodayPicks()[0];return`Suggested: <b style="color:var(--txt)">${BIKE_CATS[p.cat].name}</b> · ${p.mins} min · or pick another`;
+  }catch(_){return'Workouts or a free ride · live watts and heart rate · saved automatically';}})()}</span></span>
   <span style="color:#60a5fa;font-weight:700;font-size:12px">Open</span>
 </button>`;
 }
@@ -9083,6 +9177,12 @@ function _rideGoalHtml(d,hr){
       ${chg?`<button onclick="ridePick('free',{type:'hr',lo:${ez.lo},hi:${ez.hi}});rideChangeOpen(false)" style="width:100%;text-align:left;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.45);border-radius:11px;color:var(--txt);padding:9px 11px;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:700">😌 Make it easy</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Free ride · auto resistance keeps your heart rate ${ez.lo}–${ez.hi}, so you can focus on something else</div></button>
       <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
       ${!chg&&(noFtp||stale)?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
+      ${!Ride.plan?(()=>{const P=_bikeTodayPicks();return`<div style="margin-bottom:8px">${P.map((p,i)=>{
+        const k=BIKE_CATS[p.cat],on=!!(Ride.prog&&Ride.prog.sug===i),top=i===0;
+        return`<button onclick="ridePick('sug',${i})" style="width:100%;text-align:left;background:${on?'rgba(124,58,237,.14)':top?'var(--s2)':'transparent'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:11px;color:var(--txt);padding:${top?'10px 11px':'7px 10px'};cursor:pointer;margin-bottom:6px;display:block">
+          <div style="font-size:10px;font-weight:700;color:${top?'var(--al)':'var(--t2)'};text-transform:uppercase;letter-spacing:.6px">${on?'✓ ':''}${p.tag}</div>
+          <div style="font-size:${top?14:13}px;font-weight:800;margin-top:1px">${k.name} <span style="font-size:11px;color:var(--t2);font-weight:600">· ${p.mins} min${p.cat==='recovery'?'':` · level ${p.lvl}`}</span></div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.45;margin-top:2px">${_esc(p.why)}</div></button>`;}).join('')}</div>`;})():''}
       ${chg?'':chip(!!(Ride.prog&&Ride.prog.test),'📏 FTP test · 15–20 min',"ridePick('ftp')")}
       ${Ride.plan?chip(Ride.prog&&Ride.prog.name===Ride.plan.name,`📋 Today: ${Ride.plan.name}`,"ridePick('plan')"):''}
       ${chip(free,'🚲 Free ride',"ridePick('free',Ride.goal)")}
@@ -9090,8 +9190,8 @@ function _rideGoalHtml(d,hr){
         ${chip(!g,'None',"ridePick('free',null)")}${[20,30,45,60].map(m=>chip(g&&g.type==='time'&&g.val===m*60,`${m} min`,`ridePick('free',{type:'time',val:${m*60}})`)).join('')}
         ${[200,300,500].map(k=>chip(g&&g.type==='kcal'&&g.val===k,`${k} kcal`,`ridePick('free',{type:'kcal',val:${k}})`)).join('')}
         ${(L=>L?[[Math.round(L*.68),Math.round(L*.75),'Easy'],[Math.round(L*.75),Math.round(L*.85),'Zone 2'],[Math.round(L*.85),Math.round(L*.92),'Brisk']]:[[105,120,'Easy'],[120,138,'Zone 2'],[138,152,'Brisk']])(_rideLthr()).map(z=>chip(g&&g.type==='hr'&&g.lo===z[0],`❤️ ${z[2]} ${z[0]}–${z[1]}`,`ridePick('free',{type:'hr',lo:${z[0]},hi:${z[1]}})`)).join('')}`:''}
-      <details style="margin-top:2px"><summary style="cursor:pointer;font-size:12px;color:var(--al);font-weight:700;padding:3px 0">Pick a different workout</summary>
-        <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">${progs.map(c=>{const on=Ride.prog&&Ride.prog.cat===c&&(!Ride.plan||Ride.prog.name!==Ride.plan.name),k=BIKE_CATS[c];
+      <details style="margin-top:2px"><summary style="cursor:pointer;font-size:12px;color:var(--al);font-weight:700;padding:3px 0">All ${Object.keys(BIKE_CATS).length} workouts</summary>
+        <div style="margin-top:6px;display:flex;flex-direction:column;gap:6px">${progs.map(c=>{const on=Ride.prog&&Ride.prog.cat===c&&Ride.prog.sug==null&&(!Ride.plan||Ride.prog.name!==Ride.plan.name),k=BIKE_CATS[c];
           return`<button onclick="ridePick('prog','${c}')" style="text-align:left;background:${on?'rgba(124,58,237,.14)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:11px;color:var(--txt);padding:8px 10px;cursor:pointer">
             <div style="font-size:13px;font-weight:700">${k.name}${c==='recovery'?'':` <span style="font-size:11px;color:var(--t2);font-weight:600">· level ${lv[c]}</span>`}</div>
             <div style="font-size:11px;color:var(--t2);line-height:1.4;margin-top:1px">${k.short}${k.feel!=='—'?` · feels like ${k.feel}`:''}</div></button>`;}).join('')}</div></details>
