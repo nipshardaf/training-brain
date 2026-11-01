@@ -1052,10 +1052,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.94';
+const APP_VERSION='3.95';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.95',d:'Fewer, better AI moments: one weekly coach card, and the daily note only when it matters',det:'The week screen had three AI cards doing overlapping jobs: the AI Coach card, the Weekly Advisor and the Weekly Review. It now has just the AI Coach card, which already covers what is progressing, what has stalled, sets per muscle and suggestions, and it is the one that plans your week. The daily coach note (shown when you tap Fresh, Okay, Tired or Sore on a day) now only asks the AI when there is something worth saying: you are tired or sore, the day was re-planned, a lift on today\'s list has stalled for three sessions, you are back after a week or more off, or your fatigue is high. Otherwise you get the short built-in tip, with a line saying so. The "Email me this summary" button moved to the AI Coach card; it appears once the weekly email is set up in Settings → Advanced, and it now sends the coach\'s review.'},
   {v:'3.94',d:'A coach debrief after every workout and ride, and a tidier Settings',det:'When you finish a gym session (on the phone or the watch) or a ride in Ride mode, the app writes a short debrief. The facts come from your own logs, worked out with plain rules: a new best, lifts that beat last time, any lift with no progress for three sessions, and total sets and weight lifted. For rides: time, watts and heart rate, how today compares with your past rides at a similar heart rate, whether your heart rate crept up for the same watts in the second half, and time in your heart-rate zone. The coach (Gemini, with DeepSeek as backup) then puts that into a sentence or two and suggests what to aim for next time. For lifts, those targets show up on the exercise card the next time that exercise comes up, e.g. Aim for 95 lb x 11. The debrief shows on the week screen until you close it, on that day, and at the end of the ride. If the coach can not be reached you still get the facts, with a Try again link. Settings is now grouped into Gym, Bike, Watches, Account and About. The older and technical parts (AI usage, the weekly email, the Vitruvian bridge, diagnostics) are folded under Advanced at the bottom.'},
   {v:'3.93',d:'Full Body days work from the day screen again, and no more made-up weather',det:'Three fixes from a full review of the app. (1) A Full Body day showed only its title card: no exercises and no way to start logging from the day screen. The app decided whether a day is a gym day from a list that had been copied about 15 times, and half the copies were older than Full Body. That also meant a missed Full Body day was not counted as missed, was skipped when sessions moved around a ride day, and got the rest-day coach note. It is now one shared list. Full Body days matter because the app makes them itself when you miss sessions. (2) With no forecast (location off or offline), every day showed a made-up ⛅ 15°, and ride days got a red Gym day badge because the stand-in weather scored zero for riding. Even indoor rides got it. Now no weather is shown when there is none, the riding badge only appears on outdoor rides with a real forecast, and the AI is no longer told about weather that does not exist. (3) A message such as No location access was drawn on top of the weekly which-days sheet, covering its buttons. While a sheet is open, messages now appear at the top of the screen.'},
   {v:'3.92',d:'Ride screen walks you through it: connect, pick, start',det:'Opening Ride used to show everything at once before you had done anything: connect buttons, the workout picker, a dashboard full of dashes, a resistance control that did nothing yet, and a Start button that would start without a bike. Now it reads as three steps. 1 Connect your bike (heart rate is optional), 2 What are you riding, then a button that says what it starts, like Start Brisk Ride 60 min. Until the bike is connected that button connects it instead, and the dashboard and resistance controls stay hidden. Once connected they appear, so you can spin and check the numbers before starting. You can still start without the bike from the small link under the button.'},
@@ -1193,8 +1194,8 @@ const TRANS={
     wr_email_fail:'Could not send email — check your EmailJS settings',
     wr_error:'Could not generate review — try again',
     wr_generated_on:'Generated',
-    wr_settings_hdr:'📊 Weekly Review',
-    wr_settings_sub:'Get an AI analysis of your training emailed to you each Sunday.',
+    wr_settings_hdr:'📧 Weekly review by email',
+    wr_settings_sub:'Email yourself the AI Coach\'s weekly review. Once this is set up, the AI Coach card on the week screen gets an "Email me this summary" button.',
     wr_soon:'An AI analysis of your training, delivered every Sunday — being set up now.',
     wr_your_email:'Your email',
     wr_emailjs_hdr:'EmailJS setup (for email delivery)',
@@ -1271,8 +1272,8 @@ const TRANS={
     wr_email_fail:'無法寄送電郵 — 請檢查你的 EmailJS 設定',
     wr_error:'無法生成回顧 — 請重試',
     wr_generated_on:'生成於',
-    wr_settings_hdr:'📊 每週回顧',
-    wr_settings_sub:'每個星期日把 AI 對你訓練的分析電郵給你。',
+    wr_settings_hdr:'📧 每週回顧電郵',
+    wr_settings_sub:'把 AI 教練的每週回顧電郵給自己。設定好後，週計劃畫面的 AI 教練卡會多一個電郵按鈕。',
     wr_soon:'每個星期日為你提供 AI 訓練分析 — 功能設定中。',
     wr_your_email:'你的電郵',
     wr_emailjs_hdr:'EmailJS 設定（用於電郵寄送）',
@@ -1417,9 +1418,28 @@ const _GROUP_META={
   Core:{color:'#10b981',bg:'rgba(16,185,129,.12)',label:'Core',sub:'Abs · Core'},
   Other:{color:'var(--t2)',bg:'var(--s2)',label:'Other',sub:''},
 };
+// Something unusual about today that the coach should speak to — or null.
+function _coachNoteReason(energy,ct,dp){
+  try{
+    if(energy==='tired'||energy==='sore')return'feeling '+energy;
+    if(dp&&dp.why)return'day re-planned';
+    const gap=typeof getLayoffDays==='function'?getLayoffDays():0;
+    if(gap>=7)return gap+' days since last training';
+    const curve=DB.get('bike_fitness_curve',null);
+    if(curve){const ks=Object.keys(curve).filter(k=>k<=fd(new Date())).sort();const t=ks.length?curve[ks[ks.length-1]].tsb:null;if(t!=null&&t<-20)return'high fatigue';}
+    if(ct==='gym'&&dp&&dp.date)for(const id of dp.exercises||[]){
+      const h=_dbHist(id,dp.date,'',3);
+      if(h.length>=3&&Math.max(h[0].e,h[1].e)<=h[2].e+0.01)return'a stalled lift';
+    }
+  }catch(_){}
+  return null;
+}
 async function getAICoach(energy,ct,dp){
   // Guests get hardcoded responses — no API keys wasted
   if(S.guest)return coachMsg(energy,ct);
+  // v3.95: the AI note only when something is worth saying; otherwise the built-in tip.
+  S._coachQuiet=false;
+  if(!_coachNoteReason(energy,ct,dp)){S._coachQuiet=true;return coachMsg(energy,ct);}
 
   const date=dp?.date||'';
   const cacheKey='coach_'+energy+'_'+date;
@@ -6495,7 +6515,11 @@ function rCoachCard(){
   ${sec('💪 Sets per muscle',r.volume?`<div style="font-size:12px;line-height:1.6;margin-top:4px">${_esc(r.volume)}</div>`:'')}
   ${sec('🎯 Suggestions',li(r.suggestions))}
   <div style="font-size:10px;color:var(--t2);margin-top:10px">Planned ${(cw.days||[]).length} session${(cw.days||[]).length===1?'':'s'} · ${ago<1?'just now':ago<48?ago+'h ago':Math.round(ago/24)+' days ago'}</div>${err}
-  ${open?btn('Re-plan with the latest data'):''}</div>`;
+  ${(()=>{ // v3.95: the weekly email moved here from the old Weekly Review screen
+    const mail=DB.get('review_email','')&&DB.get('emailjs_service','')&&DB.get('emailjs_template','')&&DB.get('emailjs_key','')
+      ?`<button onclick="emailWeeklyReview('${mk}')" style="background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:700;padding:8px 14px;cursor:pointer;margin-top:10px">📧 ${_T('wr_email_btn')}</button>`:'';
+    return open||mail?`<div style="display:flex;flex-wrap:wrap;column-gap:6px">${open?btn('Re-plan with the latest data'):''}${mail}</div>`:'';
+  })()}</div>`;
 }
 
 /* ── EXERCISE IMAGES ── */
@@ -9402,9 +9426,7 @@ ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
 ${rAskCoach()}
 ${rRideOnGymDayBanner()}
 ${rComebackBanner()}
-${rReviewCard()}
 ${rCoachCard()}
-${rWeeklyAdvisor()}
 ${(()=>{const p=DB.get('bike_pref','weather');
 return plan?`
 ${rCatchUpBanner()}
@@ -11767,20 +11789,24 @@ function _loadEmailJS(cb){
   document.head.appendChild(s);
 }
 
-function emailWeeklyReview(){
+// v3.95: emails the AI Coach's review for week mk (the Weekly Review screen is no longer shown).
+function emailWeeklyReview(mk){
   const svc=DB.get('emailjs_service',''),tpl=DB.get('emailjs_template',''),key=DB.get('emailjs_key',''),email=DB.get('review_email','');
   if(!svc||!tpl||!key||!email){showToast(_T('wr_email_setup'),'var(--amb)');go('settings');return;}
-  const review=DB.get('weekreview_'+fd(getMon(new Date())),null);
-  if(!review)return;
+  mk=mk||fd(getMon(new Date()));
+  const cw=DB.get('coachweek_'+mk,null),r=cw&&cw.review;
+  if(!r){showToast('No coach review for this week yet','var(--amb)');return;}
   const sec=(t,c)=>c?`<h3 style="margin:16px 0 4px;color:#7c3aed;font-size:15px">${t}</h3><div style="margin:0;line-height:1.6;font-size:14px">${c}</div>`:'';
+  const ul=a=>a&&a.length?`<ul style="margin:0;padding-left:18px">${a.map(x=>`<li>${_esc(x)}</li>`).join('')}</ul>`:'';
+  const n=(cw.days||[]).length,wk=new Date(mk+'T12:00:00').toLocaleDateString(undefined,{day:'numeric',month:'short'});
   const html=`<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;color:#1a1a1a">
-<h2 style="color:#7c3aed;font-size:19px">🧠 Training Brain — ${_T('wr_screen_title')}</h2>
-${sec(_T('wr_s_summary'),review.summary)}
-${sec(_T('wr_s_overload'),review.overload)}
-${sec(_T('wr_s_recovery'),review.recovery)}
-${sec(_T('wr_s_focus'),review.focus)}
-${sec(_T('wr_s_sequence'),review.sequence)}
-<p style="margin-top:22px;font-size:12px;color:#888">${_T('wr_generated_on')} ${review.generated?new Date(review.generated).toLocaleString():''}</p>
+<h2 style="color:#7c3aed;font-size:19px">🧠 Training Brain — AI Coach, week of ${_esc(wk)}</h2>
+${r.summary?`<div style="line-height:1.6;font-size:14px">${_esc(r.summary)}</div>`:''}
+${sec('📈 Progressing',ul(r.progressing))}
+${sec('⏸️ Stalled or dropping',ul(r.stalled))}
+${sec('💪 Sets per muscle',r.volume?_esc(r.volume):'')}
+${sec('🎯 Suggestions',ul(r.suggestions))}
+<p style="margin-top:22px;font-size:12px;color:#888">Planned ${n} session${n===1?'':'s'} · ${_T('wr_generated_on')} ${cw.generated?new Date(cw.generated).toLocaleString():''}</p>
 </div>`;
   showToast('📧 …','var(--acc)');
   _loadEmailJS(()=>{
@@ -14357,7 +14383,7 @@ ${rFriendsSection()}
 
 ${(()=>{
   const st=getAIUsageStats();
-  const typeLabels={'coach_gym':'🏋️ Gym Coach','coach_ride':'🚴 Ride Coach','weekly_advisor':'🧠 Weekly Advisor','weekly_review':'📋 Weekly Review'};
+  const typeLabels={'coach_gym':'🏋️ Daily note (gym)','coach_ride':'🚴 Daily note (ride)','coach_week':'🧠 AI Coach week plan','debrief':'📝 Debriefs','week_exercise_gen':'🏋️ Exercise picks','next_week_plan':'📅 Next-week plan','weekly_advisor':'🧠 Weekly Advisor (old)','weekly_review':'📋 Weekly Review (old)'};
   const maxBar=Math.max(...st.days.map(d=>d.n),1);
   const quotaLimit=1500;
   const quotaPct=Math.min(100,Math.round(st.todayCount/quotaLimit*100));
@@ -15355,13 +15381,20 @@ function bindEnergy(){
         p.style.transition='';p.style.opacity='1';
         p.textContent=defaultMsg;
         card.classList.add('on');
+        card.querySelector('.quiet-note')?.remove();
         getAICoach(b.dataset.e,ct,dp).then(msg=>{
+          if(S.energy!==b.dataset.e)return; // a later tap owns the card now
           const c2=document.getElementById('coach-card');
           if(c2&&msg&&msg!==defaultMsg){
             const p2=c2.querySelector('p');
             p2.style.transition='opacity .35s ease';
             p2.style.opacity='0';
             setTimeout(()=>{p2.textContent=msg;p2.style.opacity='1';},350);
+          }
+          if(c2&&S._coachQuiet&&!S.guest){
+            let q=c2.querySelector('.quiet-note');
+            if(!q){q=document.createElement('div');q.className='quiet-note';q.style.cssText='font-size:10px;color:var(--t2);margin-top:7px;opacity:.75';c2.appendChild(q);}
+            q.textContent='Nothing unusual today — the coach speaks up when you\'re tired or sore, a lift has stalled, a day was re-planned, or after a break.';
           }
           // Show quota note if AI hit its daily limit
           if(c2&&_aiQuotaHit){
