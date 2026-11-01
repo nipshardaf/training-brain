@@ -1043,10 +1043,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.91';
+const APP_VERSION='3.92';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'3.92',d:'Ride screen walks you through it: connect, pick, start',det:'Opening Ride used to show everything at once before you had done anything: connect buttons, the workout picker, a dashboard full of dashes, a resistance control that did nothing yet, and a Start button that would start without a bike. Now it reads as three steps. 1 Connect your bike (heart rate is optional), 2 What are you riding, then a button that says what it starts, like Start Brisk Ride 60 min. Until the bike is connected that button connects it instead, and the dashboard and resistance controls stay hidden. Once connected they appear, so you can spin and check the numbers before starting. You can still start without the bike from the small link under the button.'},
   {v:'3.91',d:'Ride screen suggests a workout for today, even on days with no ride planned',det:'Opening Ride on a gym or rest day used to land on a bare Free ride, with the real workouts hidden under Pick a different workout. The cycling plan only chose workouts for the days it had marked as ride days. Now the Ride screen opens on a Suggested workout for today, using the same rules as your weekly plan: your goal, which hard session you have gone longest without, how tired you are, legs yesterday, today or tomorrow, and recovery weeks. It also looks at the rest of your week. If you already did your hard session, or your planned hard day is coming up, it suggests an easy ride and tells you why, so an extra ride does not steal from it or stack two hard days. Under the suggestion are one or two alternatives (keep it easy, or a harder one if you feel fresh), each with a one-line reason. The full list is still there as All 8 workouts. The Ride with my bike button on the week screen now shows the workout it will open with. None of this is AI: the bike workouts come from the app\'s own training rules. The AI coach only plans your gym exercises.'},
   {v:'3.90',d:'Machine Lateral Raise, and a Remove set button',det:'Added the Machine Lateral Raise. Swap it in on any day with side delts, and the planner can pick it too. Next to + Add set there is now − Remove set: it takes away the last set you have not ticked yet (it asks first if they are all ticked), and the message has an Undo in case you tapped it by mistake.'},
   {v:'3.89',d:'Name the machine you are on, and its numbers stay separate',det:'The same exercise on two machines can have very different weights (your Dual Pulley Pulldown versus another lat pulldown), and the app mixed them up, so the target said 130 lb while your last set was 100. On an exercise you can now tap Name this machine. From then on, last time, the target and the PR for that exercise come only from sets on that machine. Each gym keeps its own list of machines, and the app picks the one you used last there. Sets logged before this count as Other.'},
@@ -9143,8 +9144,8 @@ ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px 
   <div class="rd-main">
     <div id="rd-conn"></div>
     <div id="rd-goal"></div>
-    <div class="rd-a">${tile('rd-hr','Heart rate')}${tile('rd-time','Time')}${tile('rd-kcal','Calories')}${tile('rd-pw','Watts')}</div>
-    <div class="rd-b">${tile('rd-cad','Cadence')}${tile('rd-avg','Avg watts')}${tile('rd-dist','km')}</div>
+    <div id="rd-live"><div class="rd-a">${tile('rd-hr','Heart rate')}${tile('rd-time','Time')}${tile('rd-kcal','Calories')}${tile('rd-pw','Watts')}</div>
+    <div class="rd-b">${tile('rd-cad','Cadence')}${tile('rd-avg','Avg watts')}${tile('rd-dist','km')}</div></div>
   </div>
   <div class="rd-side">
     <div id="rd-res"></div>
@@ -9173,7 +9174,7 @@ function _rideGoalHtml(d,hr){
     const noFtp=!_rideFtp(),old=(DB.get('user_profile',{})||{}).ftp_tested,stale=!noFtp&&old&&(Date.now()-new Date(old+'T12:00:00'))/864e5>56;
     const chg=Ride.changeOpen&&Ride.state!=='idle'&&Ride.state!=='done';
     const ez=(L=>L?{lo:Math.round(L*.68),hi:Math.round(L*.75)}:{lo:105,hi:120})(_rideLthr());
-    return box(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${chg?'Change to…':'What are you riding?'}</div>${chg?`<button onclick="rideChangeOpen(false)" style="background:none;border:none;color:var(--al);font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px">Done</button>`:''}</div>
+    return box(`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px"><div style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${chg?'Change to…':Ride.state==='idle'?'2 · What are you riding?':'What are you riding?'}</div>${chg?`<button onclick="rideChangeOpen(false)" style="background:none;border:none;color:var(--al);font-size:12px;font-weight:700;cursor:pointer;padding:2px 4px">Done</button>`:''}</div>
       ${chg?`<button onclick="ridePick('free',{type:'hr',lo:${ez.lo},hi:${ez.hi}});rideChangeOpen(false)" style="width:100%;text-align:left;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.45);border-radius:11px;color:var(--txt);padding:9px 11px;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:700">😌 Make it easy</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Free ride · auto resistance keeps your heart rate ${ez.lo}–${ez.hi}, so you can focus on something else</div></button>
       <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
       ${!chg&&(noFtp||stale)?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
@@ -9277,7 +9278,11 @@ function _rideDraw(){
   const chip=(on,txt,act,btn)=>`<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid ${on==='on'?'var(--grn)':on==='lost'?'var(--amb)':'var(--bord)'};border-radius:12px;padding:8px 10px">
     <span style="flex:1;min-width:0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${txt}</span>
     ${on==='on'?'':`<button onclick="${act}" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;flex-shrink:0">${btn}</button>`}</div>`;
-  const conn=`<div style="display:flex;gap:8px;margin-bottom:8px">
+  // v3.92: before a ride the screen is a short checklist (connect → pick → start); the
+  // dashboard and resistance controls wait until there's a bike to show.
+  const pre=Ride.state==='idle',bikeOn=Bike.status==='on';
+  const stepH=(n,txt,done)=>pre?`<div style="font-size:11px;font-weight:700;color:${done?'var(--grn)':'var(--t2)'};text-transform:uppercase;letter-spacing:.6px;margin:2px 0 6px">${done?'✓':n+' ·'} ${txt}</div>`:'';
+  const conn=`${stepH(1,bikeOn?'Bike connected':'Connect your bike · heart rate optional',bikeOn)}<div style="display:flex;gap:8px;margin-bottom:8px">
     ${chip(Bike.status,Bike.status==='on'?`🚲 ${_esc(Bike.name)}${d?'':' · waiting for data'}`:Bike.status==='connecting'?'🚲 Connecting…':Bike.status==='lost'?'🚲 Reconnecting…':'🚲 Bike','bikeConnect()',Bike.status==='lost'?'Retry':'Connect')}
     ${chip(Bike.hrStatus,Bike.hrStatus==='on'?`❤️ ${_esc(Bike.hrName)}`:Bike.hrStatus==='connecting'?'❤️ Connecting…':Bike.hrStatus==='lost'?'❤️ Reconnecting…':'❤️ Heart rate','bikeConnectHR()','Connect')}
   </div>${Bike.err?`<div style="font-size:11px;color:var(--red);margin:-4px 0 8px;word-break:break-word">${_esc(Bike.err)}</div>`:''}`;
@@ -9306,7 +9311,10 @@ function _rideDraw(){
   const ctl=`<div style="display:flex;gap:8px">${
     Ride.state==='riding'?b('⏸ Pause','ridePause()','btn-s')+b('🏁 Finish','rideFinish()','btn-p')
     :Ride.state==='paused'?b('▶ Resume','rideStart()','btn-p')+b('🏁 Finish','rideFinish()','btn-s')
-    :b(Ride.state==='done'?'▶ Start another ride':'▶ Start ride','rideStart()','btn-p')}</div>
+    :Ride.state==='done'?b('▶ Start another ride','rideStart()','btn-p')
+    :bikeOn?b(`▶ Start ${_esc(Ride.prog?Ride.prog.name.replace(/ · .*/,''):Ride.name)}${Ride.prog?` · ${Math.round(Ride.prog.steps.reduce((a,x)=>a+x.sec,0)/60)} min`:''}`,'rideStart()','btn-p')
+    :b('🚲 Connect the bike to start','bikeConnect()','btn-p')}</div>
+    ${pre&&!bikeOn?`<button onclick="rideStart()" style="display:block;margin:8px auto 0;background:none;border:none;color:var(--t2);font-size:12px;text-decoration:underline;cursor:pointer">Start without the bike (time and heart rate only)</button>`:''}
     ${(Ride.state==='riding'||Ride.state==='paused')&&!Ride.changeOpen?`<button class="btn btn-s" style="margin-top:8px" onclick="rideChangeOpen()">🔀 Change workout</button>`:''}
     ${Ride.state==='paused'?`<button class="btn btn-s" style="margin-top:8px;color:var(--red)" onclick="if(confirm('Discard this ride?'))rideDiscard()">Discard ride</button>`:''}`;
   const put=(id,html)=>{const e=$(id);if(e&&e._h!==html){e.innerHTML=html;e._h=html;}};
@@ -9333,8 +9341,9 @@ function _rideDraw(){
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
     <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
-  put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-res',res);put('rd-ctl',ctl);
-  set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Bike connected. Pick your ride and press Start.':''));
+  put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-res',pre&&!bikeOn?'':res);put('rd-ctl',ctl);
+  const lv=$('rd-live');if(lv){const want=pre&&!bikeOn?'none':'';if(lv.style.display!==want)lv.style.display=want;}
+  set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Spin the pedals to check the numbers, then press Start.':''));
 }
 
 /* ── WEEK SCREEN ── */
