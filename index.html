@@ -1315,10 +1315,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='3.99';
+const APP_VERSION='4.00';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.00',d:'A coach rides with you: a check-in every 10 minutes',det:'While you ride, every 10 minutes (or tap Ask now) the coach looks at your last 10 minutes: watts, heart rate and how it moved, cadence, time in your zone, and whether your heart rate is climbing for the same watts compared with early in the ride. It then says one short thing you can act on right now, on screen and out loud. Auto resistance still does the second-by-second work, so when it is on the coach never tells you to change the watts. With no signal or no AI left for the day, you get the plain numbers instead. The debrief after the ride now says whether you followed the check-ins. Turn the coach or its voice off on the Ride screen.'},
   {v:'3.99',d:'Muscle-building rules for when the AI coach is not available',det:'The planner that runs without the AI now follows standard muscle-building practice. (1) Your main lifts stay the same while they are going up, so you can keep adding weight; a main lift changes after 3 sessions with no gain or after about 6 weeks, while the smaller exercises keep rotating for variety. (2) Isolation and core exercises climb through their own rep range (for example 12 to 15) before the weight goes up, instead of jumping weight at 12 reps. (3) Leg days always include a leg curl, because squats barely train the hamstrings. (4) Isolation picks favour exercises that work the muscle at full stretch, like incline curls, overhead triceps extensions and seated leg curls. (5) After 5 hard weeks in a row, or 3 with two main lifts stalled, the week screen offers a lighter week: one set fewer per exercise and about 10% less weight. You choose, and the AI coach is told when you take it.'},
   {v:'3.98',d:'Your week comes first, and the full backup includes your rides again',det:'The week screen now shows the days of your week right after the check-in and the ride card; the AI Coach review and Ask the Coach moved below the plan and the recovery map, so today is visible without scrolling. The full backup (Settings, Account) had stopped including your ride history when rides moved to their own cloud list in 3.60; it now includes your rides and any ride still waiting to upload, and Restore brings them back. On a phone the backup opens the share sheet (Save to Files, AirDrop, Mail) instead of a download, which the Training Brain iPhone app could not save at all.'},
   {v:'3.97',d:'A daily check-in that eases the day off, and a rest timer between sets',det:'Check-in: on a gym or ride day the week screen asks how you are today. Good keeps the plan. Tired or Sore eases the day off: on a gym day you get the lighter exercise swaps and lighter, higher-rep targets (the same as the Tired and Sore buttons on the day screen, which now remember your answer for today), and a hard ride becomes an easy spin. Change your answer any time. Rest timer: ticking a set starts a countdown for the next one (2 min after big lifts, 75 s after smaller ones, 45 s after core) with −15, +15 and Skip, and a beep when rest is up. It keeps time while you are in another app and shows the right time when you come back. In the Training Brain iPhone app it also sends a notification when rest is up, even while you are in another app or the phone is locked (update the app in SideStore to get this). You can turn it off in Settings, Gym.'},
@@ -5466,7 +5467,7 @@ const _guestStore={};
 // and the dirty-key tracker so incremental sync only uploads what changed.
 const SYNC_KEYS=['checkins','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
-  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach'];
+  'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach','ride_coach','ride_coach_voice'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
@@ -8891,6 +8892,7 @@ function _rideTick(){
     if(Ride.erg&&d)_rideErg(d);
     else if(Ride.deposit&&Ride.lastTq!=null&&Bike.status==='on')_bikeSend(0,0x44,[Math.round(Ride.lastTq*2)]); // v3.68: manual − / + held every second too
     if(Ride.elapsed%15===0)_rideStash();
+    _rideCoachTick(); // v4.00
   }
   if(S.screen==='ride')_rideDraw();
 }
@@ -9010,6 +9012,7 @@ function rideStart(){
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
     Ride.progAt=0;Ride.goalAt=0;Ride.goalKcal=0;Ride.name0=Ride.name;Ride.changeOpen=false;
+    Ride.coach=null;Ride.coachLog=[];Ride.coachBusy=false; // v4.00
     Ride.targetW=0;Ride.hrHist=[];Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.cadHist=[];Ride.levelTq=null;Ride.wuW=0;Ride.wuAdj=0;Ride.learned=null;Ride.zW=0;Ride.zKey='';Ride.z2Sum=0;Ride.z2N=0;Ride.steadyFrom=0;Ride.dbg=[]; // v3.71: the last ride's target used to carry over
     if(Ride.auto&&Bike.status==='on'){Ride.erg=true;Ride.deposit=false;_rideTakeControl();}
     if(/ N$/.test(Bike.name||''))_bikeSend(0,0x44,[0]); // R-Q002 N: AI Gym zeroes the torque at the start
@@ -9017,6 +9020,7 @@ function rideStart(){
   }
   else{if(Ride.erg&&Bike.status==='on'){Ride.deposit=false;_rideTakeControl();Ride.lastTq=null;}_bikeSend(0,0x40,[0,4]);}
   Ride.note='';
+  _rideSpeechUnlock(); // v4.00: lets the coach speak later (iOS needs a tap first)
   Ride.state='riding';_rideWake();_rideDraw();
 }
 function ridePause(){Ride.state='paused';_bikeSend(0,0x40,[0,3]);_rideStash();_rideDraw();}
@@ -9174,10 +9178,140 @@ function rideKeepGym(){
   const t=Ride.gymPrompt&&Ride.gymPrompt.type;Ride.gymPrompt=null;
   Ride.note=t?`👍 ${_rideLabel(t)} is still on for today.`:'';_rideDraw();
 }
+/* ── v4.00 RIDE COACH: a check-in every 10 minutes while you ride ─────────────────
+   Auto resistance still does the second-by-second work (instant, works offline). The
+   coach is a slower layer on top: every 10 minutes, or "Ask now", it looks at the last
+   10 minutes (watts, heart rate and how it moved, cadence, time in the zone, watts per
+   beat against minutes 5 to 15) and says one thing to act on now, out loud if voice is
+   on. With auto resistance on it never suggests changing the watts. Offline or out of AI
+   quota it shows and says the plain numbers. Synced toggles ride_coach, ride_coach_voice
+   (both on by default). The post-ride debrief (v3.94) is told what the check-ins said.
+   Ported from the cowork-ride-coach branch (its post-ride review was left out). */
+// Spoken text: no markdown, no dashes (they read badly), one paragraph, capped.
+function _rideCoachClean(t,max){
+  let s=String(t||'').replace(/[*_#`>]+/g,'').replace(/\s*[—–]\s*/g,', ').replace(/\s*\n+\s*/g,' ').replace(/\s{2,}/g,' ').trim();
+  if(s.length>max){const cut=s.slice(0,max);const p=Math.max(cut.lastIndexOf('. '),cut.lastIndexOf('! '),cut.lastIndexOf('? '));s=p>max*0.5?cut.slice(0,p+1):cut.replace(/\s+\S*$/,'')+'…';}
+  return s;
+}
+function _rideSay(text){
+  if(!DB.get('ride_coach_voice',true)||!text)return;
+  try{
+    const ss=window.speechSynthesis;if(!ss||typeof SpeechSynthesisUtterance!=='function')return;
+    ss.cancel();
+    const u=new SpeechSynthesisUtterance(text);u.rate=1;u.pitch=1;u.lang='en-US';
+    ss.speak(u);
+  }catch(_){}
+}
+// iOS only lets speech start from a tap; Start ride is one, so a silent line unlocks it.
+function _rideSpeechUnlock(){
+  try{const ss=window.speechSynthesis;if(ss&&typeof SpeechSynthesisUtterance==='function'&&DB.get('ride_coach',true)&&DB.get('ride_coach_voice',true)){const u=new SpeechSynthesisUtterance(' ');u.volume=0;ss.speak(u);}}catch(_){}
+}
+// The heart-rate band this ride is aiming for: the step's or goal's zone, else Zone 2.
+function _rideCoachZone(){
+  let z=null;try{z=_rideHrZone(_rideStepNow());}catch(_){}
+  if(z&&z.hi)return{lo:z.lo||0,hi:z.hi,name:Ride.goal&&Ride.goal.type==='hr'?'your goal zone':'this step\'s zone'};
+  const L=_rideLthr();
+  return L?{lo:Math.round(L*.75),hi:Math.round(L*.85),name:'Zone 2'}:null;
+}
+// Sample rows: [unix s, watts, cadence, speed, hr, metres, erg, finding].
+function _rideWin(x,z){
+  const avg=a=>a.length?a.reduce((p,c)=>p+c,0)/a.length:0;
+  const ped=x.filter(v=>v[2]>=10),hr=x.map(v=>v[4]).filter(h=>h>0);
+  const both=ped.filter(v=>v[1]>0&&v[4]>0);
+  const ef=both.length>=60?avg(both.map(v=>v[1]))/avg(both.map(v=>v[4])):0;
+  const inZ=z&&hr.length>=30?Math.round(100*hr.filter(h=>h>=z.lo&&h<=z.hi).length/hr.length):null;
+  const hrs=x.filter(v=>v[4]>0);
+  return{w:Math.round(avg(ped.map(v=>v[1]))),hr:Math.round(avg(hr)),cad:Math.round(avg(ped.map(v=>v[2]))),
+    ef:ef?+ef.toFixed(3):0,inZ,n:x.length,coast:x.length?Math.round(100*(x.length-ped.length)/x.length):0,
+    hr0:hrs.length>=120?Math.round(avg(hrs.slice(0,60).map(v=>v[4]))):0,hr1:hrs.length>=120?Math.round(avg(hrs.slice(-60).map(v=>v[4]))):0};
+}
+function _rideCoachCtx(){
+  const x=Ride.samples,z=_rideCoachZone(),win=x.slice(-600),w=_rideWin(win,z);
+  // same-ride comparison: minutes 5 to 15 against now (efficiency fading = tiring or overheating)
+  const early=x.length>=1500?_rideWin(x.slice(300,900),z):null;
+  let step=null;
+  try{const sn=_rideStepNow();if(sn&&sn.step&&!sn.done){const tg=_rideStepTargets(sn.step);
+    step={label:sn.step.label,left:Math.round(sn.left/60),w:tg.wLo?`${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W`:'',
+      hr:tg.hHi?`${tg.hLo?tg.hLo+'–':'under '}${tg.hHi} bpm`:'',hard:sn.step.lo>=0.88};}}catch(_){}
+  const g=Ride.goal;
+  const goal=g?g.type==='time'?`${Math.round(g.val/60)} min ride`:g.type==='kcal'?`${g.val} kcal`:g.type==='hr'?`keep ${g.lo}–${g.hi} bpm`:'':'';
+  const mins=Math.round(win.length/60);
+  const line=`Last ${mins} min: ${w.w} W · ${w.hr?w.hr+' bpm':'no heart rate'}${w.inZ!=null&&z?` · ${w.inZ}% in ${z.lo}–${z.hi}`:''}${w.cad?` · ${w.cad} rpm`:''}`;
+  return{x,z,w,early,step,goal,mins,line,elapsed:Ride.elapsed,kcal:Math.round(Ride.kcal),name:Ride.name,auto:!!Ride.auto,prev:Ride.coach&&Ride.coach.text||''};
+}
+function _rideCoachPrompt(c){
+  const w=c.w,ef=c.early&&c.early.ef&&w.ef?Math.round((w.ef/c.early.ef-1)*100):null;
+  return`You are a friendly, practical cycling coach speaking through a phone to someone riding an indoor smart bike right now. Your words will be read aloud.
+Return JSON only: {"headline":"what you say"}
+
+Ride so far: ${Math.round(c.elapsed/60)} min, ${c.kcal} kcal. Workout: ${c.name}.${c.step?` Current step: ${c.step.label}, ${c.step.left} min left, target ${[c.step.w,c.step.hr].filter(Boolean).join(', ')}${c.step.hard?' (a hard step)':''}.`:''}${c.goal?` Goal: ${c.goal}.`:''}
+Heart-rate band to stay in: ${c.z?`${c.z.lo}–${c.z.hi} bpm (${c.z.name})`:'unknown (no threshold heart rate yet)'}.
+Last ${c.mins} min: ${w.w} W average, ${w.hr?w.hr+' bpm average':'no heart rate'}${w.hr0&&w.hr1?` (heart rate went from ${w.hr0} to ${w.hr1})`:''}, ${w.cad} rpm, ${w.inZ!=null?w.inZ+'% of the time in the band, ':''}${w.coast}% of the time not pedalling.
+${ef!=null?`Watts per heartbeat compared with minutes 5 to 15 of this ride: ${ef>0?'+':''}${ef}% (negative means heart rate is climbing for the same power, i.e. tiring or getting hot).`:''}
+Auto resistance: ${c.auto?'ON. The app sets the watts to keep heart rate in the band, so NEVER suggest changing the resistance or the watts.':'OFF. They set the resistance themselves; you may suggest + or - 5 to 10 W.'}
+${c.prev?`Your previous tip was: "${c.prev}". Say something different.`:''}
+
+The headline is ONE or TWO short sentences, at most 30 words, that they can act on right now: pacing, cadence, breathing, posture, drinking, cooling, or encouragement tied to a real number above. If heart rate is well above the band or climbing fast, tell them to ease off. No lists, no emojis, no dashes, no medical claims.`;
+}
+async function _rideCoachNow(manual){
+  if(Ride.coachBusy||Ride.state!=='riding')return;
+  if(Ride.samples.length<120){if(manual){Ride.note='The coach needs a couple of minutes of riding first.';_rideDraw();}return;}
+  Ride.coachBusy=true;
+  const c=_rideCoachCtx();
+  Ride.coach={at:Ride.elapsed,line:c.line,text:'',busy:true,prev:c.prev};
+  _rideDraw();
+  try{
+    if(navigator.onLine===false)throw new Error('offline');
+    if(_aiQuotaHit)throw new Error('quota');
+    // the v3.94 debrief helper, with a time limit so a slow answer can't hang the card
+    const res=await Promise.race([_debriefAsk(_rideCoachPrompt(c)),new Promise(r=>setTimeout(()=>r({err:'timeout'}),25000))]);
+    if(!res.ai){if(/\((429|403)\)/.test(res.err||''))_aiQuotaHit=true;throw new Error(res.err||'no answer');}
+    const t=_rideCoachClean(res.ai.headline,240);
+    if(!t)throw new Error('empty');
+    Ride.coach.text=t;
+    (Ride.coachLog=Ride.coachLog||[]).push([Math.round(c.elapsed/60),t]);
+    _rideBeep(1);setTimeout(()=>_rideSay(t),300);
+  }catch(e){
+    Ride.coach.err=e&&e.message==='offline'?'No signal, so just the numbers.':_aiQuotaHit?'AI quota used up for today, so just the numbers.':'Coach couldn\'t answer this time, so just the numbers.';
+    _rideBeep(1);setTimeout(()=>_rideSay(c.line.replace(/\s*·\s*/g,', ').replace(/(\d+)–(\d+)/g,'$1 to $2')),300);
+  }finally{Ride.coach.busy=false;Ride.coachBusy=false;_rideDraw();}
+}
+// From _rideTick, once a second while riding.
+function _rideCoachTick(){
+  if(!DB.get('ride_coach',true)||S.guest)return;
+  const e=Ride.elapsed;
+  if(e>=600&&e%600===0)_rideCoachNow(false);
+}
+function rideCoachToggle(k){DB.set(k,!DB.get(k,true));if(k==='ride_coach_voice'&&!DB.get(k,true))try{window.speechSynthesis&&window.speechSynthesis.cancel();}catch(_){}_rideDraw();}
+// The coach panel on the Ride screen.
+function _rideCoachHtml(){
+  if(S.guest||Ride.state==='done')return'';
+  const on=DB.get('ride_coach',true),voice=DB.get('ride_coach_voice',true);
+  const tg=(k,v,label)=>`<button onclick="rideCoachToggle('${k}')" style="background:${v?'rgba(124,58,237,.14)':'var(--s2)'};border:1px solid ${v?'var(--acc)':'var(--bord)'};border-radius:999px;color:${v?'var(--al)':'var(--t2)'};font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer">${label}</button>`;
+  if(Ride.state!=='riding'&&Ride.state!=='paused'){
+    return`<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0 0 8px">${tg('ride_coach',on,on?'🧠 Coach on':'🧠 Coach off')}${on?tg('ride_coach_voice',voice,voice?'🔊 Voice on':'🔇 Voice off'):''}
+      <span style="font-size:11px;color:var(--t2)">${on?'A check-in every 10 min':''}</span></div>`;
+  }
+  if(!on)return'';
+  const c=Ride.coach;
+  const next=Ride.elapsed<600?600-Ride.elapsed:600-(Ride.elapsed%600);
+  return`<div style="background:var(--s1);border:1px solid rgba(124,58,237,.35);border-radius:14px;padding:10px 12px;margin-bottom:8px">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.6px">🧠 Coach${c&&!c.busy?` · at ${_mmss(c.at)}`:''}</div>
+      <div style="display:flex;gap:6px">${tg('ride_coach_voice',voice,voice?'🔊':'🔇')}
+        <button onclick="_rideCoachNow(true)" ${Ride.coachBusy||Ride.state!=='riding'?'disabled':''} style="background:var(--s2);border:1px solid var(--bord);border-radius:999px;color:var(--al);font-size:11px;font-weight:700;padding:5px 10px;cursor:pointer">Ask now</button></div>
+    </div>
+    ${c?`${c.busy?`<div style="font-size:12px;color:var(--t2);margin-top:5px">Thinking…</div>`:''}
+      ${c.text?`<div style="font-size:14px;font-weight:600;line-height:1.45;margin-top:5px">${_esc(c.text)}</div>`:''}
+      <div style="font-size:11px;color:var(--t2);margin-top:4px">${_esc(c.line)}${c.err?' · '+_esc(c.err):''}</div>`
+      :`<div style="font-size:12px;color:var(--t2);margin-top:4px">First check-in in about ${Math.max(1,Math.ceil(next/60))} min.</div>`}
+  </div>`;
+}
+
 function rideDiscard(){
   _bikeSend(0,0x40,[0,0]);
   if(Ride.deposit)rideKnob();
-  Object.assign(Ride,{state:'idle',elapsed:0,dist:0,kj:0,kcal:0,samples:[],note:''});
+  Object.assign(Ride,{state:'idle',elapsed:0,dist:0,kj:0,kcal:0,samples:[],note:'',coach:null,coachLog:[]});
   try{localStorage.removeItem('ride_progress');}catch(_){}
   _rideDraw();
 }
@@ -9595,6 +9729,7 @@ ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px 
   <div class="rd-main">
     <div id="rd-conn"></div>
     <div id="rd-goal"></div>
+    <div id="rd-coach"></div>
     <div id="rd-live"><div class="rd-a">${tile('rd-hr','Heart rate')}${tile('rd-time','Time')}${tile('rd-kcal','Calories')}${tile('rd-pw','Watts')}</div>
     <div class="rd-b">${tile('rd-cad','Cadence')}${tile('rd-avg','Avg watts')}${tile('rd-dist','km')}</div></div>
   </div>
@@ -9793,7 +9928,7 @@ function _rideDraw(){
     <div style="font-size:13px;font-weight:700;margin-bottom:8px">Today was ${_esc(_rideLabel(gp.type))}. Move it to another day this week?</div>
     <div style="display:flex;gap:8px"><button class="btn btn-p" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideMoveGym()">Move it</button>
     <button class="btn btn-s" style="flex:1;margin:0;font-size:13px;padding:10px" onclick="rideKeepGym()">I'll still do it today</button></div></div>`:''));
-  put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-res',pre&&!bikeOn?'':res);put('rd-ctl',ctl);
+  put('rd-conn',conn);put('rd-goal',_rideGoalHtml(d,hr));put('rd-coach',_rideCoachHtml());put('rd-res',pre&&!bikeOn?'':res);put('rd-ctl',ctl);
   const lv=$('rd-live');if(lv){const want=pre&&!bikeOn?'none':'';if(lv.style.display!==want)lv.style.display=want;}
   set('rd-note',Ride.note||(Ride.state==='idle'&&Bike.status==='on'?'Spin the pedals to check the numbers, then press Start.':''));
 }
@@ -13062,7 +13197,8 @@ function _rideDebriefFacts(){
   return{start:new Date(Ride.start).toISOString(),date:today,name:Ride.name,mins:Math.round(st.secs/60),avgW:st.avgW,maxW:st.maxW,avgHr:st.avgHr,
     maxHr:Math.max(0,...x.map(v=>v[4]||0)),cad:st.avgCad,kcal:st.kcal,blocks,drift,usual,usualN:sim.length,
     band:g?`${g.lo}-${g.hi}`:null,inBand,auto:!!Ride.auto,ftp:_rideFtp()||null,lthr:_rideLthr()||null,
-    level:ln?`${BIKE_CATS[ln.cat].name} level ${ln.from} -> ${ln.to} (${ln.why})`:null,ctlTrouble:ctl};
+    level:ln?`${BIKE_CATS[ln.cat].name} level ${ln.from} -> ${ln.to} (${ln.why})`:null,ctlTrouble:ctl,
+    tips:(Ride.coachLog||[]).slice(-6).map(([m,t])=>`${m} min: ${t}`)}; // v4.00: the live check-ins
 }
 function _rideDebriefPrompt(f){
   return`You are a cycling coach writing a short debrief right after an indoor ride on a smart bike. Plain English, no jargon (say "heart rate crept up" not "decoupling"), no emojis. Use ONLY the numbers given.
@@ -13072,6 +13208,7 @@ ${f.band?`Heart-rate goal ${f.band} bpm, in the band ${f.inBand}% of the time. `
 ${f.drift!=null?`Heart rate vs power, second half against first half: ${f.drift>0?'heart rate higher for the same watts by':'heart rate lower for the same watts by'} ${Math.abs(f.drift)}% (over 5% means tiring, too warm, or under-fuelled; under 3% is steady).`:''}
 ${f.usual?`Previous ${f.usualN} rides at a similar average heart rate averaged ${f.usual} W (today ${f.avgW} W).`:''}
 ${f.level?`Workout level: ${f.level}.`:''}${f.ctlTrouble?' The bike did not always follow the app\'s resistance.':''}
+${f.tips&&f.tips.length?`What the coach told them during the ride (say in one note whether they followed it, judging only by the numbers):\n${f.tips.join('\n')}`:''}
 Five-minute blocks:
 ${f.blocks.join('\n')}`;
 }
