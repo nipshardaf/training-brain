@@ -18,8 +18,10 @@ buttons call. `node --check` only proves it parses.
   mkdir -p $SCRATCH/site/training-brain && cp index.html sw.js $SCRATCH/site/training-brain/
   (cd $SCRATCH/site && nohup python3 -m http.server 8765 >/dev/null 2>&1 &)
   ```
-  Copy index.html again after every edit. Stop it with `pkill -f "[h]ttp.server 8765"`
-  (the brackets stop pkill from matching your own shell).
+  Copy index.html (and `assets/` when pictures change) again after every edit. Stop it with
+  `pkill -f "[h]ttp.server 8765"` in its OWN command: the brackets stop pkill matching itself,
+  but if the same command line also started the server, pkill matches your shell and kills it
+  (exit 144).
 - On the PC (Windows) chat, install Playwright and Chromium first if they are missing.
 
 ## Run the smoke test first

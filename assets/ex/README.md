@@ -1,8 +1,11 @@
-# Exercise pictures to make (job for the PC chat)
+# Exercise pictures
 
-These exercises have no photo in free-exercise-db, so the app shows a coloured placeholder
-(`p:null` in `EX` in `index.html`). Make one picture each with the `chatgpt-image-gen` skill
-(ChatGPT in the user's Chrome), show them to the user, and add the ones they approve.
+These exercises have no photo in free-exercise-db. Since v4.01 each has a drawn picture made
+by `draw.py` (gym-sign style: `<id>.svg` start, `<id>-2.svg` end of the movement, working muscle
+in orange). Change a pose in `draw.py` and run `python3 assets/ex/draw.py` from the repo root.
+
+Optional upgrade (job for the PC chat): nicer pictures with the `chatgpt-image-gen` skill
+(ChatGPT in the user's Chrome). Show them to the user and swap in the ones they approve.
 
 ## Style (keep it the same for all of them)
 - One adult in plain gym clothes doing the exercise, side or three-quarter view, the machine
@@ -12,7 +15,7 @@ These exercises have no photo in free-exercise-db, so the app shows a coloured p
 - Optional second frame for the "Animate" toggle: `assets/ex/<id>-2.webp` (end of the movement).
 
 ## Wiring an approved picture
-In `EX`, change the entry's `p:null` to `p:['assets/ex/<id>.webp']`, or
+In `EX`, change the entry's `p` to `p:['assets/ex/<id>.webp']`, or
 `p:['assets/ex/<id>.webp','assets/ex/<id>-2.webp']` with a second frame. Arrays are direct
 image URLs, so nothing else is needed (sw.js caches same-origin files). Then follow the
 publish flow in CLAUDE.md.
