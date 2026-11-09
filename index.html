@@ -1291,6 +1291,7 @@ const WI = {
   LONG_INDOOR: {l:(ds)=>getRideSession('LONG_INDOOR',ds).name,i:_icon('ride-day.png','🚲'), c:'#6366f1',d:(ds)=>{const s=getRideSession('LONG_INDOOR',ds);return `${s.total} min · ${BIKE_CATS[s.cat].name} · Indoor`;}},
   SHORT_INDOOR: {l:(ds)=>getRideSession('SHORT_INDOOR',ds).name,i:_icon('ride-day.png','🚲'), c:'#6366f1',d:(ds)=>{const s=getRideSession('SHORT_INDOOR',ds);return `${s.total} min · ${BIKE_CATS[s.cat].name} · Indoor`;}},
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
+  MOBILITY:     {l:()=>'Mobility',          i:_icon('rest-mobility.png','🧘'),   c:'#14b8a6',d:()=>_mobDesc()}, // v4.03
   SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Gym session missed — the gym days left this week now cover it.'},
   FULL_BODY:    {l:()=>'Full Body',         i:_icon('gym-weights.png','💪'),     c:'#7c3aed',d:()=>'One-session full-body — squat · hinge · press · pull · shoulder · core'},
 };
@@ -1315,10 +1316,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.02';
+const APP_VERSION='4.03';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.03',d:'Hip and mobility routines, with your chiropractor\'s exercises',det:'A new card on the week screen sets up short mobility routines for a stiff or sore area: hips, lower back, knees or shoulders. Tell it what you have at home (mat, long band, mini loop band, foam roller) and add the exercises your chiropractor gave you, with sets, band colour and her cue. Those always come first and are never swapped. The app fills in the rest from 31 gentle exercises (loosen, wake up, strengthen, stretch), a different mix each day, about 15 minutes. Do it any day from the card, on rest days, or make a day a Mobility day from Swap. Rate the pain 0 to 10 before and after, and you can see over the weeks whether it is helping. Each exercise has a ▶ demo. It never diagnoses: sharp pain, numbness, tingling or pain at night means stop and check with your chiropractor.'},
   {v:'4.02',d:'Auto resistance: no more piling on at the start, and it keeps you in the middle of Zone 2',det:'On your 7 Nov ride, once the warm-up ended auto resistance added 10 W every 45 seconds because your heart rate was still under Zone 2. Heart rate takes a minute or two to catch up, so it kept adding and had you at 150 W by minute 10. Then your heart rate sat at 138 to 142, the top of Zone 2, for 25 minutes, and it barely eased because anywhere inside the zone counted as fine. Now it only adds watts once your heart rate has levelled off, 5 W at a time, and never more than 15% over your usual Zone 2 watts (30% if you are clearly under the zone). And it aims for the middle of the zone: a few beats over the middle for a while eases 5 W, a few under adds 5 W. It still never drops you below 80% of your usual watts. On a replay of that ride it peaked at 120 W instead of 150 and kept you in the middle of Zone 2 for 28 of the last 30 minutes.'},
   {v:'4.01',d:'Pictures for the 22 exercises that had none',det:'Machines like the pendulum squat, belt squat, V-squat, hip thrust machine, seated leg press and rotary torso, plus the foot exercises, showed a coloured placeholder because the free photo library has no picture of them. Each now has a drawn picture in a clean gym-sign style, with the working muscle in orange and a start and end position for the Animate button. They are part of the app, so they show with no signal at the gym too.'},
   {v:'4.00',d:'A coach rides with you: a check-in every 10 minutes',det:'While you ride, every 10 minutes (or tap Ask now) the coach looks at your last 10 minutes: watts, heart rate and how it moved, cadence, time in your zone, and whether your heart rate is climbing for the same watts compared with early in the ride. It then says one short thing you can act on right now, on screen and out loud. Auto resistance still does the second-by-second work, so when it is on the coach never tells you to change the watts. With no signal or no AI left for the day, you get the plain numbers instead. The debrief after the ride now says whether you followed the check-ins. Turn the coach or its voice off on the Ride screen.'},
@@ -5467,13 +5469,13 @@ let _pinBuf='';
 const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
-const SYNC_KEYS=['checkins','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+const SYNC_KEYS=['checkins','rehab','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
   'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach','ride_coach','ride_coach_voice'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
 // prefix — it was missing here since the feature shipped, so extra-gym logs never
 // synced to the cloud and lived only on the device that logged them. v2.95.
-function _isSyncKey(k){return k.startsWith('deload_')||k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||k.startsWith('coachweek_')||SYNC_KEYS.includes(k);}
+function _isSyncKey(k){return k.startsWith('mob_')||k.startsWith('deload_')||k.startsWith('gym_days_')||k.startsWith('week_capacity_')||k.startsWith('home_day_')||k.startsWith('week_picker_')||k.startsWith('log_')||k.startsWith('extralog_')||k.startsWith('plan_')||k.startsWith('auto_ex_')||k.startsWith('weekreview_')||k.startsWith('coachweek_')||SYNC_KEYS.includes(k);}
 // v3.33: the dirty set is persisted (_sync_dirty). It used to live only in memory,
 // so sets logged with no signal were forgotten when the app closed — and the next
 // open's pull (cloud wins) replaced them with the cloud's older copy of that day.
@@ -7174,7 +7176,7 @@ function toggleAnim(xid,btn){
 // (cached per exercise, or fetched once via the worker) and plays it inline in
 // an iframe. Falls back to YouTube search links if no video / worker / key.
 function openVid(xid){
-  const ex=EX[xid];if(!ex)return;
+  const ex=_exOrMob(xid);if(!ex)return;
   const modal=document.createElement('div');
   modal.id='vid-modal';
   modal.style.cssText='position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:flex-end';
@@ -7194,7 +7196,7 @@ function openVid(xid){
 }
 
 async function _resolveAndPlayVid(xid){
-  const ex=EX[xid];if(!ex)return;
+  const ex=_exOrMob(xid);if(!ex)return;
   // 1. Cached video ID for this exercise?
   const cache=DB.get('yt_cache',{})||{};
   if(cache[xid]&&cache[xid].videoId){_renderVidPlayer(xid,cache[xid].videoId);return;}
@@ -7228,7 +7230,7 @@ function _renderVidPlayer(xid,videoId){
 
 function _renderVidSearchLinks(xid){
   const body=document.getElementById('vid-body');if(!body)return;
-  const ex=EX[xid];
+  const ex=_exOrMob(xid);
   const searches=[
     {label:'🔍 YouTube Search',url:'https://www.youtube.com/results?search_query='+encodeURIComponent(ex.n+' exercise proper form tutorial')},
     {label:'📺 Jeff Nippard',url:'https://www.youtube.com/results?search_query='+encodeURIComponent('Jeff Nippard '+ex.n)},
@@ -9977,6 +9979,7 @@ ${S.guest?`<div class="guest-bar"><span>👁 Guest preview — data not saved</s
 </div>
 ${rGymDaysBar(plan)}
 ${plan&&+S.weekStart===+getMon(new Date())?_checkinCard(plan):''}
+${!S.guest&&+S.weekStart===+getMon(new Date())?_mobCard():''}
 ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_deloadCard():''}
 ${+S.weekStart===+getMon(new Date())?_weekDebriefs():''}
 ${plan&&!S.guest&&+S.weekStart===+getMon(new Date())?_rideEntry():''}
@@ -10213,7 +10216,7 @@ ${rAskCoach(ds)}
 ${isGym&&dp.exercises?rExList(dp,log,{regen:true}):''}
 ${isRide?rRideCard(dp)+rLoggedGymOnRideDay(ds):''}
 ${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
-${dp.type==='REST'?rRestCard():''}
+${dp.type==='REST'||dp.type==='MOBILITY'?_mobDayHtml(ds,dp.type):''}${dp.type==='REST'&&!_mobOn()?rRestCard():''}
 ${isGym?`<button class="btn btn-p mt12" onclick="startLog('${ds}')">${log&&log.completed?'✓ '+_T('view_log'):log?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button>`:''}
 ${isRide&&dp.extraGym?(()=>{const xlog=DB.get('extralog_'+ds,null);const xwi=WI[dp.extraGym.type]||WI.REST;return`<div style="border-top:1px solid var(--bord);margin-top:20px;padding-top:18px"><div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:14px">💪</span><div style="font-size:11px;font-weight:700;color:var(--al);text-transform:uppercase;letter-spacing:.8px">${_T('add_gym_extra_lbl')}: ${typeof xwi.l==='function'?xwi.l():xwi.l}</div></div>${rExList({exercises:dp.extraGym.exercises,date:ds,type:dp.extraGym.type},xlog)}<button class="btn btn-p mt12" onclick="startLog('${ds}',true)">${xlog&&xlog.completed?'✓ '+_T('view_log'):xlog?'📝 '+_T('continue_log'):'📝 '+_T('log_workout')}</button></div>`;})():''}
 ${isRide&&!dp.extraGym?(()=>{
@@ -10487,6 +10490,215 @@ ${(()=>{ // v3.62: where you are in each type — levels rise as you complete wo
 })()}
 </div>`;
 }
+
+/* ── v4.03 MOBILITY & REHAB ─────────────────────────────────────────────────────
+   Short routines for a sore or stiff area (hips first), done any day: a daily card on the
+   week screen, the routine on rest days, and a Mobility day type you can put in the week.
+   Your chiropractor's exercises (synced 'rehab'.chiro) always come first and are never
+   swapped; the app fills in around them from MOB_EX, using only the kit you have at home.
+   Each day's routine and your pain before / after (0-10) are kept in synced mob_<date>,
+   so you can see whether it's helping. No AI yet, and it never diagnoses: anything sharp,
+   numb or getting worse goes back to the chiropractor. */
+const MOB_AREAS={hip:'Hips',back:'Lower back',knee:'Knees',shoulder:'Shoulders'};
+const MOB_KIT={mat:'Mat',band:'Long resistance band',mini_band:'Mini loop band',foam_roller:'Foam roller'};
+const MOB_KIND={mob:'Loosen',act:'Wake up',str:'Strengthen',stretch:'Stretch'};
+// k: mob (move a joint through its range), act (switch on a weak muscle), str (light
+// strength), stretch (hold). eq: what it needs (none = just you and the floor or a wall).
+const MOB_EX={
+  m_hip_9090:   {n:'90/90 hip switches',a:['hip'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Sit tall with both knees bent to one side, then rotate both knees to the other side slowly. Use your hands behind you if you need to.'},
+  m_hip_cars:   {n:'Hip circles (CARs)',a:['hip'],k:'mob',d:'5 slow circles each way, each leg',eq:[],c:'Hold a wall. Lift the knee and draw the biggest slow circle you can with it without your pelvis moving.'},
+  m_adductor:   {n:'Adductor rock-back',a:['hip'],k:'mob',d:'2 × 10',eq:['mat'],c:'On hands and knees with one leg straight out to the side, sit your hips back slowly until you feel the inner thigh, then return.'},
+  m_squat_hold: {n:'Supported deep squat hold',a:['hip','knee'],k:'mob',d:'3 × 30 s',eq:[],c:'Hold a post or door frame and sink into a deep squat, heels down, chest up. Breathe and let the hips open.'},
+  m_foam_glute: {n:'Foam roll glutes and outer hip',a:['hip'],k:'mob',d:'60 s each side',eq:['foam_roller'],c:'Sit on the roller tilted to one side and roll slowly; pause on tight spots for a few breaths.'},
+  m_bridge:     {n:'Glute bridge',v:'bridge',a:['hip','back'],k:'act',d:'2 × 12, 2 s squeeze at the top',eq:['mat'],c:'Feet flat, push through the heels and squeeze your glutes to lift. Ribs down; don\'t arch the lower back.'},
+  m_band_bridge:{n:'Banded glute bridge',v:'bridge',a:['hip'],k:'act',d:'2 × 12, knees pressing out',eq:['mat','mini_band'],c:'Band just above the knees. Keep pushing the knees out against the band the whole time.'},
+  m_clam:       {n:'Clamshell',v:'clam',a:['hip'],k:'act',d:'2 × 15 each side',eq:['mat'],c:'Lie on your side, knees bent, heels together. Lift the top knee without rolling your hips back.'},
+  m_band_clam:  {n:'Banded clamshell',v:'clam',a:['hip'],k:'act',d:'2 × 15 each side',eq:['mat','mini_band'],c:'Same as the clamshell with a mini band above the knees. Slow on the way down.'},
+  m_hydrant:    {n:'Fire hydrant',a:['hip'],k:'act',d:'2 × 10 each side',eq:['mat'],c:'On hands and knees, lift one bent knee out to the side to hip height, keeping your back flat.'},
+  m_side_raise: {n:'Side-lying leg raise',a:['hip'],k:'act',d:'2 × 12 each side',eq:['mat'],c:'Lie on your side, bottom knee bent. Lift the top leg straight, toes forward, heel leading slightly back.'},
+  m_side_steps: {n:'Banded side steps',a:['hip','knee'],k:'str',d:'2 × 12 steps each way',eq:['mini_band'],c:'Band around the ankles or above the knees, half squat, step sideways keeping tension and toes forward.'},
+  m_monster:    {n:'Banded monster walk',a:['hip'],k:'str',d:'2 × 10 steps forward and back',eq:['mini_band'],c:'Half squat, feet wide, walk forward and back on a diagonal, never letting the band go slack.'},
+  m_split_hold: {n:'Split squat hold',a:['hip','knee'],k:'str',d:'2 × 20 s each side',eq:[],c:'Hold the bottom of a split squat, front knee over the foot, back knee just off the floor. Hold a wall for balance.'},
+  m_hip_flexor: {n:'Half-kneeling hip flexor stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Tuck your tailbone and squeeze the back glute, then shift forward a little. Feel it at the front of the back hip.'},
+  m_figure4:    {n:'Figure-4 glute stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Lying on your back, cross one ankle over the other knee and pull the bottom thigh towards you.'},
+  m_cat_cow:    {n:'Cat-cow',a:['back'],k:'mob',d:'1 × 10 slow',eq:['mat'],c:'On hands and knees, round your back up slowly, then let it sag, moving one segment at a time.'},
+  m_open_book:  {n:'Open book rotation',a:['back','shoulder'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Lie on your side, knees bent, arms together in front. Open the top arm across to the other side, following it with your eyes.'},
+  m_bird_dog:   {n:'Bird dog',a:['back','hip'],k:'act',d:'2 × 8 each side, 3 s hold',eq:['mat'],c:'Reach one arm and the opposite leg out long, hips level, without arching. Pause, then switch.'},
+  m_dead_bug:   {n:'Dead bug',a:['back'],k:'act',d:'2 × 8 each side',eq:['mat'],c:'On your back, arms up, knees over hips. Lower the opposite arm and leg slowly while keeping the lower back on the floor.'},
+  m_side_plank: {n:'Side plank from the knees',a:['back','hip'],k:'str',d:'2 × 20 s each side',eq:['mat'],c:'Elbow under shoulder, knees bent, lift the hips into a straight line from knees to head.'},
+  m_child:      {n:'Child\'s pose',a:['back'],k:'stretch',d:'hold 45 s',eq:['mat'],c:'Sit back on your heels, arms long in front, and breathe into the lower back.'},
+  m_tke:        {n:'Banded knee extension',a:['knee'],k:'act',d:'2 × 15 each leg',eq:['band'],c:'Band anchored low in front, looped behind the knee. Bend slightly, then straighten the knee fully against the band.'},
+  m_slr:        {n:'Straight-leg raise',a:['knee'],k:'act',d:'2 × 12 each leg',eq:['mat'],c:'On your back, other knee bent. Tighten the thigh, lift the straight leg to the height of the bent knee, lower slowly.'},
+  m_wall_sit:   {n:'Wall sit',a:['knee'],k:'str',d:'3 × 30 s',eq:[],c:'Back against a wall, slide down only as far as feels comfortable for the knees, weight in the heels.'},
+  m_step_down:  {n:'Slow step-down',a:['knee'],k:'str',d:'2 × 8 each leg',eq:[],c:'Stand on a low step and lower the other heel to the floor over 3 seconds, knee tracking over the toes.'},
+  m_ham_band:   {n:'Hamstring stretch with a band',a:['knee','back'],k:'stretch',d:'hold 45 s each leg',eq:['band','mat'],c:'Lying on your back, loop the band around one foot and raise the straight leg until you feel the back of the thigh.'},
+  m_pull_apart: {n:'Band pull-apart',a:['shoulder'],k:'act',d:'2 × 15',eq:['band'],c:'Arms straight in front, pull the band apart to your chest by squeezing the shoulder blades.'},
+  m_band_er:    {n:'Banded external rotation',a:['shoulder'],k:'str',d:'2 × 12 each arm',eq:['band'],c:'Elbow at your side bent to 90 degrees, rotate the forearm outward against the band, slowly.'},
+  m_wall_slide: {n:'Wall slides',a:['shoulder'],k:'mob',d:'2 × 10',eq:[],c:'Back and arms against the wall in a W, slide the arms up into a Y keeping contact, then back down.'},
+  m_doorway:    {n:'Doorway chest stretch',a:['shoulder'],k:'stretch',d:'hold 30 s each side',eq:[],c:'Forearm on the door frame at shoulder height, step through gently until you feel the front of the shoulder.'},
+};
+function _rehab(){return DB.get('rehab',null);}
+function _mobOn(){const r=_rehab();return!!(r&&r.on!==false&&(r.areas||[]).length);}
+function _mobAreaTxt(){const r=_rehab()||{};return(r.areas||[]).map(a=>MOB_AREAS[a]).filter(Boolean).join(' & ')||'Mobility';}
+function _mobDesc(){return _mobOn()?`Your ${_mobAreaTxt().toLowerCase()} routine · about 15 min`:'Mobility and band work · about 15 min';}
+// The exercise behind an id, for demos: gym exercise, mobility exercise, or one of yours.
+function _exOrMob(id){
+  if(EX[id])return EX[id];
+  const m=MOB_EX[id];if(m)return{n:m.n,m:m.a.map(a=>MOB_AREAS[a]).join(' · ')};
+  const c=((_rehab()||{}).chiro||[]).find(x=>x.id===id);
+  return c?{n:c.n,m:'From your chiropractor'}:null;
+}
+function _mobInfo(id){
+  const m=MOB_EX[id];if(m)return{n:m.n,d:m.d,c:m.c,k:MOB_KIND[m.k],chiro:false};
+  const c=((_rehab()||{}).chiro||[]).find(x=>x.id===id);
+  return c?{n:c.n,d:[c.dose,c.band?c.band+' band':''].filter(Boolean).join(' · '),c:c.note||'',k:'From your chiropractor',chiro:true}:null;
+}
+// Today's routine: your chiropractor's exercises for these areas, then loosen → wake up →
+// strengthen → stretch from MOB_EX with the kit you have, up to 8 in all. Seeded by the date,
+// so it changes day to day but every device shows the same one.
+function _mobPick(ds){
+  const r=_rehab()||{},kit=new Set(r.kit||['mat']);
+  const areas=(r.areas&&r.areas.length)?r.areas:['hip'];
+  const chiro=(r.chiro||[]).filter(c=>!c.a||areas.includes(c.a)).map(c=>c.id);
+  const per=areas.length===1?{mob:2,act:2,str:1,stretch:1}:{mob:1,act:1,str:1,stretch:1};
+  const out=[],vs=new Set(); // vs: one of each exercise (glute bridge or its banded version, not both)
+  for(const k of['mob','act','str','stretch'])for(const a of areas){
+    const cands=Object.keys(MOB_EX).filter(id=>{const m=MOB_EX[id];return m.k===k&&m.a.includes(a)&&m.eq.every(e=>kit.has(e))&&!out.includes(id);})
+      .sort((x,y)=>_hash(ds+x)-_hash(ds+y));
+    let n=0;for(const id of cands){if(n>=per[k])break;const v=MOB_EX[id].v||id;if(vs.has(v))continue;vs.add(v);out.push(id);n++;}
+  }
+  return[...chiro,...out.slice(0,Math.max(3,8-chiro.length))];
+}
+function _mobDay(ds,create){
+  let m=DB.get('mob_'+ds,null);
+  if(!m&&create&&_mobOn()){m={ex:_mobPick(ds),done:[],p0:null,p1:null,areas:(_rehab()||{}).areas||[]};DB.set('mob_'+ds,m);}
+  return m;
+}
+// Pain before each session over the last 4 weeks, oldest first.
+function _mobTrend(){
+  const out=[];for(let i=27;i>=0;i--){const ds=fd(addDays(new Date(),-i)),m=DB.get('mob_'+ds,null);if(m&&m.p0!=null)out.push([ds,m.p0,m.p1]);}
+  return out;
+}
+// Week screen: every day, whatever the day's plan is.
+function _mobCard(){
+  const r=_rehab();
+  if(r&&r.on===false)return'';
+  if(!r)return`<div class="card" style="display:flex;align-items:center;gap:10px;padding:11px 14px">
+  <div style="font-size:22px">🧘</div>
+  <div style="flex:1;min-width:0;font-size:12px;line-height:1.45;color:var(--t2)"><b style="color:var(--txt)">Hip and mobility routines.</b> Short band and mobility work for a stiff or sore area, with your chiropractor's exercises.</div>
+  <div style="display:flex;flex-direction:column;gap:5px;flex-shrink:0"><button onclick="openMobSetup()" style="background:var(--acc);border:none;border-radius:9px;color:#fff;font-size:12px;font-weight:700;padding:7px 10px;cursor:pointer">Set up</button>
+  <button onclick="mobDismiss()" style="background:none;border:none;color:var(--t2);font-size:11px;cursor:pointer">Not now</button></div>
+</div>`;
+  if(!_mobOn())return'';
+  const today=fd(new Date()),m=_mobDay(today,false),n=m?m.ex.length:_mobPick(today).length,dn=m?m.done.filter(x=>m.ex.includes(x)).length:0;
+  const all=m&&dn>=m.ex.length;
+  const pain=m&&m.p0!=null?` · pain ${m.p0}${m.p1!=null?' → '+m.p1:''}`:'';
+  return`<div class="card" style="display:flex;align-items:center;gap:10px;padding:11px 14px;border-color:${all?'rgba(16,185,129,.4)':'rgba(20,184,166,.35)'}">
+  <div style="font-size:22px">${all?'✅':'🧘'}</div>
+  <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:800">Today's mobility · ${_esc(_mobAreaTxt())}</div>
+  <div style="font-size:11px;color:var(--t2);margin-top:2px">${all?'Done':dn?`${dn} of ${n} done`:`${n} exercises · about 15 min`}${pain}</div></div>
+  <button onclick="openMob('${today}')" style="background:${all?'var(--s2)':'#14b8a6'};border:${all?'1px solid var(--bord)':'none'};border-radius:9px;color:${all?'var(--al)':'#fff'};font-size:12px;font-weight:700;padding:7px 12px;cursor:pointer;flex-shrink:0">${all?'View':dn?'Continue':'Start'}</button>
+</div>`;
+}
+// Day screen: rest days and Mobility days.
+function _mobDayHtml(ds,type){
+  if(!_mobOn()){
+    if(type!=='MOBILITY')return'';
+    return`<div class="card" style="padding:14px"><div style="font-size:14px;font-weight:800;margin-bottom:6px">🧘 Mobility day</div><div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">Pick the areas to work on and the kit you have, and add your chiropractor's exercises.</div><button class="btn btn-p" style="margin:0" onclick="openMobSetup()">Set up my routine</button></div>`;
+  }
+  const m=_mobDay(ds,false),ids=m?m.ex:_mobPick(ds),done=new Set(m?m.done:[]);
+  return`<div class="card" style="padding:14px;border-color:rgba(20,184,166,.35)">
+  <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px"><div style="font-size:14px;font-weight:800">🧘 ${_esc(_mobAreaTxt())} routine</div><div style="font-size:11px;color:var(--t2)">${ids.length} exercises · ~15 min</div></div>
+  ${ids.map(id=>{const i=_mobInfo(id);return i?`<div style="display:flex;gap:8px;font-size:12px;padding:4px 0;color:${done.has(id)?'var(--t2)':'var(--txt)'}"><span>${done.has(id)?'✓':'·'}</span><span style="flex:1">${_esc(i.n)}${i.chiro?' <span style="font-size:10px;color:#14b8a6;font-weight:700">CHIRO</span>':''}</span><span style="color:var(--t2)">${_esc(i.d)}</span></div>`:'';}).join('')}
+  <button class="btn btn-p" style="margin:10px 0 0;background:#14b8a6" onclick="openMob('${ds}')">${done.size?'Continue':'Start'} routine</button>
+</div>`;
+}
+const _painRow=(ds,w,cur)=>`<div style="display:flex;gap:3px;margin-top:6px">${[0,1,2,3,4,5,6,7,8,9,10].map(v=>`<button onclick="mobPain('${ds}','${w}',${v})" style="flex:1;min-width:0;padding:6px 0;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid ${cur===v?'#14b8a6':'var(--bord)'};background:${cur===v?'rgba(20,184,166,.2)':'var(--s2)'};color:${cur===v?'#14b8a6':'var(--t2)'}">${v}</button>`).join('')}</div>`;
+function _mobSheetHtml(ds){
+  const m=_mobDay(ds,true);if(!m)return'';
+  const done=new Set(m.done),tr=_mobTrend().filter(t=>t[0]!==ds).slice(-6);
+  const dl=new Date(ds+'T12:00:00').toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+  return`<div class="swap-title">🧘 ${_esc(_mobAreaTxt())} · ${dl}</div>
+  <div style="font-size:12px;font-weight:700;margin-top:2px">How does it feel right now? <span style="font-weight:400;color:var(--t2)">0 = no pain, 10 = worst</span></div>
+  ${_painRow(ds,'p0',m.p0)}
+  ${tr.length?`<div style="font-size:11px;color:var(--t2);margin-top:6px">Before your last sessions: ${tr.map(t=>t[1]).join(' → ')}</div>`:''}
+  <div style="margin-top:12px">${m.ex.map(id=>{const i=_mobInfo(id);if(!i)return'';const on=done.has(id);
+    return`<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--bord)">
+      <button onclick="mobTick('${ds}','${id}')" style="flex-shrink:0;width:30px;height:30px;border-radius:50%;border:2px solid ${on?'#14b8a6':'var(--bord)'};background:${on?'#14b8a6':'none'};color:#fff;font-size:15px;font-weight:800;cursor:pointer">${on?'✓':''}</button>
+      <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;${on?'color:var(--t2)':''}">${_esc(i.n)}</div>
+        <div style="font-size:12px;color:#14b8a6;font-weight:700;margin-top:1px">${_esc(i.d)}<span style="color:var(--t2);font-weight:400"> · ${_esc(i.k)}</span></div>
+        ${i.c?`<div style="font-size:12px;color:var(--t2);line-height:1.45;margin-top:3px">${_esc(i.c)}</div>`:''}</div>
+      <button onclick="openVid('${id}')" style="flex-shrink:0;background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:12px;padding:5px 8px;cursor:pointer">▶</button>
+    </div>`;}).join('')}</div>
+  ${done.size?`<div style="font-size:12px;font-weight:700;margin-top:10px">And now?</div>${_painRow(ds,'p1',m.p1)}`:''}
+  <div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:12px;background:var(--s2);border-radius:10px;padding:8px 10px">Gentle is the goal: mild discomfort up to about 3 out of 10 is fine, sharp pain is not. Stop and check with your chiropractor if it gets worse, or if you notice numbness, tingling or pain at night.</div>
+  <div style="display:flex;gap:6px;margin-top:10px"><button class="add-set" style="flex:1" onclick="mobNewMix('${ds}')">↻ New mix</button><button class="add-set" style="flex:1" onclick="openMobSetup()">Areas, kit & chiro</button></div>
+  <button class="btn btn-p" style="margin-top:10px;background:#14b8a6" onclick="closeMob()">Done</button>`;
+}
+function openMob(ds){
+  if(!_mobOn()){openMobSetup();return;}
+  document.getElementById('mob-modal')?.remove();
+  const md=document.createElement('div');md.className='swap-modal';md.id='mob-modal';md.dataset.ds=ds;
+  md.innerHTML=`<div class="swap-ov" onclick="closeMob()"></div><div class="swap-sheet">${_mobSheetHtml(ds)}</div>`;
+  document.body.appendChild(md);requestAnimationFrame(()=>md.classList.add('on'));
+}
+function _mobRedraw(ds){const sh=document.querySelector('#mob-modal .swap-sheet');if(sh)sh.innerHTML=_mobSheetHtml(ds);}
+function closeMob(){const md=document.getElementById('mob-modal');if(md){md.classList.remove('on');setTimeout(()=>md.remove(),300);}debouncedSync();render();}
+function mobTick(ds,id){const m=_mobDay(ds,true);if(!m)return;const i=m.done.indexOf(id);if(i>=0)m.done.splice(i,1);else m.done.push(id);DB.set('mob_'+ds,m);_mobRedraw(ds);}
+function mobPain(ds,w,v){const m=_mobDay(ds,true);if(!m)return;m[w]=m[w]===v?null:v;DB.set('mob_'+ds,m);_mobRedraw(ds);}
+function mobNewMix(ds){const m=_mobDay(ds,true);if(!m)return;
+  const keep=m.ex.filter(id=>m.done.includes(id)||!MOB_EX[id]);   // ticked and chiro ones stay
+  const fresh=_mobPick(ds+'|'+Date.now()).filter(id=>!keep.includes(id));
+  m.ex=[...keep,...fresh].slice(0,Math.max(keep.length,8));DB.set('mob_'+ds,m);_mobRedraw(ds);}
+function mobDismiss(){DB.set('rehab',{on:false,areas:[],kit:['mat'],chiro:[]});debouncedSync();render();}
+// Set-up sheet: areas, home kit, and the chiropractor's list.
+function _mobSetupHtml(){
+  const r=_rehab()||{areas:[],kit:['mat'],chiro:[]};
+  const chip=(on,label,fn)=>`<button onclick="${fn}" style="border:1px solid ${on?'#14b8a6':'var(--bord)'};background:${on?'rgba(20,184,166,.18)':'var(--s2)'};color:${on?'#14b8a6':'var(--t2)'};border-radius:999px;font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer">${on?'✓ ':''}${label}</button>`;
+  const inp=(id,ph)=>`<input id="${id}" placeholder="${ph}" autocomplete="off" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:9px;color:var(--txt);font-size:14px;padding:9px 10px;margin-top:6px;font-family:inherit">`;
+  return`<div class="swap-title">🧘 Mobility set-up</div>
+  <div style="font-size:12px;font-weight:700">What needs work?</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${Object.entries(MOB_AREAS).map(([k,l])=>chip((r.areas||[]).includes(k),l,`mobSet('areas','${k}')`)).join('')}</div>
+  <div style="font-size:12px;font-weight:700;margin-top:14px">What do you have at home?</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:6px">${Object.entries(MOB_KIT).map(([k,l])=>chip((r.kit||[]).includes(k),l,`mobSet('kit','${k}')`)).join('')}</div>
+  <div style="font-size:12px;font-weight:700;margin-top:14px">From my chiropractor</div>
+  <div style="font-size:11px;color:var(--t2);margin-top:2px;line-height:1.45">These always come first in your routine and are never swapped out.</div>
+  ${(r.chiro||[]).map(c=>`<div style="display:flex;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--bord)"><div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700">${_esc(c.n)}</div><div style="font-size:11px;color:var(--t2)">${_esc([c.dose,c.band?c.band+' band':'',c.a?MOB_AREAS[c.a]:'',c.note].filter(Boolean).join(' · '))}</div></div><button onclick="mobChiroDel('${c.id}')" style="background:none;border:1px solid var(--bord);border-radius:8px;color:var(--t2);font-size:12px;padding:4px 8px;cursor:pointer">Remove</button></div>`).join('')}
+  <div style="background:var(--s2);border-radius:12px;padding:8px 10px 10px;margin-top:8px">
+    ${inp('mob-c-n','Exercise name (e.g. Banded hip distraction)')}${inp('mob-c-d','Sets / reps or hold (e.g. 2 × 10, hold 30 s)')}
+    <div style="display:flex;gap:6px">${inp('mob-c-b','Band colour (optional)')}<select id="mob-c-a" style="margin-top:6px;background:var(--s1);border:1px solid var(--bord);border-radius:9px;color:var(--txt);font-size:14px;padding:8px">${Object.entries(MOB_AREAS).map(([k,l])=>`<option value="${k}"${(r.areas||[])[0]===k?' selected':''}>${l}</option>`).join('')}</select></div>
+    ${inp('mob-c-note','Her cue or note (optional)')}
+    <button class="add-set" style="margin-top:8px" onclick="mobChiroAdd()">＋ Add to my list</button>
+  </div>
+  <button class="btn btn-p" style="margin-top:12px;background:#14b8a6" onclick="closeMobSetup()">${(r.areas||[]).length?'Save':'Save'}</button>
+  ${r.on!==false&&(r.areas||[]).length?`<button onclick="mobSet('off')" style="width:100%;background:none;border:none;color:var(--t2);font-size:12px;margin-top:8px;cursor:pointer">Turn mobility routines off</button>`:''}`;
+}
+function openMobSetup(){
+  document.getElementById('mob-modal')?.remove();document.getElementById('mobset-modal')?.remove();
+  if(!_rehab()||_rehab().on===false)DB.set('rehab',{...(_rehab()||{kit:['mat'],chiro:[]}),on:true,areas:(_rehab()?.areas?.length?_rehab().areas:['hip'])});
+  const md=document.createElement('div');md.className='swap-modal';md.id='mobset-modal';
+  md.innerHTML=`<div class="swap-ov" onclick="closeMobSetup()"></div><div class="swap-sheet">${_mobSetupHtml()}</div>`;
+  document.body.appendChild(md);requestAnimationFrame(()=>md.classList.add('on'));
+}
+function _mobSetupRedraw(){const sh=document.querySelector('#mobset-modal .swap-sheet');if(sh)sh.innerHTML=_mobSetupHtml();}
+function closeMobSetup(){const md=document.getElementById('mobset-modal');if(md){md.classList.remove('on');setTimeout(()=>md.remove(),300);}debouncedSync();render();}
+function mobSet(what,k){
+  const r={on:true,areas:[],kit:['mat'],chiro:[],...(_rehab()||{})};
+  if(what==='off'){r.on=false;DB.set('rehab',r);closeMobSetup();return;}
+  const a=new Set(r[what]||[]);a.has(k)?a.delete(k):a.add(k);r[what]=[...a];
+  DB.set('rehab',r);_mobSetupRedraw();
+}
+function mobChiroAdd(){
+  const v=id=>(document.getElementById(id)?.value||'').trim();
+  const n=v('mob-c-n');if(!n){showToast('Add the exercise name first','var(--amb)');return;}
+  const r={on:true,areas:['hip'],kit:['mat'],chiro:[],...(_rehab()||{})};
+  r.chiro=[...(r.chiro||[]),{id:'c_'+Date.now().toString(36),n:n.slice(0,60),dose:v('mob-c-d').slice(0,40),band:v('mob-c-b').slice(0,20),a:v('mob-c-a')||null,note:v('mob-c-note').slice(0,140)}];
+  DB.set('rehab',r);
+  // today's routine picks it up straight away
+  const td=fd(new Date()),m=DB.get('mob_'+td,null);if(m){m.ex=[...new Set([...r.chiro.map(c=>c.id),...m.ex])];DB.set('mob_'+td,m);}
+  _mobSetupRedraw();showToast('Added to your routine','#14b8a6');
+}
+function mobChiroDel(id){const r=_rehab();if(!r)return;r.chiro=(r.chiro||[]).filter(c=>c.id!==id);DB.set('rehab',r);_mobSetupRedraw();}
 
 function rRestCard(){
   return`<div class="rest-card">
@@ -15376,7 +15588,7 @@ function doSwap(ds,newType){
   const oldType=plan[di].type;
   const gymTypes=GYM_TYPES;
   const wasGym=gymTypes.includes(oldType);
-  const goingToRest=newType==='REST';
+  const goingToRest=newType==='REST'||newType==='MOBILITY'; // v4.03: a Mobility day frees the gym session like Rest
   const goingToGym=gymTypes.includes(newType);
   const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body'};
   const dayLong=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
