@@ -1317,10 +1317,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.05';
+const APP_VERSION='4.06';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.06',d:'The coach thinks before it answers, and gives fuller answers',det:'The Ask the Coach chat was told to answer in 2 or 3 sentences and had its thinking switched off, so replies came back fast but thin. Now the AI takes a moment to think first and can answer in up to about 150 words, with a few bullets when that is clearer. Each reply also says which AI answered it (via Gemini, or via DeepSeek when Gemini is busy), so you can see it is the real thing.'},
   {v:'4.05',d:'Ask the Coach is a chat bubble now, and it handles pain better',det:'The coach chat was at the very bottom of the week screen, in a small scroll box that fought the page when you scrolled. Now a 💬 bubble sits in the lower right of the Plan, day and My Training screens and opens the chat full screen, with the box you type in just above the keyboard. Open it from a day and it asks about that day. The coach also got smarter. When it proposed a change and you replied, it was never told whether you applied or skipped it, so it could repeat itself word for word; now it is. When you mention pain it asks where and what kind first, sends you to your chiropractor or a doctor for warning signs (swelling, the knee giving way, numbness, pain at night), changes the exercises on the affected days instead of moving whole days, and can add that area to your daily mobility routine.'},
   {v:'4.04',d:'Mobility routines for more areas: knees, ankles, neck, upper back and wrists',det:'The mobility set-up now has eight areas: hips, lower back, upper back and posture, neck, shoulders, elbows and wrists, knees, and ankles and feet. Knees got more exercises (heel slides, quad sets, short-arc quads, banded Spanish squat, quad stretch), and each new area has its own loosen, wake up, strengthen and stretch exercises, 57 in all. Pick as many areas as you like in Areas, kit and chiro and the daily routine covers them, still about 15 minutes.'},
   {v:'4.03',d:'Hip and mobility routines, with your chiropractor\'s exercises',det:'A new card on the week screen sets up short mobility routines for a stiff or sore area: hips, lower back, knees or shoulders. Tell it what you have at home (mat, long band, mini loop band, foam roller) and add the exercises your chiropractor gave you, with sets, band colour and her cue. Those always come first and are never swapped. The app fills in the rest from 31 gentle exercises (loosen, wake up, strengthen, stretch), a different mix each day, about 15 minutes. Do it any day from the card, on rest days, or make a day a Mobility day from Swap. Rate the pain 0 to 10 before and after, and you can see over the weeks whether it is helping. Each exercise has a ▶ demo. It never diagnoses: sharp pain, numbness, tingling or pain at night means stop and check with your chiropractor.'},
@@ -11377,7 +11378,7 @@ function buildAskPrompt(question){
   const mobTxt=_mobOn()?`Daily mobility routine for: ${_mobAreaTxt()}. Pain before recent sessions (0-10): ${_mt.length?_mt.map(t=>t[0].slice(5)+' '+t[1]+(t[2]!=null?'->'+t[2]:'')).join(', '):'none logged yet'}.${(_rh.chiro||[]).length?` Chiropractor's exercises: ${_rh.chiro.map(c=>c.n).join(', ')}.`:''}`:'No mobility routine set up.';
   const zh=DB.get('lang','en')==='zh';
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
-  return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${_layoffNote()}${langNote}
+  return`You are the user's personal training coach. Answer like a knowledgeable personal coach who knows their data: specific and practical, usually 3 to 6 sentences (up to about 150 words), with short paragraphs or a few "- " bullets when that is clearer. Explain the why briefly. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${_layoffNote()}${langNote}
 
 VOCABULARY — NEVER write these acronyms in your response. Use plain English ONLY:
 - "CTL" / "ATL" / "TSB" — concepts called "Fitness" / "Fatigue" / "Form". NEVER write the acronym at all.
@@ -11486,7 +11487,7 @@ ${recent.join('\n')}
 === USER'S QUESTION ===
 ${question}
 
-Answer in plain words: the direct answer first, then the reasoning with their actual days and numbers (up to about 120 words). If they ask for advice or a change, give a concrete recommendation AND call the tool that makes it, in this same reply.`;
+Answer in plain words: the direct answer first, then the reasoning with their actual days and numbers (up to about 150 words). If they ask for advice or a change, give a concrete recommendation AND call the tool that makes it, in this same reply.`;
 }
 
 // Tool/function declarations the AI can call to actually modify the plan.
@@ -12363,7 +12364,9 @@ async function sendAskCoach(){
         contents:_buildAskContents(conv),
         tools:COACH_TOOLS,
         toolConfig:{functionCallingConfig:{mode:'AUTO'}},
-        generationConfig:{maxOutputTokens:1200,temperature:0.5,thinkingConfig:{thinkingBudget:0}}
+        // v4.06: the coach thinks before it answers (it had no thinking budget, so replies
+        // were quick but shallow); room for the thinking plus a fuller reply
+        generationConfig:{maxOutputTokens:3000,temperature:0.5,thinkingConfig:{thinkingBudget:1024}}
       })});
     if(!r.ok){
       // Friendlier error messages for known status codes
@@ -12374,10 +12377,11 @@ async function sendAskCoach(){
     }
     const json=await r.json();
     const parts=json.candidates?.[0]?.content?.parts||[];
-    const textParts=parts.filter(p=>p.text).map(p=>p.text.trim()).filter(Boolean);
+    const textParts=parts.filter(p=>p.text&&!p.thought).map(p=>p.text.trim()).filter(Boolean);
     const fnCalls=parts.filter(p=>p.functionCall).map(p=>p.functionCall);
     const text=textParts.join('\n\n');
     if(!text&&!fnCalls.length)throw new Error('empty response');
+    const _via=r.headers.get('X-TB-AI')||''; // v4.06: which AI answered (gemini / deepseek / …)
     incrementAskQuota();
     trackAICall?.('ask_coach',true);
     // Safety net: strip any acronyms the model slipped in despite the prompt rules
@@ -12387,6 +12391,7 @@ async function sendAskCoach(){
       role:'model',
       text:cleanedText?_esc(cleanedText).replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>').replace(/\n+/g,'<br>'):'',
       rawText:cleanedText,
+      ai:_via,
       functionCalls:fnCalls,
       pendingActions:[...fnCalls],
       appliedActions:[],
@@ -12599,6 +12604,7 @@ function rAskCoach(dayDs,dock){
         </div>
         ${t.text?`<div style="font-size:12px;color:var(--t1);line-height:1.5">${t.text}</div>`:''}
         ${cardsHtml}${appliedHtml}${skippedHtml}
+        ${t.ai?`<div style="font-size:9px;color:var(--t2);margin-top:5px;opacity:.8">via ${({gemini:'Gemini',deepseek:'DeepSeek',perplexity:'Perplexity',openai:'OpenAI'})[t.ai]||_esc(t.ai)}</div>`:''}
       </div>
     </div>`;
   }).join('');
