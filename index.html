@@ -133,6 +133,7 @@ body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!i
 .bnav{position:fixed;bottom:0;left:0;right:0;background:rgba(9,9,15,.93);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--bord);display:flex;justify-content:center;padding:8px calc(var(--sr)) calc(var(--sb) + 4px) calc(var(--sl))}
 .bnav-btn{flex:1;max-width:160px;background:transparent;border:none;padding:7px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;-webkit-appearance:none;opacity:.45;transition:opacity .15s}
 .bnav-btn.on{opacity:1}
+html.ask-open,html.ask-open body{overflow:hidden} /* v4.05: the page stays put under the full-screen chat */
 .bnav-btn span:first-child{font-size:22px}
 .bnav-btn span:last-child{font-size:10px;font-weight:700;color:var(--txt)}
 
@@ -1316,10 +1317,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.04';
+const APP_VERSION='4.05';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.05',d:'Ask the Coach is a chat bubble now, and it handles pain better',det:'The coach chat was at the very bottom of the week screen, in a small scroll box that fought the page when you scrolled. Now a 💬 bubble sits in the lower right of the Plan, day and My Training screens and opens the chat full screen, with the box you type in just above the keyboard. Open it from a day and it asks about that day. The coach also got smarter. When it proposed a change and you replied, it was never told whether you applied or skipped it, so it could repeat itself word for word; now it is. When you mention pain it asks where and what kind first, sends you to your chiropractor or a doctor for warning signs (swelling, the knee giving way, numbness, pain at night), changes the exercises on the affected days instead of moving whole days, and can add that area to your daily mobility routine.'},
   {v:'4.04',d:'Mobility routines for more areas: knees, ankles, neck, upper back and wrists',det:'The mobility set-up now has eight areas: hips, lower back, upper back and posture, neck, shoulders, elbows and wrists, knees, and ankles and feet. Knees got more exercises (heel slides, quad sets, short-arc quads, banded Spanish squat, quad stretch), and each new area has its own loosen, wake up, strengthen and stretch exercises, 57 in all. Pick as many areas as you like in Areas, kit and chiro and the daily routine covers them, still about 15 minutes.'},
   {v:'4.03',d:'Hip and mobility routines, with your chiropractor\'s exercises',det:'A new card on the week screen sets up short mobility routines for a stiff or sore area: hips, lower back, knees or shoulders. Tell it what you have at home (mat, long band, mini loop band, foam roller) and add the exercises your chiropractor gave you, with sets, band colour and her cue. Those always come first and are never swapped. The app fills in the rest from 31 gentle exercises (loosen, wake up, strengthen, stretch), a different mix each day, about 15 minutes. Do it any day from the card, on rest days, or make a day a Mobility day from Swap. Rate the pain 0 to 10 before and after, and you can see over the weeks whether it is helping. Each exercise has a ▶ demo. It never diagnoses: sharp pain, numbness, tingling or pain at night means stop and check with your chiropractor.'},
   {v:'4.02',d:'Auto resistance: no more piling on at the start, and it keeps you in the middle of Zone 2',det:'On your 7 Nov ride, once the warm-up ended auto resistance added 10 W every 45 seconds because your heart rate was still under Zone 2. Heart rate takes a minute or two to catch up, so it kept adding and had you at 150 W by minute 10. Then your heart rate sat at 138 to 142, the top of Zone 2, for 25 minutes, and it barely eased because anywhere inside the zone counted as fine. Now it only adds watts once your heart rate has levelled off, 5 W at a time, and never more than 15% over your usual Zone 2 watts (30% if you are clearly under the zone). And it aims for the middle of the zone: a few beats over the middle for a while eases 5 W, a few under adds 5 W. It still never drops you below 80% of your usual watts. On a replay of that ride it peaked at 120 W instead of 150 and kept you in the middle of Zone 2 for 28 of the last 30 minutes.'},
@@ -8631,6 +8633,7 @@ function _renderInner(){
   // Bind scroll observers on dynamic regions that may have just been rendered.
   // Each binder is no-op when its target isn't present or is already bound.
   if(typeof _bindAskScrollObserver==='function')_bindAskScrollObserver();
+  try{_askDock();}catch(e){console.warn('[ask dock]',e);} // v4.05
 }
 
 /* ── BIKE RIDE MODE (v3.50) ────────────────────────────────────────────────
@@ -10055,7 +10058,7 @@ ${rRecoveryMap()}
 </div>`;
 })();})()}
 ${rCoachCard()}
-${rAskCoach()}
+
 ${(()=>{
   if(S.guest||!S.fbUser)return'';
   const ls=DB.get('fb_last_sync',null)||DB.get('fb_last_pull',null);
@@ -10213,7 +10216,7 @@ ${rVitruvianCard(ds)}
 ${isGym||dp.extraGym?_watchNote(ds):''}
 ${ds===fd(new Date())&&!/OUTDOOR|INDOOR/.test(dp.type)?_rideEntry():''}
 ${rRunsCard(ds)}
-${rAskCoach(ds)}
+
 ${isGym&&dp.exercises?rExList(dp,log,{regen:true}):''}
 ${isRide?rRideCard(dp)+rLoggedGymOnRideDay(ds):''}
 ${restDayRide?`<div class="sec-lbl">🚴 Logged today</div>${rLoggedRideCard(restDayRide)}`:''}
@@ -11369,6 +11372,9 @@ function buildAskPrompt(question){
   const _cw=DB.get('coachweek_'+fd(getMon(new Date())),null);
   const coachTxt=_cw?.review?`${_cw.review.summary||''}\n  Suggestions: ${(_cw.review.suggestions||[]).join(' | ')}`:'(no review this week yet)';
   recent.unshift('  '+gapTxt);
+  // v4.05: the mobility routines (v4.03) and how sore spots have scored lately
+  const _rh=_rehab(),_mt=_mobTrend().slice(-5);
+  const mobTxt=_mobOn()?`Daily mobility routine for: ${_mobAreaTxt()}. Pain before recent sessions (0-10): ${_mt.length?_mt.map(t=>t[0].slice(5)+' '+t[1]+(t[2]!=null?'->'+t[2]:'')).join(', '):'none logged yet'}.${(_rh.chiro||[]).length?` Chiropractor's exercises: ${_rh.chiro.map(c=>c.n).join(', ')}.`:''}`:'No mobility routine set up.';
   const zh=DB.get('lang','en')==='zh';
   const langNote=zh?'\n\nIMPORTANT: Respond in Traditional Chinese (繁體中文).':'';
   return`You are the user's personal training coach. Answer their question with a SHORT, specific, data-driven response — 2-3 sentences, max ~80 words. Cite their actual numbers when relevant. Avoid generic advice. If their plan or fatigue suggests a specific answer, say so directly. Don't recommend rest unless their Form (TSB) is genuinely low or they've trained 5+ days in a row.${_layoffNote()}${langNote}
@@ -11463,6 +11469,16 @@ ${recent.join('\n')}
 
 === THIS WEEK'S AI COACH REVIEW ===
   ${coachTxt}
+
+=== MOBILITY / REHAB ===
+  ${mobTxt}
+
+=== WHEN THEY MENTION PAIN OR AN INJURY ===
+  1. Never diagnose. If you don't yet know where exactly it hurts, what it feels like (sharp, aching, stiff, clicking), what makes it worse (stairs, squats, sitting, after riding) and since when, ask up to 2 short questions in one reply and do NOT call any tool yet.
+  2. Warning signs (swelling, the joint locking or giving way, numbness or tingling, pain at night or at rest, pain after a fall or twist, pain getting worse fast): tell them to stop that activity and see their chiropractor or a doctor. No exercise advice beyond that.
+  3. Otherwise keep them training around it: change the EXERCISES on the affected days rather than moving whole days (swap_exercise / set_day_exercises; for a knee, e.g. a box squat to a comfortable depth, leg press with a shorter range, hamstring curls, glute bridges, hip thrusts, and no deep lunges or jumps if those hurt). Pain during an exercise should stay at 3 out of 10 or less, and no worse the next morning.
+  4. Offer the mobility routine: call add_mobility_area for that area so it shows in their daily routine.
+  5. Each reply must move the conversation on: answer what they just said, never repeat your previous reply.
 
 === HOW THE PLANNER WORKS (explain it when asked why the week looks the way it does) ===
   A gym day that passes without a workout is Skipped, and the gym days left this week are re-chosen to cover the muscles still untrained (the "why" on each day says what happened). Rides never count as a gym session. Only say what the plan above shows; never invent days or reasons.
@@ -11691,6 +11707,17 @@ const COACH_TOOLS=[{
         },
         required:['date','exercise']
       }
+    },
+    {
+      name:'add_mobility_area',
+      description:"Add a body area to the user's daily mobility and rehab routine (gentle loosen / wake up / strengthen / stretch exercises with their own kit, their chiropractor's exercises first). Use when they mention a sore, stiff or painful area and there are no warning signs.",
+      parameters:{
+        type:'OBJECT',
+        properties:{
+          area:{type:'STRING',description:'Body area',enum:['hip','back','upper','neck','shoulder','wrist','knee','ankle']}
+        },
+        required:['area']
+      }
     }
   ]
 }];
@@ -11818,6 +11845,18 @@ const COACH_TOOL_HANDLERS={
       DB.set(lk,log);
       syncUp();
       return{ok:true,msg:`${date} marked ${log.completed?'complete':'incomplete'}`};
+    }
+  },
+  add_mobility_area:{ // v4.05
+    summarize:({area})=>`Add ${MOB_AREAS[area]||area} to your daily mobility routine`,
+    execute:({area})=>{
+      if(!MOB_AREAS[area])return{ok:false,msg:'Unknown area'};
+      const r={kit:['mat'],chiro:[],...(_rehab()||{}),on:true};
+      r.areas=[...new Set([...(r.areas||[]),area])];
+      DB.set('rehab',r);
+      const tk='mob_'+fd(new Date()),tm=DB.get(tk,null);if(tm&&!(tm.done||[]).length&&tm.p0==null)DB.set(tk,null);
+      syncUp();
+      return{ok:true,msg:`${MOB_AREAS[area]} added to your mobility routine (Today's mobility card)`};
     }
   },
   set_lock_day:{
@@ -12249,7 +12288,16 @@ function _buildAskContents(conv){
     const t=conv[i];
     if(t.role==='user'){
       const text=(i===lastUserIdx)?_buildAskUserContext(conv,t.rawText,t.dayCtx):t.rawText;
-      contents.push({role:'user',parts:[{text}]});
+      // v4.05: a model turn that proposed changes needs an answer for each one before the
+      // next message (Gemini's function-calling turn order). Without it the coach repeated
+      // its last reply word for word.
+      const prev=conv[i-1],fr=[];
+      if(prev&&prev.role==='model')for(const fc of(prev.functionCalls||[])){
+        const ap=(prev.appliedActions||[]).find(a=>a.fc&&a.fc.name===fc.name&&JSON.stringify(a.fc.args)===JSON.stringify(fc.args));
+        const sk=(prev.skippedActions||[]).find(a=>a.fc&&a.fc.name===fc.name&&JSON.stringify(a.fc.args)===JSON.stringify(fc.args));
+        fr.push({functionResponse:{name:fc.name,response:{result:ap?('Applied: '+((ap.result&&ap.result.msg)||'done')):sk?'The user tapped Skip, so this was not done.':'Not applied: the user replied without tapping Apply.'}}});
+      }
+      contents.push({role:'user',parts:[...fr,{text}]});
     }else{
       // model role
       const parts=[];
@@ -12441,7 +12489,29 @@ function _askDayFocus(ds){
   lines.push('Read "this day", "this workout" and "these exercises" as this day unless the user names another date. Changing this day\'s exercises: a different style of the same workout (dumbbells only, machines only, bodyweight, a muscle focus, easier on a sore joint) → set_day_exercises with 4–6 exercises from the list above, exact names; random fresh picks → regenerate_day_exercises; change one lift → swap_exercise; add or drop one → add_exercise / remove_exercise.');
   return'=== DAY IN FOCUS ===\n'+lines.join('\n');
 }
-function rAskCoach(dayDs){
+/* v4.05 ASK COACH DOCK: a 💬 bubble in the lower right of the Plan, day and My Training
+   screens opens the chat full screen. It replaced the inline panel at the bottom of the
+   week and day screens: you had to scroll to the end to reach it, and its 420 px scroll
+   box inside the scrolling page fought your finger on iPhone. The chat lives in its own
+   element (#ask-dock, outside #app) and is redrawn after every render, keeping what you
+   were typing and where you were in the thread. Opened from a day, it asks about that day. */
+function _askAvail(){if(!S.authed||S.guest||!S.fbUser)return false;const c=_TIERS[getUserTier()];return!!(c&&c.quota!==0);}
+function openAskDock(){S.askOpen=true;S.askDockDay=S.screen==='day'&&S.viewDate?fd(S.viewDate):null;_askDock();setTimeout(()=>{const t=document.getElementById('ask-thread');if(t)t.scrollTop=t.scrollHeight;},60);}
+function closeAskDock(){S.askOpen=false;_askDock();}
+function _askDock(){
+  let host=document.getElementById('ask-dock');
+  if(!host){host=document.createElement('div');host.id='ask-dock';document.body.appendChild(host);}
+  const show=_askAvail()&&['week','day','prs'].includes(S.screen);
+  document.documentElement.classList.toggle('ask-open',!!(show&&S.askOpen));
+  if(!show){host.innerHTML='';return;}
+  if(!S.askOpen){host.innerHTML=`<button onclick="openAskDock()" aria-label="Ask the coach" style="position:fixed;right:16px;bottom:calc(var(--sb) + 78px);z-index:150;width:54px;height:54px;border-radius:50%;border:none;background:var(--acc);color:#fff;font-size:24px;box-shadow:0 6px 20px rgba(124,58,237,.45);cursor:pointer">💬</button>`;return;}
+  const oi=document.getElementById('ask-coach-input'),typed=oi?oi.value:'';
+  const ot=document.getElementById('ask-thread'),atBottom=!ot||ot.scrollTop+ot.clientHeight>=ot.scrollHeight-60,keep=ot?ot.scrollTop:0;
+  host.innerHTML=rAskCoach(S.askDockDay||null,true);
+  const ni=document.getElementById('ask-coach-input');if(ni&&typed)ni.value=typed;
+  const nt=document.getElementById('ask-thread');if(nt)nt.scrollTop=atBottom?nt.scrollHeight:keep;
+}
+function rAskCoach(dayDs,dock){
   // Guests see the panel as a locked preview so they know the feature exists
   if(S.guest||!S.fbUser){
     if(dayDs)return''; // the week screen already shows the preview; don't repeat it on every day
@@ -12483,7 +12553,7 @@ function rAskCoach(dayDs){
   // Following the exercise-card pattern: the WHOLE row is clickable, with a
   // chevron indicating state. v2.62.
   // On a day screen the panel opens per day and starts closed (v3.30).
-  const collapsed=dayDs?S.askDayOpen!==dayDs:_askCollapsed;
+  const collapsed=dock?false:dayDs?S.askDayOpen!==dayDs:_askCollapsed;
   const title=dayDs?'💬 Ask about this day':'💬 Ask the Coach';
   const toggle=dayDs?`toggleAskCollapse('${dayDs}')`:'toggleAskCollapse()';
   if(collapsed){
@@ -12539,6 +12609,23 @@ function rAskCoach(dayDs){
   // Header + thread + input combined panel. The LEFT half of the header (title +
   // tier badge + chevron) is clickable to collapse, mirroring the exercise-card
   // pattern. The right-side controls (counter, Reset) stay non-collapsing.
+  if(dock)return`<div style="position:fixed;left:0;right:0;top:0;bottom:var(--kb,0px);z-index:300;background:var(--bg);display:flex;flex-direction:column;padding:calc(var(--st) + 10px) 14px calc(var(--sb) + 10px)">
+  <div style="display:flex;align-items:center;gap:8px;padding-bottom:8px">
+    <span style="font-size:15px;font-weight:800;color:var(--al);flex:1;min-width:0">💬 ${dayDs?'Ask about '+_dayLbl(dayDs):'Ask the Coach'}</span>
+    ${counter}
+    ${hasThread?`<button onclick="resetAskConversation()" style="background:none;border:1px solid var(--bord);border-radius:7px;color:var(--t2);font-size:11px;font-weight:700;cursor:pointer;padding:4px 8px">🗑 Reset</button>`:''}
+    <button onclick="closeAskDock()" aria-label="Close" style="background:var(--s2);border:none;border-radius:9px;color:var(--t2);font-size:18px;line-height:1;padding:6px 10px;cursor:pointer">✕</button>
+  </div>
+  <div id="ask-thread" style="flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;padding:10px 2px 12px;border-top:1px solid var(--bord)">${hasThread?threadHtml+loadingHtml:`<div style="font-size:13px;color:var(--t2);line-height:1.6;padding:8px 4px">Ask anything about your training: your week, a sore knee, whether to ride today. The coach can change your plan too, and you confirm each change.</div>${loadingHtml}`}</div>
+  ${S.askError?`<div style="font-size:11px;color:var(--red);margin:6px 0">⚠️ ${_esc(S.askError)}</div>`:''}
+  <div style="display:flex;gap:6px;padding-top:8px;border-top:1px solid var(--bord)">
+    <input id="ask-coach-input" data-day="${dayDs||''}" type="text" enterkeyhint="send" placeholder="${limitReached?'Daily limit reached':hasThread?'Reply…':'Ask the coach…'}" ${limitReached?'disabled':''}
+      onkeydown="if(event.key==='Enter')sendAskCoach()"
+      style="flex:1;min-width:0;background:var(--s2);border:1px solid var(--bord);border-radius:12px;color:var(--txt);font-size:16px;padding:11px 12px;outline:none;font-family:inherit">
+    <button onclick="sendAskCoach()" ${limitReached||S.askLoading?'disabled':''} style="background:var(--acc);border:none;border-radius:12px;color:#fff;font-size:14px;font-weight:700;padding:0 16px;cursor:pointer;${(limitReached||S.askLoading)?'opacity:.5':''}">${S.askLoading?'…':'Send'}</button>
+  </div>
+  ${!limitReached&&!hasThread?`<div style="display:flex;gap:5px;overflow-x:auto;padding-top:8px;-webkit-overflow-scrolling:touch">${(dayDs?_askDaySuggestions(dayDs):_ASK_SUGGESTIONS).map(q=>`<button onclick="document.getElementById('ask-coach-input').value=this.textContent.trim();sendAskCoach()" style="flex:0 0 auto;padding:7px 12px;border-radius:100px;border:1px solid var(--bord);background:var(--s2);color:var(--t2);font-size:12px;font-weight:600;cursor:pointer;white-space:nowrap">${q}</button>`).join('')}</div>`:''}
+</div>`;
   return`<div style="background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:13px 15px;margin-bottom:12px">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:${hasThread?'10px':'8px'}">
     <div style="display:flex;align-items:center;gap:6px;cursor:pointer;flex:1;min-width:0" onclick="${toggle}">
