@@ -1316,10 +1316,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.03';
+const APP_VERSION='4.04';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.04',d:'Mobility routines for more areas: knees, ankles, neck, upper back and wrists',det:'The mobility set-up now has eight areas: hips, lower back, upper back and posture, neck, shoulders, elbows and wrists, knees, and ankles and feet. Knees got more exercises (heel slides, quad sets, short-arc quads, banded Spanish squat, quad stretch), and each new area has its own loosen, wake up, strengthen and stretch exercises, 57 in all. Pick as many areas as you like in Areas, kit and chiro and the daily routine covers them, still about 15 minutes.'},
   {v:'4.03',d:'Hip and mobility routines, with your chiropractor\'s exercises',det:'A new card on the week screen sets up short mobility routines for a stiff or sore area: hips, lower back, knees or shoulders. Tell it what you have at home (mat, long band, mini loop band, foam roller) and add the exercises your chiropractor gave you, with sets, band colour and her cue. Those always come first and are never swapped. The app fills in the rest from 31 gentle exercises (loosen, wake up, strengthen, stretch), a different mix each day, about 15 minutes. Do it any day from the card, on rest days, or make a day a Mobility day from Swap. Rate the pain 0 to 10 before and after, and you can see over the weeks whether it is helping. Each exercise has a ▶ demo. It never diagnoses: sharp pain, numbness, tingling or pain at night means stop and check with your chiropractor.'},
   {v:'4.02',d:'Auto resistance: no more piling on at the start, and it keeps you in the middle of Zone 2',det:'On your 7 Nov ride, once the warm-up ended auto resistance added 10 W every 45 seconds because your heart rate was still under Zone 2. Heart rate takes a minute or two to catch up, so it kept adding and had you at 150 W by minute 10. Then your heart rate sat at 138 to 142, the top of Zone 2, for 25 minutes, and it barely eased because anywhere inside the zone counted as fine. Now it only adds watts once your heart rate has levelled off, 5 W at a time, and never more than 15% over your usual Zone 2 watts (30% if you are clearly under the zone). And it aims for the middle of the zone: a few beats over the middle for a while eases 5 W, a few under adds 5 W. It still never drops you below 80% of your usual watts. On a replay of that ride it peaked at 120 W instead of 150 and kept you in the middle of Zone 2 for 28 of the last 30 minutes.'},
   {v:'4.01',d:'Pictures for the 22 exercises that had none',det:'Machines like the pendulum squat, belt squat, V-squat, hip thrust machine, seated leg press and rotary torso, plus the foot exercises, showed a coloured placeholder because the free photo library has no picture of them. Each now has a drawn picture in a clean gym-sign style, with the working muscle in orange and a start and end position for the Animate button. They are part of the app, so they show with no signal at the gym too.'},
@@ -10499,7 +10500,7 @@ ${(()=>{ // v3.62: where you are in each type — levels rise as you complete wo
    Each day's routine and your pain before / after (0-10) are kept in synced mob_<date>,
    so you can see whether it's helping. No AI yet, and it never diagnoses: anything sharp,
    numb or getting worse goes back to the chiropractor. */
-const MOB_AREAS={hip:'Hips',back:'Lower back',knee:'Knees',shoulder:'Shoulders'};
+const MOB_AREAS={hip:'Hips',back:'Lower back',upper:'Upper back & posture',neck:'Neck',shoulder:'Shoulders',wrist:'Elbows & wrists',knee:'Knees',ankle:'Ankles & feet'}; // v4.04: + upper back, neck, wrists, ankles
 const MOB_KIT={mat:'Mat',band:'Long resistance band',mini_band:'Mini loop band',foam_roller:'Foam roller'};
 const MOB_KIND={mob:'Loosen',act:'Wake up',str:'Strengthen',stretch:'Stretch'};
 // k: mob (move a joint through its range), act (switch on a weak muscle), str (light
@@ -10521,8 +10522,8 @@ const MOB_EX={
   m_split_hold: {n:'Split squat hold',a:['hip','knee'],k:'str',d:'2 × 20 s each side',eq:[],c:'Hold the bottom of a split squat, front knee over the foot, back knee just off the floor. Hold a wall for balance.'},
   m_hip_flexor: {n:'Half-kneeling hip flexor stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Tuck your tailbone and squeeze the back glute, then shift forward a little. Feel it at the front of the back hip.'},
   m_figure4:    {n:'Figure-4 glute stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Lying on your back, cross one ankle over the other knee and pull the bottom thigh towards you.'},
-  m_cat_cow:    {n:'Cat-cow',a:['back'],k:'mob',d:'1 × 10 slow',eq:['mat'],c:'On hands and knees, round your back up slowly, then let it sag, moving one segment at a time.'},
-  m_open_book:  {n:'Open book rotation',a:['back','shoulder'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Lie on your side, knees bent, arms together in front. Open the top arm across to the other side, following it with your eyes.'},
+  m_cat_cow:    {n:'Cat-cow',a:['back','upper'],k:'mob',d:'1 × 10 slow',eq:['mat'],c:'On hands and knees, round your back up slowly, then let it sag, moving one segment at a time.'},
+  m_open_book:  {n:'Open book rotation',a:['back','shoulder','upper'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Lie on your side, knees bent, arms together in front. Open the top arm across to the other side, following it with your eyes.'},
   m_bird_dog:   {n:'Bird dog',a:['back','hip'],k:'act',d:'2 × 8 each side, 3 s hold',eq:['mat'],c:'Reach one arm and the opposite leg out long, hips level, without arching. Pause, then switch.'},
   m_dead_bug:   {n:'Dead bug',a:['back'],k:'act',d:'2 × 8 each side',eq:['mat'],c:'On your back, arms up, knees over hips. Lower the opposite arm and leg slowly while keeping the lower back on the floor.'},
   m_side_plank: {n:'Side plank from the knees',a:['back','hip'],k:'str',d:'2 × 20 s each side',eq:['mat'],c:'Elbow under shoulder, knees bent, lift the hips into a straight line from knees to head.'},
@@ -10532,10 +10533,38 @@ const MOB_EX={
   m_wall_sit:   {n:'Wall sit',a:['knee'],k:'str',d:'3 × 30 s',eq:[],c:'Back against a wall, slide down only as far as feels comfortable for the knees, weight in the heels.'},
   m_step_down:  {n:'Slow step-down',a:['knee'],k:'str',d:'2 × 8 each leg',eq:[],c:'Stand on a low step and lower the other heel to the floor over 3 seconds, knee tracking over the toes.'},
   m_ham_band:   {n:'Hamstring stretch with a band',a:['knee','back'],k:'stretch',d:'hold 45 s each leg',eq:['band','mat'],c:'Lying on your back, loop the band around one foot and raise the straight leg until you feel the back of the thigh.'},
-  m_pull_apart: {n:'Band pull-apart',a:['shoulder'],k:'act',d:'2 × 15',eq:['band'],c:'Arms straight in front, pull the band apart to your chest by squeezing the shoulder blades.'},
+  m_pull_apart: {n:'Band pull-apart',a:['shoulder','upper'],k:'act',d:'2 × 15',eq:['band'],c:'Arms straight in front, pull the band apart to your chest by squeezing the shoulder blades.'},
   m_band_er:    {n:'Banded external rotation',a:['shoulder'],k:'str',d:'2 × 12 each arm',eq:['band'],c:'Elbow at your side bent to 90 degrees, rotate the forearm outward against the band, slowly.'},
-  m_wall_slide: {n:'Wall slides',a:['shoulder'],k:'mob',d:'2 × 10',eq:[],c:'Back and arms against the wall in a W, slide the arms up into a Y keeping contact, then back down.'},
-  m_doorway:    {n:'Doorway chest stretch',a:['shoulder'],k:'stretch',d:'hold 30 s each side',eq:[],c:'Forearm on the door frame at shoulder height, step through gently until you feel the front of the shoulder.'},
+  m_wall_slide: {n:'Wall slides',a:['shoulder','upper'],k:'mob',d:'2 × 10',eq:[],c:'Back and arms against the wall in a W, slide the arms up into a Y keeping contact, then back down.'},
+  m_doorway:    {n:'Doorway chest stretch',a:['shoulder','upper'],k:'stretch',d:'hold 30 s each side',eq:[],c:'Forearm on the door frame at shoulder height, step through gently until you feel the front of the shoulder.'},
+  // v4.04: knees (more), ankles & feet, upper back & posture, neck, elbows & wrists
+  m_heel_slide: {n:'Heel slides',a:['knee'],k:'mob',d:'2 × 10 each leg',eq:['mat'],c:'Lying on your back, slide the heel towards your bottom as far as is comfortable, then back out slowly.'},
+  m_quad_set:   {n:'Quad sets',a:['knee'],k:'act',d:'2 × 10, 5 s squeeze',eq:['mat'],c:'Sitting with the leg straight, press the back of the knee down into the floor by tightening the front of the thigh. Hold, relax.'},
+  m_short_arc:  {n:'Short-arc quad',a:['knee'],k:'act',d:'2 × 12 each leg',eq:['mat'],c:'Lying down with a rolled towel under the knee, straighten the knee fully and hold 2 s, lower slowly.'},
+  m_spanish_sq: {n:'Banded Spanish squat',a:['knee'],k:'str',d:'3 × 30 s hold',eq:['band'],c:'Band anchored to something solid and looped behind both knees. Lean back into it and sit into a shallow squat, shins upright.'},
+  m_quad_stretch:{n:'Standing quad stretch',a:['knee','hip'],k:'stretch',d:'hold 30 s each leg',eq:[],c:'Hold a wall, bring your heel towards your bottom, knees together and hips tucked under.'},
+  m_ankle_circ: {n:'Ankle circles and alphabet',a:['ankle'],k:'mob',d:'1 round each foot',eq:[],c:'Seated, draw slow circles both ways with your foot, then trace the alphabet with your big toe.'},
+  m_knee_wall:  {n:'Knee-to-wall ankle rocks',a:['ankle','knee'],k:'mob',d:'2 × 10 each side',eq:[],c:'Foot a few cm from the wall, push the knee forward to touch the wall with the heel down. Move the foot back as it gets easier.'},
+  m_balance:    {n:'Single-leg balance',a:['ankle','knee'],k:'act',d:'3 × 30 s each leg',eq:[],c:'Stand on one foot near a wall, knee soft. Too easy? Close your eyes or stand on a cushion.'},
+  m_band_ankle: {n:'Banded ankle in and out',a:['ankle'],k:'str',d:'2 × 15 each way, each foot',eq:['band'],c:'Seated, band around the forefoot anchored to the side. Turn the sole in, then out, against the band without moving the knee.'},
+  m_calf_raise: {n:'Slow calf raise',a:['ankle','knee'],k:'str',d:'2 × 12, 3 s down',eq:[],c:'Hold a wall, rise onto your toes, then lower over 3 seconds. Single leg once both legs are easy.'},
+  m_calf_str:   {n:'Wall calf stretch',a:['ankle'],k:'stretch',d:'hold 45 s each side, knee straight then bent',eq:[],c:'Hands on the wall, back leg straight, heel down, lean in. Then bend the back knee a little to reach the lower calf.'},
+  m_foam_tspine:{n:'Upper-back extension on a foam roller',a:['upper'],k:'mob',d:'2 × 8',eq:['foam_roller'],c:'Roller across the upper back, hands behind your head, gently lean back over it, then move the roller up a few cm and repeat. Not on the lower back.'},
+  m_ytw:        {n:'Prone Y-T-W raises',a:['upper','shoulder'],k:'act',d:'1 × 8 of each letter',eq:['mat'],c:'Face down, thumbs up, lift your arms into a Y, then a T, then a W by squeezing the shoulder blades. Small and slow.'},
+  m_band_row:   {n:'Band row',a:['upper','shoulder'],k:'str',d:'2 × 15',eq:['band'],c:'Band anchored at chest height, pull your elbows back along your sides and squeeze the shoulder blades together.'},
+  m_chin_tuck:  {n:'Chin tucks',a:['neck','upper'],k:'act',d:'2 × 10, 3 s hold',eq:[],c:'Sit or stand tall and slide your chin straight back, making a double chin, without tipping the head down.'},
+  m_neck_rot:   {n:'Gentle neck turns and tilts',a:['neck'],k:'mob',d:'5 slow each direction',eq:[],c:'Turn your head slowly to look over each shoulder, then tilt each ear towards the shoulder. Stay in a pain-free range.'},
+  m_neck_iso:   {n:'Neck holds against your hand',a:['neck'],k:'str',d:'5 s each direction × 5',eq:[],c:'Press your head gently into your hand forwards, backwards and to each side without letting it move. About a third of full effort.'},
+  m_trap_str:   {n:'Upper trap stretch',a:['neck','shoulder'],k:'stretch',d:'hold 30 s each side',eq:[],c:'Sit on one hand, tilt the opposite ear towards the shoulder and let the other hand rest lightly on your head.'},
+  m_levator:    {n:'Levator stretch',a:['neck'],k:'stretch',d:'hold 30 s each side',eq:[],c:'Turn your nose towards one armpit and gently bring it down, with the other hand behind your back.'},
+  m_wrist_circ: {n:'Wrist circles and prayer stretch',a:['wrist'],k:'mob',d:'10 circles each way, then hold 20 s',eq:[],c:'Circle the wrists slowly both ways, then press the palms together in front of the chest and lower them gently.'},
+  m_grip:       {n:'Towel squeeze',a:['wrist'],k:'act',d:'3 × 10, 3 s squeeze',eq:[],c:'Roll a small towel and squeeze it firmly, then relax fully. Comfortable effort only.'},
+  m_band_wrist: {n:'Banded wrist extension',a:['wrist'],k:'str',d:'2 × 15 each side, slow down',eq:['band'],c:'Forearm on your thigh, palm down, band under your foot. Lift the back of the hand up, then lower over 3 seconds.'},
+  m_wrist_flex: {n:'Forearm stretches',a:['wrist'],k:'stretch',d:'hold 30 s each, palm up then palm down',eq:[],c:'Arm straight in front, gently pull the fingers back with the other hand, then turn the palm down and pull the hand towards you.'},
+  // no-band strengthening, so every area has one with just a mat
+  m_wall_plus:  {n:'Wall push-up plus',a:['shoulder','upper'],k:'str',d:'2 × 12',eq:[],c:'Hands on the wall at shoulder height, do a push-up, then at the top push a little further so the shoulder blades spread apart.'},
+  m_cobra_hold: {n:'Prone cobra hold',a:['upper','back'],k:'str',d:'3 × 15 s',eq:['mat'],c:'Face down, arms by your sides, palms down. Lift chest and hands a few cm, squeeze the shoulder blades back and down, chin tucked.'},
+  m_bottle_curl:{n:'Wrist curls with a water bottle',a:['wrist'],k:'str',d:'2 × 15 each way, each hand',eq:[],c:'Forearm on your thigh, hold a full water bottle. Curl the wrist up and lower slowly, palm up, then palm down.'},
 };
 function _rehab(){return DB.get('rehab',null);}
 function _mobOn(){const r=_rehab();return!!(r&&r.on!==false&&(r.areas||[]).length);}
@@ -10561,13 +10590,18 @@ function _mobPick(ds){
   const areas=(r.areas&&r.areas.length)?r.areas:['hip'];
   const chiro=(r.chiro||[]).filter(c=>!c.a||areas.includes(c.a)).map(c=>c.id);
   const per=areas.length===1?{mob:2,act:2,str:1,stretch:1}:{mob:1,act:1,str:1,stretch:1};
-  const out=[],vs=new Set(); // vs: one of each exercise (glute bridge or its banded version, not both)
-  for(const k of['mob','act','str','stretch'])for(const a of areas){
-    const cands=Object.keys(MOB_EX).filter(id=>{const m=MOB_EX[id];return m.k===k&&m.a.includes(a)&&m.eq.every(e=>kit.has(e))&&!out.includes(id);})
+  const K=['mob','act','str','stretch'],bk={mob:[],act:[],str:[],stretch:[]},vs=new Set(); // vs: one of each exercise (glute bridge or its banded version, not both)
+  for(const k of K)for(const a of areas.slice().sort((x,y)=>_hash(ds+x)-_hash(ds+y))){
+    const cands=Object.keys(MOB_EX).filter(id=>{const m=MOB_EX[id];return m.k===k&&m.a.includes(a)&&m.eq.every(e=>kit.has(e))&&!bk[k].includes(id);})
       .sort((x,y)=>_hash(ds+x)-_hash(ds+y));
-    let n=0;for(const id of cands){if(n>=per[k])break;const v=MOB_EX[id].v||id;if(vs.has(v))continue;vs.add(v);out.push(id);n++;}
+    let n=0;for(const id of cands){if(n>=per[k])break;const v=MOB_EX[id].v||id;if(vs.has(v))continue;vs.add(v);bk[k].push(id);n++;}
   }
-  return[...chiro,...out.slice(0,Math.max(3,8-chiro.length))];
+  // v4.04: with several areas, take one of each kind in turn so a long list doesn't lose
+  // its stretches to the cap, then show them loosen → wake up → strengthen → stretch
+  const room=Math.max(3,8-chiro.length),take=[];
+  for(let i=0;take.length<room&&K.some(k=>bk[k].length>i);i++)for(const k of K)if(bk[k][i]&&take.length<room)take.push(bk[k][i]);
+  take.sort((x,y)=>K.indexOf(MOB_EX[x].k)-K.indexOf(MOB_EX[y].k));
+  return[...chiro,...take];
 }
 function _mobDay(ds,create){
   let m=DB.get('mob_'+ds,null);
@@ -10686,7 +10720,10 @@ function mobSet(what,k){
   const r={on:true,areas:[],kit:['mat'],chiro:[],...(_rehab()||{})};
   if(what==='off'){r.on=false;DB.set('rehab',r);closeMobSetup();return;}
   const a=new Set(r[what]||[]);a.has(k)?a.delete(k):a.add(k);r[what]=[...a];
-  DB.set('rehab',r);_mobSetupRedraw();
+  DB.set('rehab',r);
+  // v4.04: today's routine follows the new areas / kit if you haven't started it
+  const tk='mob_'+fd(new Date()),tm=DB.get(tk,null);if(tm&&!(tm.done||[]).length&&tm.p0==null)DB.set(tk,null);
+  _mobSetupRedraw();
 }
 function mobChiroAdd(){
   const v=id=>(document.getElementById(id)?.value||'').trim();
