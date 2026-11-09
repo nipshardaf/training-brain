@@ -495,6 +495,11 @@ const EX = {
   sl_seated_calf:{n:'Single-Leg Seated Calf',g:'calf',   t:'I',sets:3,reps:'15/leg',rpe:'7',  m:'Calves · Soleus',         p:'Dumbbell_Seated_One-Leg_Calf_Raise',      uni:true},
   mountain_climber:{n:'Mountain Climber',  g:'core',     t:'I',sets:3,reps:'30s',   rpe:'6', m:'Core · Hip Flexors',      p:'Mountain_Climbers', bw:true},
   bicycle_crunch:{n:'Bicycle Crunch',      g:'core',     t:'I',sets:3,reps:'15–20', rpe:'6', m:'Abs · Obliques',          p:['https://wger.de/media/exercise-images/176/Cross-body-crunch-1.png','https://wger.de/media/exercise-images/176/Cross-body-crunch-2.png'], bw:true},
+  // v4.07 calisthenics moves
+  hollow_hold:  {n:'Hollow Body Hold',     g:'core',     t:'I',sets:3,reps:'20–30s',rpe:'7',m:'Abs · Core',              bw:true},
+  l_sit:        {n:'Tuck L-Sit',           g:'core',     t:'I',sets:3,reps:'10–20s',rpe:'8',m:'Abs · Hip Flexors · Triceps', bw:true},
+  pistol_box:   {n:'Box Pistol Squat',     g:'quad',     t:'C',sets:3,reps:'6–8/side',rpe:'8',m:'Quads · Glutes · Balance', bw:true, uni:true},
+  bw_bss:       {n:'Bodyweight Bulgarian Split Squat',g:'quad',t:'C',sets:3,reps:'10–12/side',rpe:'7',m:'Quads · Glutes',   bw:true, uni:true},
   side_plank:   {n:'Side Plank',           g:'core',     t:'I',sets:3,reps:'30s/side',rpe:'6',m:'Obliques · Core',        p:'Side_Bridge', bw:true, uni:true},
   leg_raise_floor:{n:'Floor Leg Raise',    g:'core',     t:'I',sets:3,reps:'12–15', rpe:'6', m:'Lower Abs',               p:['https://wger.de/media/exercise-images/125/Leg-raises-1.png','https://wger.de/media/exercise-images/125/Leg-raises-2.png'], bw:true},
   crunch:       {n:'Crunch',               g:'core',     t:'I',sets:3,reps:'15–20', rpe:'5', m:'Abs',                     p:'Crunches', bw:true},
@@ -612,6 +617,17 @@ function applyExLang(){
 // filterSlot picks the best available option — BW exercises surface automatically when
 // gym equipment is not present or when home-week mode is active.
 const SLOTS = {
+  // v4.07: bodyweight full body with a core focus, a stand-in for a gym day
+  CALISTHENICS:[
+    ['pullup','chinup','inverted_row'],                                      // 1. Vertical pull
+    ['pushup','decline_pu','diamond_pu'],                                    // 2. Push-up
+    ['bw_bss','pistol_box','bw_lunge','bw_squat'],                           // 3. Single-leg / squat
+    ['inverted_row'],                                      // 4. Row
+    ['dips','chest_dip','pike_pu'],                                     // 5. Dip or overhead push
+    ['sl_glute_bridge','nordic_curl'],                                       // 6. Hinge / hamstrings
+    ['hollow_hold','l_sit','hang_raise'],                                    // 7. Core: front
+    ['side_plank','dead_bug','leg_raise_floor','mountain_climber'],          // 8. Core: sides and anti-extension
+  ],
   // PUSH — Chest / Shoulders / Triceps
   PUSH:[
     ['bb_bench','incline_bb','db_bench','incline_db','pushup'],          // 1. Chest press A (v3.83: flat or incline)
@@ -738,6 +754,7 @@ const EX_EQUIP={
   single_calf:['bodyweight'],plank:['bodyweight'],hang_raise:['pullup_bar'],ab_wheel:['ab_wheel'],
   cable_crunch:['cable'],mach_crunch:['machine'],short_foot:['bodyweight'],towel_scrunch:['bodyweight'],
   arch_raise:['bodyweight'],toe_spread:['bodyweight'],heel_raise:['bodyweight'],
+  hollow_hold:['bodyweight'],l_sit:['bodyweight'],pistol_box:['bodyweight'],bw_bss:['bodyweight'], // v4.07
   pushup:['bodyweight'],decline_pu:['bodyweight'],diamond_pu:['bodyweight'],pike_pu:['bodyweight'],
   inverted_row:['bodyweight'],superman:['bodyweight'],
   bw_squat:['bodyweight'],jump_squat:['bodyweight'],bw_lunge:['bodyweight'],
@@ -861,6 +878,10 @@ const EX_CUES={
   mountain_climber:'Plank position. Drive knees to chest alternately in a running motion. Keep hips level — don\'t bounce.',
   bicycle_crunch:'Elbow to opposite knee, other leg fully extended. Slow and deliberate — no momentum, no neck strain.',
   side_plank:'Elbow directly under shoulder, hips lifted. Body in one straight line. 30s per side.',
+  hollow_hold:'On your back, press the lower back into the floor, arms overhead and legs long, lifted just off the floor. Bend the knees to make it easier.',
+  l_sit:'Hands on dip bars, two chairs or the floor, arms locked, push the shoulders down and lift the knees to the chest. Straighten the legs as you get stronger.',
+  pistol_box:'Stand on one leg in front of a box or bench, sit back slowly until you touch it, then stand up on that leg. Lower box as it gets easier.',
+  bw_bss:'Back foot on a bench or chair, drop the back knee straight down, front shin fairly upright, drive up through the front heel.',
   leg_raise_floor:'Hands under lower back for support. Keep legs straight, lower slowly without letting them touch the floor.',
   crunch:'Hands lightly behind head, elbows wide. Curl upper back up — focus on abs shortening, not pulling your neck.',
   burpee:'Hands down, feet back, chest to floor (or push-up), feet forward, stand, jump with arms overhead. Keep pace.',
@@ -1294,6 +1315,7 @@ const WI = {
   REST:         {l:()=>_T('wt_rest'),      i:_icon('rest-mobility.png','🌿'),   c:'#64748b',d:()=>_T('wi_rest_d')},
   MOBILITY:     {l:()=>'Mobility',          i:_icon('rest-mobility.png','🧘'),   c:'#14b8a6',d:()=>_mobDesc()}, // v4.03
   SKIPPED:      {l:()=>'Skipped',           i:_icon('rest-mobility.png','⏭️'),   c:'#94a3b8',d:()=>'Gym session missed — the gym days left this week now cover it.'},
+  CALISTHENICS: {l:()=>'Calisthenics',      i:'🤸',                              c:'#0ea5e9',d:()=>'Bodyweight full body with a core focus: pull-ups, push-ups, dips, single-leg squats, L-sits'}, // v4.07
   FULL_BODY:    {l:()=>'Full Body',         i:_icon('gym-weights.png','💪'),     c:'#7c3aed',d:()=>'One-session full-body — squat · hinge · press · pull · shoulder · core'},
 };
 
@@ -1317,10 +1339,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.06';
+const APP_VERSION='4.07';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.07',d:'Calisthenics days: swap a gym day for a bodyweight session',det:'Tap Swap on a gym day and pick Calisthenics for a bodyweight full-body session with a core focus: a pull-up or chin-up, push-ups or dips, a single-leg squat (Bulgarian split squat or box pistol), inverted rows, a hamstring move, and two core exercises such as a hollow body hold, a tuck L-sit or a side plank. New exercises: Hollow Body Hold, Tuck L-Sit, Box Pistol Squat and Bodyweight Bulgarian Split Squat. It counts as a full-body session, so the rest of your week still plans around what you trained. You can also ask the coach to make a day Calisthenics.'},
   {v:'4.06',d:'The coach thinks before it answers, and gives fuller answers',det:'The Ask the Coach chat was told to answer in 2 or 3 sentences and had its thinking switched off, so replies came back fast but thin. Now the AI takes a moment to think first and can answer in up to about 150 words, with a few bullets when that is clearer. Each reply also says which AI answered it (via Gemini, or via DeepSeek when Gemini is busy), so you can see it is the real thing.'},
   {v:'4.05',d:'Ask the Coach is a chat bubble now, and it handles pain better',det:'The coach chat was at the very bottom of the week screen, in a small scroll box that fought the page when you scrolled. Now a 💬 bubble sits in the lower right of the Plan, day and My Training screens and opens the chat full screen, with the box you type in just above the keyboard. Open it from a day and it asks about that day. The coach also got smarter. When it proposed a change and you replied, it was never told whether you applied or skipped it, so it could repeat itself word for word; now it is. When you mention pain it asks where and what kind first, sends you to your chiropractor or a doctor for warning signs (swelling, the knee giving way, numbness, pain at night), changes the exercises on the affected days instead of moving whole days, and can add that area to your daily mobility routine.'},
   {v:'4.04',d:'Mobility routines for more areas: knees, ankles, neck, upper back and wrists',det:'The mobility set-up now has eight areas: hips, lower back, upper back and posture, neck, shoulders, elbows and wrists, knees, and ankles and feet. Knees got more exercises (heel slides, quad sets, short-arc quads, banded Spanish squat, quad stretch), and each new area has its own loosen, wake up, strengthen and stretch exercises, 57 in all. Pick as many areas as you like in Areas, kit and chiro and the daily routine covers them, still about 15 minutes.'},
@@ -5717,11 +5740,12 @@ function getLastGymType(){
 // v3.93: the one list of gym session types. It used to be copied ~15 times and about
 // half the copies predated FULL_BODY, so Full Body days showed no exercises on the day screen,
 // weren't counted as missed, and were skipped when sessions shifted around a ride day.
-const GYM_TYPES=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY'];
+const GYM_TYPES=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY','CALISTHENICS'];
 const _isGym=t=>GYM_TYPES.includes(t);
 const _MUSC={PUSH:['chest','delts','triceps'],PULL:['back','biceps'],LEGS:['legs'],
   UPPER_PUMP:['chest','back','delts','biceps','triceps'],SHOULDERS_ARMS:['delts','biceps','triceps'],
-  FULL_BODY:['chest','back','delts','biceps','triceps','legs']};
+  FULL_BODY:['chest','back','delts','biceps','triceps','legs'],
+  CALISTHENICS:['chest','back','delts','biceps','triceps','legs']}; // v4.07: counts like a full-body session
 const _WEEK_SET=[[],['FULL_BODY'],['UPPER_PUMP','LEGS'],['PUSH','PULL','LEGS'],['PUSH','PULL','LEGS','SHOULDERS_ARMS'],
   ['PUSH','PULL','LEGS','SHOULDERS_ARMS','LEGS'],['PUSH','PULL','LEGS','PUSH','PULL','LEGS']];
 // Gym sessions with done sets, fromStr ≤ date < toStr: [{date,type}]
@@ -5896,7 +5920,7 @@ function _dayWasDone(d){
 // session fell off each time, and last week's misses (rides too) were dragged in
 // on top of the new week's own catch-up. v3.58: applied when the week is read
 // (_resolveWeek), never saved. Never touches days with logged work or locked days.
-function _isGymDay(t){return GYM_SEQ.includes(t)||t==='FULL_BODY';}
+function _isGymDay(t){return GYM_SEQ.includes(t)||t==='FULL_BODY'||t==='CALISTHENICS';}
 function _gymPart(d){const p={};for(const k in d)if(k!=='date'&&k!=='weather')p[k]=d[k];return p;}
 function _setGymPart(d,p){for(const k of Object.keys(d))if(k!=='date'&&k!=='weather')delete d[k];Object.assign(d,p);}
 // ── v3.58: THE WEEK YOU SEE IS WORKED OUT, NOT STORED ─────────────────────────
@@ -6522,7 +6546,8 @@ function genSession(type,energy='okay',bwOnly=false,seed=''){
     // v3.96: already-picked moves are left out first, so the slot can fall back to its extra
     // options; a slot with nothing your equipment allows is skipped rather than planned anyway
     const notPicked=id=>!picked.includes(id);
-    let avail=filterSlot(candidates.filter(notPicked),bwOnly,_slotMore(type,si).filter(notPicked),true);
+    // v4.07: a calisthenics day IS bodyweight, so skip the gym-equipment preference
+    let avail=type==='CALISTHENICS'?candidates.filter(notPicked).filter(exAvail):filterSlot(candidates.filter(notPicked),bwOnly,_slotMore(type,si).filter(notPicked),true);
     if(!avail.length)continue;
     // Energy filter — prefer compound when fresh, isolation when tired/sore
     if(energy==='fresh'){
@@ -11316,7 +11341,7 @@ function buildAskPrompt(question){
   const ydayLog=DB.get('log_'+ydayStr,null);
   const ydayRide=stravaRideOnDate(ydayStr);
   // Format today's plan + weather
-  const _typeLabel={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full body',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest',SKIPPED:'Skipped'};
+  const _typeLabel={CALISTHENICS:'Calisthenics (bodyweight)',PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full body',LONG_OUTDOOR:'Long outdoor ride',SHORT_OUTDOOR:'Short outdoor ride',LONG_INDOOR:'Long indoor ride',SHORT_INDOOR:'Short indoor ride',REST:'Rest',SKIPPED:'Skipped'};
   const todayPlanStr=todayPlan?`${_typeLabel[todayPlan.type]||todayPlan.type}${todayPlan.weather&&!_wxFake(todayPlan.weather)?` · weather ${todayPlan.weather.tmin}-${todayPlan.weather.tmax}°C, rain ${todayPlan.weather.rain}mm`:''}`:'no plan';
   const todayDoneStr=todayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?'GYM ALREADY DONE TODAY':todayRide?`RIDE ALREADY LOGGED TODAY: ${+((todayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((todayRide.moving_time||0)/60)}min`:'nothing logged yet';
   const ydayStr2=ydayLog?.exercises?.some(e=>e.sets.some(s=>s.done))?`Yesterday: gym (${ydayLog.type})`:ydayRide?`Yesterday: rode ${+((ydayRide.distance||0)/1000).toFixed(1)}km, ${Math.round((ydayRide.moving_time||0)/60)}min`:'Yesterday: rest';
@@ -11514,7 +11539,7 @@ const COACH_TOOLS=[{
         type:'OBJECT',
         properties:{
           date:{type:'STRING',description:'Date in YYYY-MM-DD format'},
-          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
+          new_type:{type:'STRING',description:'New workout type for that day',enum:['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS','FULL_BODY','CALISTHENICS','LONG_OUTDOOR','SHORT_OUTDOOR','LONG_INDOOR','SHORT_INDOOR','REST']}
         },
         required:['date','new_type']
       }
@@ -15688,7 +15713,7 @@ function _swapCounterpart(plan,ds,newType){
 }
 function openSwap(ds){
   const plan=DB.get(DB.pk(getMon(new Date(ds+'T12:00:00'))),null);
-  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body'};
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body',CALISTHENICS:'Calisthenics'};
   const dn=d=>['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][new Date(d+'T12:00:00').getDay()];
   const preview=t=>{
     const cp=_swapCounterpart(plan,ds,t);
@@ -15720,7 +15745,7 @@ function doSwap(ds,newType){
   const wasGym=gymTypes.includes(oldType);
   const goingToRest=newType==='REST'||newType==='MOBILITY'; // v4.03: a Mobility day frees the gym session like Rest
   const goingToGym=gymTypes.includes(newType);
-  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body'};
+  const tl={PUSH:'Push',PULL:'Pull',LEGS:'Legs',UPPER_PUMP:'Upper Pump',SHOULDERS_ARMS:'Shoulders & Arms',FULL_BODY:'Full Body',CALISTHENICS:'Calisthenics'};
   const dayLong=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const dayName=d=>dayLong[new Date(d+'T12:00:00').getDay()];
   // v3.18: work out where the replaced session goes BEFORE this day changes,
