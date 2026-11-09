@@ -1,3 +1,5 @@
+// v17 — Fallback providers get the whole chat (app v4.05), not just its first message, so
+//       the coach no longer answers the opening question again when Gemini is busy.
 // v16 — When every provider fails, the 429 reply says why in X-TB-AI-Err (e.g. deepseek:401).
 // v15 — Accepts the DeepSeek secret as DEEPSEEK_KEY or Deepseek_KEY. Every AI reply carries
 //       X-TB-AI: <provider>. A signed-in request with X-TB-Try: deepseek skips Gemini (for testing).
@@ -228,7 +230,15 @@ export default {
     function extractPrompt(rawBody) {
       try {
         const parsed = JSON.parse(rawBody);
-        return parsed?.contents?.[0]?.parts?.[0]?.text || '';
+        const cs = parsed?.contents || [];
+        if (cs.length <= 1) return (cs[0]?.parts || []).map(p => p.text || '').join('\n');
+        // v17: a chat sends every turn; label them and include proposed changes and results
+        return cs.map(c => {
+          const t = (c.parts || []).map(p => p.text ? p.text
+            : p.functionCall ? `[proposed change: ${p.functionCall.name} ${JSON.stringify(p.functionCall.args || {})}]`
+            : p.functionResponse ? `[${p.functionResponse.name}: ${p.functionResponse.response?.result || ''}]` : '').filter(Boolean).join('\n');
+          return `${c.role === 'model' ? 'Coach' : 'User'}: ${t}`;
+        }).join('\n\n') + '\n\nReply as the Coach to the last User message.';
       } catch { return ''; }
     }
 
@@ -508,6 +518,6 @@ function corsHeaders(origin) {
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TB-Try',
     'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker, X-TB-AI, X-TB-AI-Err',
     'X-TB-Auth': '1',
-    'X-TB-Worker': '16',
+    'X-TB-Worker': '17',
   };
 }
