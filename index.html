@@ -1350,6 +1350,7 @@ function getActiveEquip(){
   return GYMS_BUILTIN[gid]?.equip||_F;
 }
 function exAvail(id){
+  if(S._eqOverride&&S._eqOverride.has('vitruvian')&&_vitDoable(id,S._eqOverride))return true; // v4.09: home day with the Vitruvian
   const eq=getActiveEquip();
   const needed=EX_EQUIP[id]||[];
   return needed.every(e=>e==='other'||eq.has(e)); // v3.96: 'other' = library kit we can't tell, assume it's there
@@ -1415,10 +1416,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.08';
+const APP_VERSION='4.09';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.09',d:'Home days can use almost any exercise on the Vitruvian',det:'The Vitruvian is a cable on a floor platform with a bar and handles, so it can do nearly anything: barbell and EZ-bar lifts (squats without a rack too), dumbbell moves with the handles, and low-cable work like cable curls, lateral raises, rows, kickbacks and pull-throughs. Home days now pick from all of those, not just the 18 Vitruvian exercises. It leaves out what needs a high pulley (pulldowns, pushdowns, face pulls, cable crunches), walking or carrying, or a landmine, T-bar or preacher bench, and anything that needs a bench only comes in if you add a bench to your home kit. Sets you do at home on the Vitruvian are logged as the Vitruvian machine, so your home numbers and your gym barbell numbers stay separate.'},
   {v:'4.08',d:'Home days use your Vitruvian and kettlebell, not just bodyweight',det:'Turning on Training at home on a gym day used to swap everything for bodyweight moves. Now home days plan with your home kit: your Vitruvian, your adjustable kettlebell and your bands, plus bodyweight moves where they fit, so a home Push day can be a Vitruvian floor press, a kettlebell press, push-ups, Vitruvian lateral raises and Vitruvian triceps. 19 Vitruvian exercises (squat, deadlift, RDL, hip thrust, split squat, calf raise, floor and bench press, floor fly, overhead press, lateral raise, rear-delt fly, bent-over and one-arm rows, curls, triceps, woodchop) and 8 kettlebell ones (goblet squat, deadlift, single-leg RDL, row, press, floor press, reverse lunge, suitcase carry). Tap Kit on a home day to change what you have. The AI Coach plans home days with the same kit.'},
   {v:'4.07',d:'Calisthenics days: swap a gym day for a bodyweight session',det:'Tap Swap on a gym day and pick Calisthenics for a bodyweight full-body session with a core focus: a pull-up or chin-up, push-ups or dips, a single-leg squat (Bulgarian split squat or box pistol), inverted rows, a hamstring move, and two core exercises such as a hollow body hold, a tuck L-sit or a side plank. New exercises: Hollow Body Hold, Tuck L-Sit, Box Pistol Squat and Bodyweight Bulgarian Split Squat. It counts as a full-body session, so the rest of your week still plans around what you trained. You can also ask the coach to make a day Calisthenics.'},
   {v:'4.06',d:'The coach thinks before it answers, and gives fuller answers',det:'The Ask the Coach chat was told to answer in 2 or 3 sentences and had its thinking switched off, so replies came back fast but thin. Now the AI takes a moment to think first and can answer in up to about 150 words, with a few bullets when that is clearer. Each reply also says which AI answered it (via Gemini, or via DeepSeek when Gemini is busy), so you can see it is the real thing.'},
@@ -13094,9 +13096,20 @@ function makeSets(exId,energy,last,mach){
 // remembers its machine (le.mach) and "last time", targets and machine PRs only use that
 // machine's sets. Each gym has its own list (synced gym_machines), and the machine you
 // used last at that gym is the default (ex_mach_last). '' = no machine named (all old logs).
-function _machGym(){return DB.get('gym_profile',null)||'gym';}
+function _machGym(){
+  // v4.09: sets on a home day belong to the home kit
+  const ds=S.activeLog&&S.activeLog.date||(S.viewDate?fd(S.viewDate):null);
+  return ds&&DB.get('home_day_'+ds,false)?'home':(DB.get('gym_profile',null)||'gym');
+}
 function _machList(exId){return((DB.get('gym_machines',{})||{})[_machGym()]||[]).filter(m=>m&&m.ex===exId).map(m=>m.n);}
-function _machDefault(exId){return((DB.get('ex_mach_last',{})||{})[_machGym()+'|'+exId])||'';}
+function _machDefault(exId){
+  const g=_machGym(),saved=(DB.get('ex_mach_last',{})||{})[g+'|'+exId];
+  if(saved!=null)return saved;
+  // v4.09: at home, a gym exercise done on the Vitruvian (bar, handles or cable) is logged as
+  // "Vitruvian", so its numbers don't mix with the gym barbell or dumbbells
+  if(g==='home'&&!/^(v_|vt_|kb_)/.test(exId)&&_homeEquip().has('vitruvian')&&_vitDoable(exId,_homeEquip())&&!(EX_EQUIP[exId]||[]).every(e=>_homeEquip().has(e)))return'Vitruvian';
+  return'';
+}
 function _leMach(le){if(le&&le.mach===undefined)le.mach=_machDefault(le.id);return le&&le.mach||'';}
 function _sameMach(e,m){return(e.mach||'')===(m||'');}
 function _machPR(exId,m){return m?(DB.get('prs_mach',{})||{})[exId+'@'+m]:(DB.get('prs',{})||{})[exId];}
@@ -16903,7 +16916,18 @@ function _homeEquip(){
   }
   return new Set([...h,'bodyweight']);
 }
-function _homeAvail(id){const H=_homeEquip();return(EX_EQUIP[id]||[]).every(e=>e==='other'||H.has(e));}
+// v4.09: the Vitruvian is a cable on a floor platform with a bar and handles, so it stands in
+// for barbell, EZ-bar and dumbbell lifts, low-cable work, and a squat rack (the bar is held by
+// the platform). Not for moves that need a high or mid-height pulley, walking or carrying, or
+// a landmine / T-bar / preacher bench / rack pins. Anything that needs a bench still needs one.
+const V_CAN=new Set(['barbell','ez_bar','dumbbell','cable','rack','trap_bar']);
+const V_NO=new Set(['tri_push','rope_pushdown','cable_tri_1arm','face_pull','cable_crunch','cable_crossover','straight_arm_pull','sa_pulldown','lat_pull','cg_lat_pull','neutral_pulldown',
+  'elevated_row','cable_ext_rot','cable_chest_press','pallof','woodchop','lunge','farmers_walk','step_up','landmine_press','tbar_row','preacher','rack_pull']);
+function _vitDoable(id,H){
+  const eq=EX_EQUIP[id]||[];if(!eq.length||V_NO.has(id)||!eq.some(e=>V_CAN.has(e)))return false;
+  return eq.every(e=>V_CAN.has(e)||e==='other'||e==='bodyweight'||(H&&H.has(e)));
+}
+function _homeAvail(id){const H=_homeEquip();return(EX_EQUIP[id]||[]).every(e=>e==='other'||H.has(e))||(H.has('vitruvian')&&_vitDoable(id,H));}
 function _homeKitTxt(){const H=_homeEquip();return[...EQUIP_ALL.filter(e=>H.has(e.id)&&e.id!=='bodyweight').map(e=>e.label),'bodyweight'].join(', ');}
 // Exercises for a gym day: from your home kit when it's a home day, else your gym's.
 function _genForDay(type,ds,energy,seed){
