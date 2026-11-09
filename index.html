@@ -556,6 +556,33 @@ const EX = {
   db_rdl:             {n:'Dumbbell Romanian Deadlift',  g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Hamstrings · Glutes',     p:'Stiff-Legged_Dumbbell_Deadlift', k:'rdl stiff leg'},
   back_ext:           {n:'Back Extension',              g:'ham',      t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Back · Glutes · Hamstrings', p:'Hyperextensions_Back_Extensions', k:'hyperextension roman chair 45'},
   back_ext_mach:      {n:'Back Extension Machine',      g:'core',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Lower Back',              p:['assets/ex/back_ext_mach.svg','assets/ex/back_ext_mach-2.svg'],                           k:'lower back'},
+  // v4.08: home kit. Vitruvian (digital resistance from the platform, bar or handles) and kettlebell.
+  vt_squat:           {n:'Vitruvian Squat',             g:'quad',     t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Quads · Glutes'},
+  v_deadlift:         {n:'Vitruvian Deadlift',          g:'ham',      t:'C',sets:3,reps:'5–8',  rpe:'8',  m:'Hamstrings · Glutes · Back'},
+  v_rdl:              {n:'Vitruvian Romanian Deadlift', g:'ham',      t:'C',sets:3,reps:'8–10', rpe:'7',  m:'Hamstrings · Glutes'},
+  v_hip_thrust:       {n:'Vitruvian Hip Thrust',        g:'glute',    t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Glutes'},
+  v_split_squat:      {n:'Vitruvian Split Squat',       g:'quad',     t:'C',sets:3,reps:'8–10/side',rpe:'7',m:'Quads · Glutes', uni:true},
+  v_calf:             {n:'Vitruvian Calf Raise',        g:'calf',     t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Calves'},
+  v_floor_press:      {n:'Vitruvian Floor Press',       g:'chest',    t:'C',sets:4,reps:'8–10', rpe:'8',  m:'Chest · Triceps'},
+  v_bench:            {n:'Vitruvian Bench Press',       g:'chest',    t:'C',sets:4,reps:'6–10', rpe:'8',  m:'Chest · Triceps · Front Delts'},
+  v_fly:              {n:'Vitruvian Floor Fly',         g:'chest',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Chest'},
+  v_ohp:              {n:'Vitruvian Overhead Press',    g:'shoulder', t:'C',sets:3,reps:'8–10', rpe:'8',  m:'Shoulders · Triceps'},
+  v_lat_raise:        {n:'Vitruvian Lateral Raise',     g:'sdelt',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Side Delts'},
+  v_rear_fly:         {n:'Vitruvian Rear Delt Fly',     g:'rdelt',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Rear Delts · Upper Back'},
+  v_row:              {n:'Vitruvian Bent-Over Row',     g:'hback',    t:'C',sets:4,reps:'8–10', rpe:'8',  m:'Mid Back · Lats · Biceps'},
+  v_1arm_row:         {n:'Vitruvian One-Arm Row',       g:'hback',    t:'C',sets:3,reps:'10–12/side',rpe:'7',m:'Lats · Mid Back', uni:true},
+  v_curl:             {n:'Vitruvian Bicep Curl',        g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps'},
+  v_hammer:           {n:'Vitruvian Hammer Curl',       g:'bi',       t:'I',sets:3,reps:'10–12',rpe:'7',  m:'Biceps · Forearms'},
+  v_tri_ext:          {n:'Vitruvian Overhead Triceps Extension',g:'tri',t:'I',sets:3,reps:'10–12',rpe:'7',m:'Triceps'},
+  v_chop:             {n:'Vitruvian Low-to-High Woodchop',g:'core',   t:'I',sets:3,reps:'10/side',rpe:'7',m:'Obliques · Core', uni:true},
+  kb_goblet:          {n:'Kettlebell Goblet Squat',     g:'quad',     t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Quads · Glutes · Core'},
+  kb_deadlift:        {n:'Kettlebell Deadlift',         g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7',  m:'Glutes · Hamstrings'},
+  kb_sl_rdl:          {n:'Kettlebell Single-Leg RDL',   g:'ham',      t:'C',sets:3,reps:'8–10/side',rpe:'7',m:'Hamstrings · Glutes · Balance', uni:true},
+  kb_row:             {n:'Kettlebell One-Arm Row',      g:'hback',    t:'C',sets:3,reps:'10–12/side',rpe:'7',m:'Lats · Mid Back', uni:true},
+  kb_press:           {n:'Kettlebell One-Arm Press',    g:'shoulder', t:'C',sets:3,reps:'8–10/side',rpe:'8',m:'Shoulders · Core', uni:true},
+  kb_floor_press:     {n:'Kettlebell Floor Press',      g:'chest',    t:'C',sets:3,reps:'10–12/side',rpe:'7',m:'Chest · Triceps', uni:true},
+  kb_rev_lunge:       {n:'Kettlebell Reverse Lunge',    g:'quad',     t:'C',sets:3,reps:'8–10/side',rpe:'7',m:'Quads · Glutes', uni:true},
+  kb_carry:           {n:'Kettlebell Suitcase Carry',   g:'core',     t:'I',sets:3,reps:'30–40s/side',rpe:'7',m:'Obliques · Grip · Core', uni:true},
   kb_swing:           {n:'Kettlebell Swing',            g:'ham',      t:'C',sets:3,reps:'15–20',rpe:'7',  m:'Glutes · Hamstrings · Core', p:'One-Arm_Kettlebell_Swings'},
   smith_hip_thrust:   {n:'Smith Machine Hip Thrust',    g:'ham',      t:'C',sets:3,reps:'10–12',rpe:'7–8',m:'Glutes · Hamstrings',     p:['assets/ex/smith_hip_thrust.svg','assets/ex/smith_hip_thrust-2.svg']},
   glute_kick_mach:    {n:'Glute Kickback Machine',      g:'glute',    t:'I',sets:3,reps:'12–15',rpe:'7',  m:'Glutes',                  p:['assets/ex/glute_kick_mach.svg','assets/ex/glute_kick_mach-2.svg'],                           uni:true, k:'glute machine'},
@@ -736,6 +763,20 @@ const SLOT_MORE={
     ['pallof','woodchop','knee_raise','dead_bug'],
   ],
 };
+// v4.08: Vitruvian and kettlebell options for each slot, by slot index. At the gym they're
+// never available, so nothing changes there; on a home day (only your home kit counts as
+// available) the planner reaches past the bodyweight-only main list to these first, so a
+// home Push day is e.g. Vitruvian floor press, kettlebell press, push-ups, Vitruvian lateral
+// raise and Vitruvian triceps: the gear you have plus bodyweight where it fits.
+const HOME_MORE={
+  PUSH:[['v_floor_press','v_bench','kb_floor_press'],['v_ohp','kb_press'],['v_fly','kb_floor_press'],['v_lat_raise'],['v_tri_ext']],
+  PULL:[[],['v_row','kb_row'],['v_1arm_row','kb_row'],['v_rear_fly'],['v_curl','v_hammer']],
+  LEGS:[['vt_squat','kb_goblet'],['v_rdl','v_deadlift','kb_deadlift','kb_swing','kb_sl_rdl','v_hip_thrust'],['v_split_squat','kb_rev_lunge'],['v_hip_thrust','kb_swing'],['v_calf'],['v_chop','kb_carry']],
+  UPPER_PUMP:[['v_floor_press','v_fly','kb_floor_press'],['v_row','v_1arm_row','kb_row'],['v_ohp','kb_press'],['v_lat_raise'],['v_curl','v_hammer'],['v_tri_ext']],
+  SHOULDERS_ARMS:[['v_ohp','kb_press'],['v_lat_raise'],['v_rear_fly'],['v_curl'],['v_tri_ext'],['v_hammer']],
+  FULL_BODY:[['vt_squat','kb_goblet'],['v_rdl','kb_swing','kb_deadlift'],['v_floor_press','kb_floor_press'],['v_row','kb_row'],['v_ohp','kb_press'],['v_chop','kb_carry']],
+};
+for(const [t,arr] of Object.entries(HOME_MORE)){SLOT_MORE[t]=SLOT_MORE[t]||[];arr.forEach((ids,i)=>{SLOT_MORE[t][i]=[...(SLOT_MORE[t][i]||[]),...ids];});}
 const _slotMore=(type,i)=>(SLOT_MORE[type]||[])[i]||[];
 
 /* ── EQUIPMENT TAGS ── */
@@ -785,7 +826,11 @@ const EX_EQUIP={
   db_pullover:['dumbbell','bench'],mach_pullover:['machine'],mach_row:['machine'],iso_row:['machine'],sa_cable_row:['cable'],
   cs_db_row:['dumbbell','incline_bench'],smith_row:['smith'],
   rack_pull:['barbell','rack'],trap_bar_dl:['trap_bar'],sumo_dl:['barbell'],db_rdl:['dumbbell'],back_ext:['back_ext'],back_ext_mach:['machine'],
-  kb_swing:['kettlebell'],smith_hip_thrust:['smith','bench'],glute_kick_mach:['machine'],standing_leg_curl:['machine'],
+  kb_swing:['kettlebell'],
+  vt_squat:['vitruvian'],v_deadlift:['vitruvian'],v_rdl:['vitruvian'],v_hip_thrust:['vitruvian'],v_split_squat:['vitruvian'],v_calf:['vitruvian'],
+  v_floor_press:['vitruvian'],v_bench:['vitruvian','bench'],v_fly:['vitruvian'],v_ohp:['vitruvian'],v_lat_raise:['vitruvian'],v_rear_fly:['vitruvian'],
+  v_row:['vitruvian'],v_1arm_row:['vitruvian'],v_curl:['vitruvian'],v_hammer:['vitruvian'],v_tri_ext:['vitruvian'],v_chop:['vitruvian'],
+  kb_goblet:['kettlebell'],kb_deadlift:['kettlebell'],kb_sl_rdl:['kettlebell'],kb_row:['kettlebell'],kb_press:['kettlebell'],kb_floor_press:['kettlebell'],kb_rev_lunge:['kettlebell'],kb_carry:['kettlebell'],smith_hip_thrust:['smith','bench'],glute_kick_mach:['machine'],standing_leg_curl:['machine'],
   smith_squat:['smith'],pendulum_squat:['machine'],belt_squat:['machine'],v_squat:['machine'],seated_leg_press:['machine'],
   smith_split_squat:['smith'],leg_press_calf:['machine'],smith_calf:['smith'],
   pallof:['cable'],woodchop:['cable'],knee_raise:['dip_bar'],rotary_torso:['machine'],dead_bug:['bodyweight'],farmers_walk:['dumbbell'],
@@ -934,6 +979,32 @@ const EX_CUES={
   back_ext:'Hips on the pad edge. Lower with a flat back, rise until the body is straight, squeeze the glutes.',
   back_ext_mach:'Pad across the upper back. Extend back slowly and stop when the body is straight.',
   kb_swing:'Hinge, hike the bell back, snap the hips forward. The arms only guide it to chest height.',
+  vt_squat:'Bar on the shoulders or handles at the shoulders, feet on the platform. Sit down between the hips, chest up, drive up through mid-foot.',
+  v_deadlift:'Bar close to the shins, flat back, push the floor away and stand tall. The Vitruvian keeps tension at the bottom, so control the descent.',
+  v_rdl:'Soft knees, push the hips back with a flat back until you feel the hamstrings, then squeeze the glutes to stand.',
+  v_hip_thrust:'Upper back on a bench or the floor, bar across the hips, drive the hips up and squeeze the glutes, ribs down.',
+  v_split_squat:'Staggered stance on the platform, handles at your sides, drop the back knee straight down, drive through the front heel.',
+  v_calf:'Bar on the shoulders or handles at your sides, rise onto your toes, pause, lower slowly.',
+  v_floor_press:'Lying on the floor with the platform behind your head or under you, press the bar up and lower until the elbows touch the floor.',
+  v_bench:'Bench over the platform, press the bar from the chest, elbows at about 45 degrees.',
+  v_fly:'Lying on the floor with a handle in each hand, open the arms wide with soft elbows, then hug them back together over the chest.',
+  v_ohp:'Standing on the platform, brace the core and press the bar or handles straight overhead, head through at the top.',
+  v_lat_raise:'Handles at your sides, lift out to shoulder height leading with the elbows, lower slowly.',
+  v_rear_fly:'Hinge forward with a flat back, handles crossed under you, open the arms out wide by squeezing the shoulder blades.',
+  v_row:'Hinge to about 45 degrees with a flat back, pull the bar to the lower ribs, squeeze, lower under control.',
+  v_1arm_row:'One hand on your knee or a bench, pull the handle to the hip, elbow close, without twisting.',
+  v_curl:'Elbows pinned to your sides, curl up and lower slowly; try the eccentric mode for a harder way down.',
+  v_hammer:'Palms facing each other, curl up without swinging, lower slowly.',
+  v_tri_ext:'Facing away from the platform with the rope or a handle behind your head, extend the elbows overhead, elbows pointing forward.',
+  v_chop:'Side-on to the platform, handle low on the far side, rotate and lift it diagonally across your body to above the opposite shoulder, arms long.',
+  kb_goblet:'Hold the bell at your chest by the horns, sit down between your hips, elbows inside the knees, chest up.',
+  kb_deadlift:'Bell between the feet, hinge with a flat back, grip and stand tall by driving the hips forward.',
+  kb_sl_rdl:'Bell in the opposite hand to the standing leg, hinge forward as the back leg rises, hips square, return slowly.',
+  kb_row:'One hand on a bench or your knee, pull the bell to the hip, elbow close, pause at the top.',
+  kb_press:'Bell in the rack position at the shoulder, brace, press straight up until the arm is locked, lower under control.',
+  kb_floor_press:'On your back, bell in one hand, press up until locked out and lower until the elbow touches the floor.',
+  kb_rev_lunge:'Bell held at the chest, step back and drop the back knee down, push through the front heel to return.',
+  kb_carry:'Heavy bell in one hand, walk tall without leaning to either side. Switch hands each set.',
   smith_hip_thrust:'Upper back on a bench, padded bar over the hips. Drive up, squeeze for a second.',
   glute_kick_mach:'Chest on the pad, foot on the plate. Push back and up with the glute, not the lower back.',
   standing_leg_curl:'Pad just above the heel. Curl the heel to the glute with the hips still, lower slowly.',
@@ -1186,6 +1257,7 @@ const EQUIP_ALL=[
   {id:'smith',label:'Smith Machine'},{id:'trap_bar',label:'Trap / Hex Bar'},{id:'landmine',label:'Landmine'},
   {id:'back_ext',label:'Back Extension Bench'},{id:'band',label:'Resistance Bands'},
   {id:'medicine_ball',label:'Medicine Ball'},{id:'stability_ball',label:'Stability Ball'},
+  {id:'vitruvian',label:'Vitruvian Trainer'}, // v4.08
   {id:'bodyweight',label:'Bodyweight (no equipment)'},
 ];
 // Equipment tier presets
@@ -1271,6 +1343,7 @@ const GYMS_BUILTIN={
 // backward-compat: expose .name and .sub from chain/area
 Object.values(GYMS_BUILTIN).forEach(g=>{g.name=g.chain;g.sub=g.area;});
 function getActiveEquip(){
+  if(S._eqOverride)return S._eqOverride; // v4.08: a home day plans with the home kit
   const gid=DB.get('gym_profile',null);
   if(!gid)return _F; // no gym set — show all exercises
   if(gid==='home'){const h=DB.get('home_equip',[]);return new Set(h);}
@@ -1290,7 +1363,10 @@ function filterSlot(slot,bwOnly=false,more=null,strict=false){
   // Home mode: prefer bodyweight-tagged exercises
   if(bwOnly)for(const p of pools){const bw=p.filter(id=>EX[id]?.bw&&exAvail(id));if(bw.length)return bw;}
   // Gym mode: prefer exercises that need equipment, not bodyweight-only moves
-  if(!bwOnly)for(const p of pools){const gym=p.filter(id=>exAvail(id)&&!EX[id]?.bw);if(gym.length)return gym;}
+  // (v4.08: "bodyweight" also means needing nothing but the floor, e.g. Nordic curls and donkey
+  // kicks weren't tagged bw, so on a home day they beat the Vitruvian and kettlebell)
+  const _noKit=id=>EX[id]?.bw||(EX_EQUIP[id]||[]).every(e=>e==='bodyweight');
+  if(!bwOnly)for(const p of pools){const gym=p.filter(id=>exAvail(id)&&!_noKit(id));if(gym.length)return gym;}
   // Nothing better: anything available (bodyweight as a fallback), else the main list
   for(const p of pools){const f=p.filter(id=>exAvail(id));if(f.length)return f;}
   return strict?[]:slot;
@@ -1339,10 +1415,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.07';
+const APP_VERSION='4.08';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.08',d:'Home days use your Vitruvian and kettlebell, not just bodyweight',det:'Turning on Training at home on a gym day used to swap everything for bodyweight moves. Now home days plan with your home kit: your Vitruvian, your adjustable kettlebell and your bands, plus bodyweight moves where they fit, so a home Push day can be a Vitruvian floor press, a kettlebell press, push-ups, Vitruvian lateral raises and Vitruvian triceps. 19 Vitruvian exercises (squat, deadlift, RDL, hip thrust, split squat, calf raise, floor and bench press, floor fly, overhead press, lateral raise, rear-delt fly, bent-over and one-arm rows, curls, triceps, woodchop) and 8 kettlebell ones (goblet squat, deadlift, single-leg RDL, row, press, floor press, reverse lunge, suitcase carry). Tap Kit on a home day to change what you have. The AI Coach plans home days with the same kit.'},
   {v:'4.07',d:'Calisthenics days: swap a gym day for a bodyweight session',det:'Tap Swap on a gym day and pick Calisthenics for a bodyweight full-body session with a core focus: a pull-up or chin-up, push-ups or dips, a single-leg squat (Bulgarian split squat or box pistol), inverted rows, a hamstring move, and two core exercises such as a hollow body hold, a tuck L-sit or a side plank. New exercises: Hollow Body Hold, Tuck L-Sit, Box Pistol Squat and Bodyweight Bulgarian Split Squat. It counts as a full-body session, so the rest of your week still plans around what you trained. You can also ask the coach to make a day Calisthenics.'},
   {v:'4.06',d:'The coach thinks before it answers, and gives fuller answers',det:'The Ask the Coach chat was told to answer in 2 or 3 sentences and had its thinking switched off, so replies came back fast but thin. Now the AI takes a moment to think first and can answer in up to about 150 words, with a few bullets when that is clearer. Each reply also says which AI answered it (via Gemini, or via DeepSeek when Gemini is busy), so you can see it is the real thing.'},
   {v:'4.05',d:'Ask the Coach is a chat bubble now, and it handles pain better',det:'The coach chat was at the very bottom of the week screen, in a small scroll box that fought the page when you scrolled. Now a 💬 bubble sits in the lower right of the Plan, day and My Training screens and opens the chat full screen, with the box you type in just above the keyboard. Open it from a day and it asks about that day. The coach also got smarter. When it proposed a change and you replied, it was never told whether you applied or skipped it, so it could repeat itself word for word; now it is. When you mention pain it asks where and what kind first, sends you to your chiropractor or a doctor for warning signs (swelling, the knee giving way, numbness, pain at night), changes the exercises on the affected days instead of moving whole days, and can add that area to your daily mobility routine.'},
@@ -6825,7 +6902,7 @@ function _coachPrompt(days,avail){
   const p=DB.get('user_profile',{})||{},U=_coachUnit(),D=_coachData();
   const goals=(p.goals||(p.goal?[p.goal]:[])).filter(Boolean).join(', ')||'general fitness';
   const exList=avail.map(id=>`${id} | ${EX[id].n} | ${EX[id].g} | ${EX[id].t==='C'?'compound':'isolation'}`).join('\n');
-  const dayList=days.map(d=>`- ${d.date} ${d.type} (${(_MUSC[d.type]||[]).join(', ')})${DB.get('home_day_'+d.date,false)?' AT HOME: bodyweight/dumbbell only':''}${d.why?' - RE-PLANNED: '+d.why+' Favour the muscles not trained yet this week.':''}`).join('\n');
+  const dayList=days.map(d=>`- ${d.date} ${d.type} (${(_MUSC[d.type]||[]).join(', ')})${DB.get('home_day_'+d.date,false)?' AT HOME, only this kit: '+_homeKitTxt()+' (use the Vitruvian and kettlebell exercises)':''}${d.why?' - RE-PLANNED: '+d.why+' Favour the muscles not trained yet this week.':''}`).join('\n');
   return`You are an evidence-based strength coach. Plan this athlete's gym sessions for the days listed and review their progress honestly.
 
 ATHLETE: goals: ${goals}; level: ${p.level||'intermediate'}${p.gender?'; '+p.gender:''}${p.age?'; age '+p.age:''}; weights in ${U}.
@@ -6872,7 +6949,8 @@ async function aiCoachWeek(pk,opts={}){
   const plan=DB.get(pk,null);if(!Array.isArray(plan))return false;
   const days=plan.filter(d=>d&&SLOTS[d.type]&&!_dayWasDone(d)&&!d.locked&&d.date>=todayStr&&(opts.dates?opts.dates.includes(d.date):true));
   if(!days.length)return false;
-  const avail=Object.keys(EX).filter(id=>!EX[id].x&&!EX[id].hide&&exAvail(id));
+  const _hd=days.some(d=>DB.get('home_day_'+d.date,false)); // v4.08: home days can use the home kit
+  const avail=Object.keys(EX).filter(id=>!EX[id].x&&!EX[id].hide&&(exAvail(id)||(_hd&&_homeAvail(id))));
   S._coachBusy=true;if(opts.ui){S._coachErr=null;render();}
   try{
     const r=await _proxyFetch({method:'POST',headers:{'Content-Type':'application/json'},
@@ -6888,7 +6966,7 @@ async function aiCoachWeek(pk,opts={}){
       const seen=new Set(),list=[];
       for(const x of d.exercises){
         if(!x||!ok.has(x.id)||seen.has(x.id))continue;
-        if(DB.get('home_day_'+d.date,false)&&!EX[x.id].bw&&!(EX_EQUIP[x.id]||[]).every(e=>e==='dumbbell'||e==='bodyweight'))continue;
+        if(DB.get('home_day_'+d.date,false)&&!_homeAvail(x.id))continue;
         seen.add(x.id);list.push(x);
       }
       if(list.length<3)continue;
@@ -10214,7 +10292,8 @@ ${stravaRideOnThisDay?(()=>{
 })():''}
 ${isGym?(()=>{const hd=DB.get('home_day_'+ds,false);return`<div onclick="toggleHomeDay('${ds}')" style="display:flex;align-items:center;gap:10px;padding:9px 14px;background:${hd?'rgba(124,58,237,.1)':'var(--s1)'};border:1px solid ${hd?'var(--acc)':'var(--bord)'};border-radius:12px;margin-bottom:14px;cursor:pointer">
   <span style="font-size:15px">🏠</span>
-  <div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:${hd?'var(--al)':'var(--txt)'}">${hd?'Gym at home — bodyweight exercises':'Training at home today?'}</div>
+  <div style="flex:1;min-width:0;font-size:12px;font-weight:700;color:${hd?'var(--al)':'var(--txt)'}">${hd?'At home: '+_esc(_homeKitTxt()):'Training at home today?'}</div>
+  ${hd?`<button onclick="event.stopPropagation();openHomeKit('${ds}')" style="background:none;border:1px solid var(--acc);border-radius:8px;padding:3px 8px;font-size:11px;font-weight:700;color:var(--al);cursor:pointer;flex-shrink:0">Kit</button>`:''}
   <div style="background:${hd?'var(--acc)':'var(--s2)'};border-radius:8px;padding:3px 10px;font-size:11px;font-weight:700;color:${hd?'#fff':'var(--t2)'};flex-shrink:0">${hd?'On':'Off'}</div>
 </div>`;})():''}
 ${ct!=='rest'?`<div class="sec-lbl">${_T('how_feeling')}</div>
@@ -16812,6 +16891,26 @@ function _wpBuild(){
 
 function shiftWeek(dir){S.weekStart=addDays(S.weekStart,dir*7);S.energy=null;render();}
 
+/* v4.08 HOME KIT: a home day used to mean bodyweight only. Now it plans with what you have
+   at home (synced home_equip): Vitruvian, kettlebell, bands, plus bodyweight. The first time,
+   the kit is filled with what you told the app about: Vitruvian, an adjustable kettlebell,
+   and the bands from your mobility set-up. */
+function _homeEquip(){
+  let h=DB.get('home_equip',null);h=Array.isArray(h)?h:[];
+  if(!localStorage.getItem('home_kit_v408')){
+    const add=['vitruvian','kettlebell'];const r=_rehab&&_rehab();if(r&&(r.kit||[]).includes('band'))add.push('band');
+    h=[...new Set([...h,...add])];DB.set('home_equip',h);try{localStorage.setItem('home_kit_v408','1');}catch(_){}
+  }
+  return new Set([...h,'bodyweight']);
+}
+function _homeAvail(id){const H=_homeEquip();return(EX_EQUIP[id]||[]).every(e=>e==='other'||H.has(e));}
+function _homeKitTxt(){const H=_homeEquip();return[...EQUIP_ALL.filter(e=>H.has(e.id)&&e.id!=='bodyweight').map(e=>e.label),'bodyweight'].join(', ');}
+// Exercises for a gym day: from your home kit when it's a home day, else your gym's.
+function _genForDay(type,ds,energy,seed){
+  if(!DB.get('home_day_'+ds,false))return genSession(type,energy||'okay',false,seed);
+  S._eqOverride=_homeEquip();
+  try{return genSession(type,energy||'okay',false,seed);}finally{S._eqOverride=null;}
+}
 function toggleHomeDay(dateStr){
   const key='home_day_'+dateStr;
   const on=!DB.get(key,false);
@@ -16821,15 +16920,40 @@ function toggleHomeDay(dateStr){
   const plan=DB.get(pk,null);
   if(plan){
     const dp=plan.find(d=>d.date===dateStr);
-    const GYM_SEQ=['PUSH','PULL','LEGS','UPPER_PUMP','SHOULDERS_ARMS'];
-    if(dp&&GYM_SEQ.includes(dp.type)){
-      dp.exercises=genSession(dp.type,'okay',on);
+    if(dp&&SLOTS[dp.type]&&!_gymSetsLogged(dateStr)){
+      dp.exercises=_genForDay(dp.type,dateStr);delete dp._aiGen;
       DB.set(pk,plan);
     }
   }
   render();
-  if(on)showToast('🏠 Switched to bodyweight exercises','var(--acc)');
+  if(on)showToast('🏠 Home workout: '+_homeKitTxt(),'var(--acc)');
   else showToast('🏠 Switched back to gym exercises','var(--t2)');
+}
+function openHomeKit(ds){
+  document.getElementById('homekit-modal')?.remove();
+  const md=document.createElement('div');md.className='swap-modal';md.id='homekit-modal';md.dataset.ds=ds||'';
+  md.innerHTML=`<div class="swap-ov" onclick="closeHomeKit()"></div><div class="swap-sheet">${_homeKitHtml()}</div>`;
+  document.body.appendChild(md);requestAnimationFrame(()=>md.classList.add('on'));
+}
+function _homeKitHtml(){
+  const H=_homeEquip();
+  return`<div class="swap-title">🏠 My home kit</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">Home days plan with these, plus bodyweight moves where they fit.</div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap">${EQUIP_ALL.filter(e=>e.id!=='bodyweight').map(e=>{const on=H.has(e.id);return`<button onclick="homeKitToggle('${e.id}')" style="border:1px solid ${on?'var(--acc)':'var(--bord)'};background:${on?'rgba(124,58,237,.18)':'var(--s2)'};color:${on?'var(--al)':'var(--t2)'};border-radius:999px;font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer">${on?'✓ ':''}${_esc(e.label)}</button>`;}).join('')}</div>
+  <button class="btn btn-p" style="margin-top:14px" onclick="closeHomeKit()">Done</button>`;
+}
+function homeKitToggle(id){
+  const h=new Set([..._homeEquip()].filter(x=>x!=='bodyweight'));h.has(id)?h.delete(id):h.add(id);
+  DB.set('home_equip',[...h]);
+  const sh=document.querySelector('#homekit-modal .swap-sheet');if(sh)sh.innerHTML=_homeKitHtml();
+}
+function closeHomeKit(){
+  const md=document.getElementById('homekit-modal'),ds=md?.dataset.ds;
+  if(md){md.classList.remove('on');setTimeout(()=>md.remove(),300);}
+  // the day you came from picks again with the new kit, if you haven't started it
+  if(ds&&DB.get('home_day_'+ds,false)){const pk=DB.pk(getMon(new Date(ds+'T12:00:00'))),plan=DB.get(pk,null),dp=plan&&plan.find(d=>d.date===ds);
+    if(dp&&SLOTS[dp.type]&&!_gymSetsLogged(ds)){dp.exercises=_genForDay(dp.type,ds);delete dp._aiGen;DB.set(pk,plan);}}
+  debouncedSync();render();
 }
 
 // v3.30: fresh exercises for one gym day. Re-planning the week deliberately keeps a
@@ -16850,13 +16974,12 @@ function _regenDayCore(ds){
   const lk='log_'+ds;
   const log=DB.get(lk,null);
   if(_gymSetsLogged(ds)||log?.completed)return{ok:false,msg:'Sets are already logged for this day — swap single exercises instead'};
-  const bw=DB.get('home_day_'+ds,false);
   const cur=new Set(dp.exercises||[]);
   // genSession breaks ties at random, so draw a few times and keep the draw
   // that shares the fewest exercises with the current list.
   let best=null,bestOverlap=Infinity;
   for(let i=0;i<10&&bestOverlap>0;i++){
-    const next=genSession(dp.type,S.energy||'okay',bw);
+    const next=_genForDay(dp.type,ds,S.energy||'okay'); // v4.08: home days use the home kit
     const overlap=next.filter(id=>cur.has(id)).length;
     if(overlap<bestOverlap){best=next;bestOverlap=overlap;}
   }
@@ -16961,7 +17084,7 @@ function _dayExerciseMenu(dp,ds){
   const byG={};
   Object.keys(EX).filter(id=>!EX[id].x&&groups.has(EX[id].g)&&exAvail(id)).forEach(id=>{(byG[EX[id].g]=byG[EX[id].g]||[]).push(id);});
   const txt=Object.entries(byG).map(([g,ids])=>`  ${g}: `+ids.map(id=>`${EX[id].n} (${(EX_EQUIP[id]||[]).join('+')||'bodyweight'}${EX[id].t==='C'?', compound':''})`).join('; ')).join('\n');
-  return txt+(DB.get('home_day_'+ds,false)?'\n  Home day is ON: favour bodyweight exercises.':'');
+  return txt+(DB.get('home_day_'+ds,false)?'\n  Home day is ON: only the home kit ('+_homeKitTxt()+').':'');
 }
 
 /* ── INIT ── */
