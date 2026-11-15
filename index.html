@@ -1416,10 +1416,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.09';
+const APP_VERSION='4.10';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.10',d:'The FTP test waits when you stop pedalling, and the next ride starts fresh',det:'On your 14 Nov test you stopped pedalling just as the ramp began. The test took 15 seconds without pedalling as you not being able to hold the watts, ended itself at 51 W (not saved) and ran a 50 W cool-down for the rest, which is why it felt easy all the way. The ride after it then re-ran that cut-down test, holding 50 W, and test steps ignore the knob. Now stopping pedalling pauses the test (Stopped: the test waits for you) and it carries on when you pedal again, and a new ride after a test starts as a normal free ride where the knob works.'},
   {v:'4.09',d:'Home days can use almost any exercise on the Vitruvian',det:'The Vitruvian is a cable on a floor platform with a bar and handles, so it can do nearly anything: barbell and EZ-bar lifts (squats without a rack too), dumbbell moves with the handles, and low-cable work like cable curls, lateral raises, rows, kickbacks and pull-throughs. Home days now pick from all of those, not just the 18 Vitruvian exercises. It leaves out what needs a high pulley (pulldowns, pushdowns, face pulls, cable crunches), walking or carrying, or a landmine, T-bar or preacher bench, and anything that needs a bench only comes in if you add a bench to your home kit. Sets you do at home on the Vitruvian are logged as the Vitruvian machine, so your home numbers and your gym barbell numbers stay separate.'},
   {v:'4.08',d:'Home days use your Vitruvian and kettlebell, not just bodyweight',det:'Turning on Training at home on a gym day used to swap everything for bodyweight moves. Now home days plan with your home kit: your Vitruvian, your adjustable kettlebell and your bands, plus bodyweight moves where they fit, so a home Push day can be a Vitruvian floor press, a kettlebell press, push-ups, Vitruvian lateral raises and Vitruvian triceps. 19 Vitruvian exercises (squat, deadlift, RDL, hip thrust, split squat, calf raise, floor and bench press, floor fly, overhead press, lateral raise, rear-delt fly, bent-over and one-arm rows, curls, triceps, woodchop) and 8 kettlebell ones (goblet squat, deadlift, single-leg RDL, row, press, floor press, reverse lunge, suitcase carry). Tap Kit on a home day to change what you have. The AI Coach plans home days with the same kit.'},
   {v:'4.07',d:'Calisthenics days: swap a gym day for a bodyweight session',det:'Tap Swap on a gym day and pick Calisthenics for a bodyweight full-body session with a core focus: a pull-up or chin-up, push-ups or dips, a single-leg squat (Bulgarian split squat or box pistol), inverted rows, a hamstring move, and two core exercises such as a hollow body hold, a tuck L-sit or a side plank. New exercises: Hollow Body Hold, Tuck L-Sit, Box Pistol Squat and Bodyweight Bulgarian Split Squat. It counts as a full-body session, so the rest of your week still plans around what you trained. You can also ask the coach to make a day Calisthenics.'},
@@ -9121,6 +9122,10 @@ async function _rideWake(){
 function rideStart(){
   try{if(!Ride.audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)Ride.audio=new AC();}}catch(_){}
   if(Ride.state==='idle'||Ride.state==='done'){
+    // v4.10: a finished FTP test is never run again by the next ride. Its steps had been cut to
+    // a 50 W cool-down, so the next ride held 50 W and the knob did nothing (test steps hold watts).
+    if(Ride.prog&&Ride.prog.test&&Ride.testResult){Ride.prog=null;Ride.goal=null;Ride.name='Free ride';Ride.auto=false;Ride.erg=false;}
+    Ride.testResult=null;
     Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;Ride.hrShift=0;Ride.testLowAt=null;
     // v3.67: AI Gym's order — display, take control, (R-Q002 N: zero torque), then
     // start — and control is always re-sent, never assumed from an old flag.
@@ -9614,10 +9619,21 @@ function _rideAutoTick(d){
   if(sn&&sn.step&&sn.step.w){
     // FTP test (plain-watt steps): hold the step's watts; on the ramp, watch for the end.
     Ride.targetW=sn.step.w;
-    if(Ride.prog&&Ride.prog.test&&!Ride.testResult&&/^Ramp/.test(sn.step.label)&&Ride.state==='riding'){
+    // v4.10 (14 Nov test): you stopped pedalling just as the ramp began, and 15 s at zero
+    // cadence counted as "can't hold it", so the test ended at 51 W and a 50 W cool-down ran
+    // for the rest. Now a stop (under 10 rpm) is a break: the test clock waits for you.
+    if(Ride.prog&&Ride.prog.test&&!Ride.testResult&&Ride.state==='riding'){
       const pw=d?d.pw:0,cad=d?d.cad:0;
-      if(pw<sn.step.w-20||cad<40){if(Ride.testLowAt==null)Ride.testLowAt=Ride.elapsed;else if(Ride.elapsed-Ride.testLowAt>=15)_rideTestEnd(false);}
-      else Ride.testLowAt=null;
+      if(cad<10){
+        Ride.progAt=(Ride.progAt||0)+1;Ride.testLowAt=null;
+        if(Ride.elapsed>5)Ride.note='Stopped: the test waits for you. Start pedalling to carry on.';
+      }else{
+        if(Ride.note&&/test waits/.test(Ride.note))Ride.note='';
+        if(/^Ramp/.test(sn.step.label)){
+          if(pw<sn.step.w-20||cad<40){if(Ride.testLowAt==null)Ride.testLowAt=Ride.elapsed;else if(Ride.elapsed-Ride.testLowAt>=15)_rideTestEnd(false);}
+          else Ride.testLowAt=null;
+        }
+      }
     }
   }else if(sn&&sn.step&&_rideFtp()&&!_rideHrLed(sn,d)){
     const tg=_rideStepTargets(sn.step),base=Math.round((tg.wLo+tg.wHi)/2/5)*5+Ride.bias;
