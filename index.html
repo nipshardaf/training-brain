@@ -1416,10 +1416,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.11';
+const APP_VERSION='4.12';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.12',d:'The coaches now see your sleep, and the gym eases you back in after a break',det:'Your watch sleep, HRV and resting heart rate now come in from intervals.icu every day. The AI Coach, Ask the Coach and the daily notes see last night and your week, and plan an easier day after a short night or a poor recovery reading. The morning check-in shows how long you slept and suggests Tired after a short night. And a break from the gym now counts even if you kept riding: after 2 or more weeks without lifting the app offers a comeback (weights eased about 15 to 20%), and the coaches treat your first sessions back as a return, at about 80% of your old weights with fewer sets, so the first day back doesn\'t wreck you.'},
   {v:'4.11',d:'The FTP test no longer says it takes 45 minutes',det:'The test showed 42 steps and 45 minutes, its longest possible length if you could keep going to about 470 W. It actually ends when you can\'t hold the watts, usually after 15 to 20 minutes, so that is what it says now, and the ride screen no longer counts down a 45-minute workout during the test.'},
   {v:'4.10',d:'The FTP test waits when you stop pedalling, and the next ride starts fresh',det:'On your 14 Nov test you stopped pedalling just as the ramp began. The test took 15 seconds without pedalling as you not being able to hold the watts, ended itself at 51 W (not saved) and ran a 50 W cool-down for the rest, which is why it felt easy all the way. The ride after it then re-ran that cut-down test, holding 50 W, and test steps ignore the knob. Now stopping pedalling pauses the test (Stopped: the test waits for you) and it carries on when you pedal again, and a new ride after a test starts as a normal free ride where the knob works.'},
   {v:'4.09',d:'Home days can use almost any exercise on the Vitruvian',det:'The Vitruvian is a cable on a floor platform with a bar and handles, so it can do nearly anything: barbell and EZ-bar lifts (squats without a rack too), dumbbell moves with the handles, and low-cable work like cable curls, lateral raises, rows, kickbacks and pull-throughs. Home days now pick from all of those, not just the 18 Vitruvian exercises. It leaves out what needs a high pulley (pulldowns, pushdowns, face pulls, cable crunches), walking or carrying, or a landmine, T-bar or preacher bench, and anything that needs a bench only comes in if you add a bench to your home kit. Sets you do at home on the Vitruvian are logged as the Vitruvian machine, so your home numbers and your gym barbell numbers stay separate.'},
@@ -5389,7 +5390,7 @@ function _checkinCard(plan){
   <button onclick="setCheckin(null)" style="background:none;border:1px solid var(--bord);border-radius:9px;color:var(--al);font-size:12px;font-weight:700;padding:6px 10px;cursor:pointer;flex-shrink:0">Change</button>
 </div>`;
   return`<div class="card" style="padding:12px 14px">
-  <div style="font-size:13px;font-weight:800;margin-bottom:9px">How are you today?</div>
+  <div style="font-size:13px;font-weight:800;margin-bottom:9px">How are you today?${(()=>{const w=_wellToday();return w&&w.sleep?` <span style="font-size:11px;font-weight:600;color:${w.sleep<6?'var(--amb)':'var(--t2)'}">· slept ${w.sleep} h${w.sleep<6?', maybe go Tired today':''}</span>`:'';})()}</div>
   <div style="display:flex;gap:7px">${btn('okay','😀','Good')}${btn('tired','😪','Tired')}${btn('sore','🤕','Sore')}</div>
   <div style="font-size:11px;color:var(--t2);margin-top:8px;line-height:1.45">Tired or sore eases today off: ${gym?'lighter weights and easier exercises':'an easy spin instead'}.</div>
 </div>`;
@@ -5503,25 +5504,78 @@ function _layoffNote(){
   if(days!=null&&days>=28){
     return`\nIMPORTANT — RETURNING FROM A LAYOFF: the user has not logged ANY training in ~${Math.round(days/7)} weeks. Treat them as detrained: recommend a conservative re-entry (2-3 easy full-body sessions in the first week at ~70-80% of old working weights), NOT their old plan or PR-based targets.`;
   }
+  // v4.12: a break from the gym while still riding
+  const gd=_gymLayoffDays();
+  if(gd!=null&&gd>=14)return`\nIMPORTANT, BACK TO THE GYM: the user has not lifted for ${gd} days (they kept riding, so their general fitness is fine). Treat the next 1 to 2 gym sessions as a return: about 80% of their previous weights, 2 to 3 sets per exercise, stopping 2 to 3 reps short of failure, then build back over 2 weeks. Expect sore muscles after the first session.`;
   return'';
 }
 // One-line fitness/fatigue snapshot for AI prompts — the daily coach notes were
 // generated blind to CTL/ATL/TSB (only the weekly review saw them), so "push
 // harder" advice couldn't account for ride fatigue. Empty string when no curve. v2.96.
+/* v4.12 SLEEP & RECOVERY: intervals.icu wellness (sleep hours, sleep score, HRV, resting heart
+   rate, from the watch) pulled with the rides into synced 'wellness' {date: {sleep, score, hrv,
+   rhr}}. A date's sleep is the night that ended that morning. Shown to every AI prompt that uses
+   _fitnessLine, the AI Coach week plan and Ask Coach, and the morning check-in mentions a short night. */
+async function icuFetchWellness(){
+  const key=DB.get('icu_key',null);if(!key||S.guest)return;
+  const r=await fetch(`${ICU_API}/athlete/0/wellness?oldest=${fd(addDays(new Date(),-45))}&newest=${fd(addDays(new Date(),1))}`,{headers:{Authorization:_icuAuthHeader(key)}});
+  if(!r.ok)return;
+  const rows=await r.json();if(!Array.isArray(rows))return;
+  const m=DB.get('wellness',{})||{};let changed=false;
+  for(const w of rows){
+    if(!w||!w.id)continue;const o={};
+    if(w.sleepSecs)o.sleep=+(w.sleepSecs/3600).toFixed(1);
+    if(w.sleepScore)o.score=Math.round(w.sleepScore);
+    if(w.hrv)o.hrv=Math.round(w.hrv);
+    if(w.restingHR)o.rhr=Math.round(w.restingHR);
+    if(Object.keys(o).length&&JSON.stringify(m[w.id])!==JSON.stringify(o)){m[w.id]=o;changed=true;}
+  }
+  if(!changed)return;
+  const ks=Object.keys(m).sort();while(ks.length>60)delete m[ks.shift()];
+  DB.set('wellness',m);
+  if(S.screen==='week')render();
+}
+function _wellToday(){return(DB.get('wellness',{})||{})[fd(new Date())]||null;}
+function _wellnessLine(){
+  const m=DB.get('wellness',{})||{};
+  const days=[...Array(7)].map((_,i)=>fd(addDays(new Date(),-i)));
+  const n=days.map(d=>m[d]).filter(x=>x&&x.sleep);
+  const last=m[days[0]]||{};
+  if(!n.length&&!last.hrv&&!last.rhr)return'';
+  const med=a=>{a=a.filter(Boolean).sort((x,y)=>x-y);return a.length?a[Math.floor(a.length/2)]:null;};
+  const all=Object.entries(m).filter(([d])=>d>=fd(addDays(new Date(),-30))).map(([,x])=>x);
+  const hb=med(all.map(x=>x.hrv)),rb=med(all.map(x=>x.rhr));
+  const parts=[last.sleep?`last night ${last.sleep} h of sleep`:'no sleep recorded last night'];
+  if(n.length)parts.push(`average ${(n.reduce((a,x)=>a+x.sleep,0)/n.length).toFixed(1)} h over the ${n.length} recorded nights this week`);
+  if(last.hrv&&hb&&last.hrv>=hb*0.4)parts.push(`HRV ${last.hrv} (usual about ${hb})`); // a reading under 40% of usual is a bad recording
+  if(last.rhr&&rb)parts.push(`resting heart rate ${last.rhr} (usual about ${rb})`);
+  return`Sleep and recovery from the watch: ${parts.join(', ')}. Under about 6 h of sleep, HRV well below usual, or resting heart rate 5 or more above usual means keep today easier.`;
+}
+// v4.12: days since the last logged gym session (rides don't count here; getLayoffDays counts
+// any activity, so riding through a gym break hid it and weights weren't eased on return)
+let _gymLayCache={date:'',days:null};
+function _gymLayoffDays(){
+  const today=fd(new Date());if(_gymLayCache.date===today)return _gymLayCache.days;
+  let days=null;
+  for(let i=0;i<120&&days==null;i++){const ds=fd(addDays(new Date(),-i));
+    for(const k of['log_'+ds,'extralog_'+ds]){const lg=DB.get(k,null);if(lg&&(lg.exercises||[]).some(e=>(e.sets||[]).some(x=>x&&x.done))){days=i;break;}}}
+  _gymLayCache={date:today,days};return days;
+}
 function _fitnessLine(){
+  const _wl=_wellnessLine(); // v4.12
   const curve=DB.get('bike_fitness_curve',null);
-  if(!curve)return'';
+  if(!curve)return _wl;
   const cur=curve[fd(new Date())]||curve[fd(addDays(new Date(),-1))];
-  if(!cur)return'';
+  if(!cur)return _wl;
   let s=`Current form: Fitness(CTL) ${Math.round(cur.ctl)} · Fatigue(ATL) ${Math.round(cur.atl)} · Form(TSB) ${cur.tsb>0?'+':''}${Math.round(cur.tsb)} (TSB below -10 = carrying fatigue, above +5 = fresh)`;
   const yRide=stravaRideOnDate(fd(addDays(new Date(),-1)));
   if(yRide&&yRide._tss)s+=`. Yesterday's ride load: TSS ${yRide._tssEst?'~':''}${yRide._tss}`;
-  return s;
+  return s+(_wl?'\n'+_wl:'');
 }
 
 function startComeback(){
-  const days=getLayoffDays()||28;
-  const factor=days>=84?0.6:days>=56?0.7:0.8; // 12+wk → 60%, 8-12wk → 70%, 4-8wk → 80%
+  const days=Math.max(getLayoffDays()||0,_gymLayoffDays()||0)||28; // v4.12: a gym-only break counts
+  const factor=days>=84?0.6:days>=56?0.7:days>=28?0.8:0.85; // 12+wk → 60%, 8-12wk → 70%, 4-8wk → 80%
   const cap=days>=56?2:3;                     // 8+wk off → 2 full-body days, else 3-day PPL
   const mon=getMon(new Date());
   DB.set('comeback_mode',{start:fd(new Date()),layoffDays:days,factor,weeks:2,cap});
@@ -5554,13 +5608,15 @@ function rComebackBanner(){
   <button onclick="endComeback()" style="background:none;border:1px solid rgba(16,185,129,.35);border-radius:8px;color:var(--grn);font-size:10px;font-weight:700;padding:5px 9px;cursor:pointer;flex-shrink:0">End early</button>
 </div>`;
   }
-  const days=getLayoffDays();
-  if(days==null||days<28)return'';
+  const ld=getLayoffDays(),gd=_gymLayoffDays(); // v4.12: 2+ weeks off the gym counts, even if you kept riding
+  const gymOnly=(ld==null||ld<28)&&gd!=null&&gd>=14;
+  const days=gymOnly?gd:ld;
+  if(days==null||(!gymOnly&&days<28))return'';
   if(DB.get('comeback_dismissed_'+fd(S.weekStart),false))return'';
   const wks=Math.round(days/7);
   return`<div style="background:rgba(16,185,129,.08);border:1px solid rgba(16,185,129,.3);border-radius:14px;padding:13px 14px;margin-bottom:12px">
   <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><span style="font-size:18px">🌱</span><div style="font-size:13px;font-weight:800;color:var(--grn)">Welcome back!</div></div>
-  <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">It's been about <strong style="color:var(--txt)">${wks} weeks</strong> since your last logged session. Jumping straight back to old weights is how comebacks get cut short — want an eased 2-week re-entry instead? Fewer days, lighter targets, and the coach paces you back up.</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.55;margin-bottom:10px">It's been about <strong style="color:var(--txt)">${wks} weeks</strong> since your last ${gymOnly?'gym session (your rides kept your fitness up, but your muscles need easing back in)':'logged session'}. Jumping straight back to old weights is how comebacks get cut short — want an eased 2-week re-entry instead? Fewer days, lighter targets, and the coach paces you back up.</div>
   <div style="display:flex;gap:6px">
     <button onclick="startComeback()" style="flex:1;background:var(--grn);border:none;border-radius:10px;color:#fff;font-size:12px;font-weight:700;padding:10px;cursor:pointer">🌱 Start comeback plan</button>
     <button onclick="dismissComeback()" style="flex:0 0 auto;background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--t2);font-size:12px;font-weight:600;padding:10px 12px;cursor:pointer">No thanks</button>
@@ -5577,7 +5633,7 @@ let _pinBuf='';
 const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
-const SYNC_KEYS=['checkins','rehab','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+const SYNC_KEYS=['checkins','rehab','wellness','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
   'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach','ride_coach','ride_coach_voice'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
@@ -6911,6 +6967,7 @@ function _coachPrompt(days,avail){
 
 ATHLETE: goals: ${goals}; level: ${p.level||'intermediate'}${p.gender?'; '+p.gender:''}${p.age?'; age '+p.age:''}; weights in ${U}.
 ${D.bw?`Bodyweight (date weight): ${D.bw}\n`:''}They also ride a bike. Weekly riding (last 4 weeks, hours and training load): ${D.rides}
+${_wellnessLine()}${_layoffNote()}
 
 PROGRESS - best set per session, last 8 weeks (date weight x reps):
 ${D.exLines.join('\n')||'(no logged sessions yet)'}
@@ -11593,6 +11650,9 @@ ${recent.join('\n')}
 
 === THIS WEEK'S AI COACH REVIEW ===
   ${coachTxt}
+
+=== SLEEP & RECOVERY ===
+  ${_wellnessLine()||'No sleep data from the watch yet.'}
 
 === MOBILITY / REHAB ===
   ${mobTxt}
@@ -17398,6 +17458,7 @@ function _icuMaybeFetch(mins){
   if(Date.now()-last<mins*60000)return;
   try{localStorage.setItem('icu_fetch_here',String(Date.now()));}catch(_){}
   icuFetchActivities().catch(()=>{});
+  icuFetchWellness().catch(()=>{}); // v4.12: sleep, HRV, resting heart rate
 }
 let _lastVisibilitySync=0;
 async function _autoPullIfNewer(reason){
