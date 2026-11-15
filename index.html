@@ -1416,10 +1416,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.10';
+const APP_VERSION='4.11';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.11',d:'The FTP test no longer says it takes 45 minutes',det:'The test showed 42 steps and 45 minutes, its longest possible length if you could keep going to about 470 W. It actually ends when you can\'t hold the watts, usually after 15 to 20 minutes, so that is what it says now, and the ride screen no longer counts down a 45-minute workout during the test.'},
   {v:'4.10',d:'The FTP test waits when you stop pedalling, and the next ride starts fresh',det:'On your 14 Nov test you stopped pedalling just as the ramp began. The test took 15 seconds without pedalling as you not being able to hold the watts, ended itself at 51 W (not saved) and ran a 50 W cool-down for the rest, which is why it felt easy all the way. The ride after it then re-ran that cut-down test, holding 50 W, and test steps ignore the knob. Now stopping pedalling pauses the test (Stopped: the test waits for you) and it carries on when you pedal again, and a new ride after a test starts as a normal free ride where the knob works.'},
   {v:'4.09',d:'Home days can use almost any exercise on the Vitruvian',det:'The Vitruvian is a cable on a floor platform with a bar and handles, so it can do nearly anything: barbell and EZ-bar lifts (squats without a rack too), dumbbell moves with the handles, and low-cable work like cable curls, lateral raises, rows, kickbacks and pull-throughs. Home days now pick from all of those, not just the 18 Vitruvian exercises. It leaves out what needs a high pulley (pulldowns, pushdowns, face pulls, cable crunches), walking or carrying, or a landmine, T-bar or preacher bench, and anything that needs a bench only comes in if you add a bench to your home kit. Sets you do at home on the Vitruvian are logged as the Vitruvian machine, so your home numbers and your gym barbell numbers stay separate.'},
   {v:'4.08',d:'Home days use your Vitruvian and kettlebell, not just bodyweight',det:'Turning on Training at home on a gym day used to swap everything for bodyweight moves. Now home days plan with your home kit: your Vitruvian, your adjustable kettlebell and your bands, plus bodyweight moves where they fit, so a home Push day can be a Vitruvian floor press, a kettlebell press, push-ups, Vitruvian lateral raises and Vitruvian triceps. 19 Vitruvian exercises (squat, deadlift, RDL, hip thrust, split squat, calf raise, floor and bench press, floor fly, overhead press, lateral raise, rear-delt fly, bent-over and one-arm rows, curls, triceps, woodchop) and 8 kettlebell ones (goblet squat, deadlift, single-leg RDL, row, press, floor press, reverse lunge, suitcase carry). Tap Kit on a home day to change what you have. The AI Coach plans home days with the same kit.'},
@@ -9925,7 +9926,7 @@ function _rideGoalHtml(d,hr){
           return`<button onclick="ridePick('prog','${c}')" style="text-align:left;background:${on?'rgba(124,58,237,.14)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:11px;color:var(--txt);padding:8px 10px;cursor:pointer">
             <div style="font-size:13px;font-weight:700">${k.name}${c==='recovery'?'':` <span style="font-size:11px;color:var(--t2);font-weight:600">· level ${lv[c]}</span>`}</div>
             <div style="font-size:11px;color:var(--t2);line-height:1.4;margin-top:1px">${k.short}${k.feel!=='—'?` · feels like ${k.feel}`:''}</div></button>`;}).join('')}</div></details>
-      ${Ride.prog?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:4px">${Ride.prog.steps.length} steps · ${mins} min${_rideFtp()?' · auto resistance holds each step\'s watts and eases off if your heart rate runs high':' · set your FTP for watt targets; auto resistance follows heart rate'}</div>`:''}
+      ${Ride.prog?`<div style="font-size:11px;color:var(--t2);line-height:1.5;margin-top:4px">${Ride.prog.test?'About 15–20 min: it ends when you can\'t hold the watts':`${Ride.prog.steps.length} steps · ${mins} min`}${_rideFtp()?' · auto resistance holds each step\'s watts and eases off if your heart rate runs high':' · set your FTP for watt targets; auto resistance follows heart rate'}</div>`:''}
       ${free&&g&&g.type==='hr'?`<div style="font-size:11px;color:var(--t2);margin-top:4px">Auto resistance keeps your heart rate in the zone.</div>`:''}`);
   }
   if(Ride.prog&&Ride.prog.test&&Ride.state!=='idle'){
@@ -9952,7 +9953,7 @@ function _rideGoalHtml(d,hr){
     const ok=inW&&inH,border=d||hr?(ok?'var(--grn)':'var(--amb)'):'var(--bord)';
     const elapsedAll=sn.total-(sn.total-Ride.elapsed);
     return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
-        <div style="min-width:0"><div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">Step ${sn.i+1} of ${Ride.prog.steps.length}</div>
+        <div style="min-width:0"><div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${Ride.prog.test?'FTP test · keep going until you can\'t hold it':`Step ${sn.i+1} of ${Ride.prog.steps.length}`}</div>
           <div style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(x.label)}</div></div>
         <div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div></div>
       ${Ride.hrCut>0?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">❤️ Heart rate high — eased off ${Ride.hrCut} W</div>`:''}
@@ -9962,8 +9963,8 @@ function _rideGoalHtml(d,hr){
       <div style="font-size:12px;margin-top:3px">🎯 ${tg.wLo?`<b>${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W</b> · `:''}❤️ <b>${tg.hLo?`${tg.hLo}–${tg.hHi}`:`under ${tg.hHi}`}</b>${x.cad?` · ${x.cad} rpm`:''}
         ${d||hr?` <span style="color:${ok?'var(--grn)':'var(--amb)'};font-weight:700">${ok?'✓ on target':!inH?(hr>tg.hHi?'↓ ease off':'↑ push a bit'):(pw<tg.wLo?'↑ push a bit':'↓ ease off')}</span>`:''}</div>
       ${bar(1-sn.left/x.sec,'var(--acc)')}
-      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-top:5px"><span>${sn.next?`Next: ${_esc(sn.next.label)} (${Math.round(sn.next.sec/60)} min)`:'Last step'}</span><span>${_mmss(sn.total-Ride.elapsed)} left in workout</span></div>
-      ${bar(elapsedAll/sn.total,'var(--grn)')}`,border);
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-top:5px"><span>${sn.next?`Next: ${_esc(sn.next.label)} (${Math.round(sn.next.sec/60)} min)`:'Last step'}</span>${Ride.prog.test?'':`<span>${_mmss(sn.total-Ride.elapsed)} left in workout</span>`}</div>
+      ${Ride.prog.test?'':bar(elapsedAll/sn.total,'var(--grn)')}`,border); // v4.11: a ramp test has no fixed length
   }
   const g=Ride.goal;
   if(!g)return'';
