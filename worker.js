@@ -1,3 +1,4 @@
+// v18 — /media: private exercise videos (the owner's own clips) in KV TB_INBOX as m:<uid>:<name>; PUT / GET / DELETE /media/<name> and GET /media (list), all needing the Firebase sign-in token in Authorization.
 // v17 — Fallback providers get the whole chat (app v4.05), not just its first message, so
 //       the coach no longer answers the opening question again when Gemini is busy.
 // v16 — When every provider fails, the 429 reply says why in X-TB-AI-Err (e.g. deepseek:401).
@@ -186,6 +187,40 @@ export default {
       }
 
       return jsonRes({ error: 'not found' }, 404);
+    }
+
+    // ── v18: private exercise videos (the user's own clips), stored in KV as m:<uid>:<name> ──
+    // Only the signed-in owner can upload, list, play or delete them. The app fetches a clip
+    // with its sign-in token in the Authorization header (never in the URL) and plays it from
+    // a blob, so no link to a clip works for anyone else. KV values are capped at 25 MB.
+    if (url.pathname === '/media' || url.pathname.startsWith('/media/')) {
+      const res = (obj, status = 200) => new Response(JSON.stringify(obj), {
+        status, headers: { 'Content-Type': 'application/json', ...corsHeaders(origin) },
+      });
+      if (!env.TB_INBOX) return res({ error: 'KV namespace TB_INBOX not bound' }, 503);
+      const token = (request.headers.get('Authorization') || '').replace(/^Bearer\s+/i, '');
+      const user = token ? await verifyFirebaseToken(token, env.FIREBASE_PROJECT_ID || 'training-631c1') : null;
+      if (!user) return res({ error: 'sign in first' }, 401);
+      const pre = 'm:' + String(user.sub) + ':';
+      if (url.pathname === '/media' && request.method === 'GET') {
+        const list = await env.TB_INBOX.list({ prefix: pre, limit: 1000 });
+        return res({ files: list.keys.map(k => ({ name: k.name.slice(pre.length), ...(k.metadata || {}) })) });
+      }
+      const name = decodeURIComponent(url.pathname.slice('/media/'.length));
+      if (!/^[A-Za-z0-9._-]{1,100}$/.test(name)) return res({ error: 'bad name' }, 400);
+      if (request.method === 'PUT') {
+        const buf = await request.arrayBuffer();
+        if (!buf.byteLength || buf.byteLength > 25 * 1024 * 1024) return res({ error: 'file must be 1 byte to 25 MB' }, 413);
+        await env.TB_INBOX.put(pre + name, buf, { metadata: { size: buf.byteLength, type: request.headers.get('Content-Type') || 'video/mp4', at: new Date().toISOString() } });
+        return res({ ok: true, name, size: buf.byteLength });
+      }
+      if (request.method === 'GET') {
+        const { value, metadata } = await env.TB_INBOX.getWithMetadata(pre + name, { type: 'stream' });
+        if (!value) return res({ error: 'not found' }, 404);
+        return new Response(value, { headers: { 'Content-Type': (metadata && metadata.type) || 'video/mp4', 'Cache-Control': 'private, max-age=86400', ...corsHeaders(origin) } });
+      }
+      if (request.method === 'DELETE') { await env.TB_INBOX.delete(pre + name); return res({ ok: true }); }
+      return res({ error: 'method not allowed' }, 405);
     }
 
     // ── Rides on a timer: a signed-in user registers their intervals.icu key ──
@@ -514,10 +549,10 @@ async function verifyFirebaseToken(token, projectId, jwksOverride) {
 function corsHeaders(origin) {
   return {
     'Access-Control-Allow-Origin': origin || '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
     'Access-Control-Allow-Headers': 'Content-Type, Authorization, X-TB-Try',
     'Access-Control-Expose-Headers': 'X-TB-Auth, X-TB-Worker, X-TB-AI, X-TB-AI-Err',
     'X-TB-Auth': '1',
-    'X-TB-Worker': '17',
+    'X-TB-Worker': '18',
   };
 }

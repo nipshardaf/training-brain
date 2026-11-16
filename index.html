@@ -1416,10 +1416,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.12';
+const APP_VERSION='4.13';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.13',d:'Your own hip and knee clips are in the app, with ready-made routines',det:'Your 18 exercise videos (9 for the hips, 9 for the knees) are now mobility exercises in the app, each with what it is for, the equipment it needs, a suggested dose and your clip on the ▶ button. They are private: only you, signed in, can play them, and each clip stays on your phone after the first play. In today\'s mobility routine, tap Hip reset, Knee strength or Hip + knee to load a ready-made day built from your clips, or open the Library to filter by area (hips, knees and more) and by equipment (none, band, kettlebell, bench), add exercises with ＋, use them for today or any day, and save your own routines. Your clips are picked first in the daily routine. Set up mobility now also knows about a box or bench and a kettlebell.'},
   {v:'4.12',d:'The coaches now see your sleep, and the gym eases you back in after a break',det:'Your watch sleep, HRV and resting heart rate now come in from intervals.icu every day. The AI Coach, Ask the Coach and the daily notes see last night and your week, and plan an easier day after a short night or a poor recovery reading. The morning check-in shows how long you slept and suggests Tired after a short night. And a break from the gym now counts even if you kept riding: after 2 or more weeks without lifting the app offers a comeback (weights eased about 15 to 20%), and the coaches treat your first sessions back as a return, at about 80% of your old weights with fewer sets, so the first day back doesn\'t wreck you.'},
   {v:'4.11',d:'The FTP test no longer says it takes 45 minutes',det:'The test showed 42 steps and 45 minutes, its longest possible length if you could keep going to about 470 W. It actually ends when you can\'t hold the watts, usually after 15 to 20 minutes, so that is what it says now, and the ride screen no longer counts down a 45-minute workout during the test.'},
   {v:'4.10',d:'The FTP test waits when you stop pedalling, and the next ride starts fresh',det:'On your 14 Nov test you stopped pedalling just as the ramp began. The test took 15 seconds without pedalling as you not being able to hold the watts, ended itself at 51 W (not saved) and ran a 50 W cool-down for the rest, which is why it felt easy all the way. The ride after it then re-ran that cut-down test, holding 50 W, and test steps ignore the knob. Now stopping pedalling pauses the test (Stopped: the test waits for you) and it carries on when you pedal again, and a new ride after a test starts as a normal free ride where the knob works.'},
@@ -5633,7 +5634,7 @@ let _pinBuf='';
 const _guestStore={};
 // Keys mirrored to the cloud under users/{uid}/data. Shared by the cloud save
 // and the dirty-key tracker so incremental sync only uploads what changed.
-const SYNC_KEYS=['checkins','rehab','wellness','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
+const SYNC_KEYS=['checkins','rehab','wellness','mob_templates','rest_off','ride_debriefs','debrief_next','prs','recent_ex','lang','review_email','emailjs_service','emailjs_template','emailjs_key',
   'user_profile','weight_log','strava_token','strava_auth_expired','strava_last_sync','icu_key','icu_last_sync','endurain_url','endurain_token','endurain_refresh','endurain_last_sync','bike_fitness_curve','bike_setup','bike_adapt_factor','bike_block_start','bike_event','bike_pref','ai_usage','ai_chat_usage','ai_chat_session','welcome_seen','yt_cache','comeback_mode',
   'vitruvian_token','vitruvian_last_sync','vitruvian_sessions','icu_strength_last_sync','run_activities','watch_push_gym','watch_sent','bike_levels','bike_level_log','bike_goal','ex_extra','bike_zone_watts2','gym_profile','home_equip','ride_debug','gym_machines','ex_mach_last','prs_mach','ride_coach','ride_coach_voice'];
 // NOTE: 'extralog_' (extra gym session on a ride day) does NOT match the 'log_'
@@ -7344,6 +7345,7 @@ function toggleAnim(xid,btn){
 // (cached per exercise, or fetched once via the worker) and plays it inline in
 // an iframe. Falls back to YouTube search links if no video / worker / key.
 function openVid(xid){
+  if(MOB_EX[xid]&&MOB_EX[xid].vid)return _openOwnClip(xid); // v4.13: your own clip
   const ex=_exOrMob(xid);if(!ex)return;
   const modal=document.createElement('div');
   modal.id='vid-modal';
@@ -10685,15 +10687,44 @@ ${(()=>{ // v3.62: where you are in each type — levels rise as you complete wo
    so you can see whether it's helping. No AI yet, and it never diagnoses: anything sharp,
    numb or getting worse goes back to the chiropractor. */
 const MOB_AREAS={hip:'Hips',back:'Lower back',upper:'Upper back & posture',neck:'Neck',shoulder:'Shoulders',wrist:'Elbows & wrists',knee:'Knees',ankle:'Ankles & feet'}; // v4.04: + upper back, neck, wrists, ankles
-const MOB_KIT={mat:'Mat',band:'Long resistance band',mini_band:'Mini loop band',foam_roller:'Foam roller'};
+const MOB_KIT={mat:'Mat',band:'Long resistance band',mini_band:'Mini loop band',foam_roller:'Foam roller',bench:'Box, bench or chair',kettlebell:'Kettlebell or dumbbell'}; // v4.13: + bench, kettlebell
 const MOB_KIND={mob:'Loosen',act:'Wake up',str:'Strengthen',stretch:'Stretch'};
 // k: mob (move a joint through its range), act (switch on a weak muscle), str (light
 // strength), stretch (hold). eq: what it needs (none = just you and the floor or a wall).
+/* v4.13 YOUR CLIPS: 18 videos you recorded (hip 1-9, knee 10-18), shrunk to phone size and kept
+   private in the worker's store (only your sign-in can play them). own:true, vid = file name,
+   p = what it's for and eqL = the equipment, both from your labels.csv. eq 'a|b' means either. */
+const MOB_OWN={
+  mv_pigeon:   {own:1,vid:'01-Pigeon-Stretch-Hip-External-Rotation.mp4',n:'Pigeon Stretch',a:['hip'],k:'stretch',v:'glutestr',d:'hold 60 s each side',eq:[],eqL:'None',p:'Hip external rotation and glute mobility'},
+  mv_box:      {own:1,vid:'02-Box-Stretch-Hip-Flexor.mp4',n:'Box Stretch',a:['hip'],k:'stretch',d:'hold 45 s each side',eq:['bench'],eqL:'Box or bench',p:'Hip flexor and anterior capsule'},
+  mv_goblet:   {own:1,vid:'03-Goblet-Squat-Hip-Ankle-Mobility.mp4',n:'Goblet Squat Hold',a:['hip','ankle'],k:'mob',v:'deepsq',d:'3 × 30 s hold',eq:['kettlebell'],eqL:'Dumbbell or kettlebell',p:'Hip and ankle mobility for squat depth'},
+  mv_capsule:  {own:1,vid:'04-Hip-Capsule-Joint-Mobility.mp4',n:'Hip Capsule Mobilization',a:['hip'],k:'mob',d:'2 × 10 each side',eq:[],eqL:'None (band optional)',p:'Hip joint capsule'},
+  mv_distract: {own:1,vid:'05-Banded-Joint-Distraction-Hip-Capsule.mp4',n:'Banded Joint Distraction',a:['hip'],k:'mob',d:'60 s each side',eq:['band'],eqL:'Resistance band',p:'Hip capsule and joint space'},
+  mv_9090:     {own:1,vid:'06-Internal-Rotation-90-90.mp4',n:'Internal Rotation (90/90)',a:['hip'],k:'mob',v:'9090',d:'2 × 8 each side',eq:[],eqL:'None',p:'Hip internal rotation for squat depth'},
+  mv_airplane: {own:1,vid:'07-Hip-Airplane-Rotation-Stability.mp4',n:'Hip Airplane',a:['hip','knee'],k:'act',d:'2 × 5 each side, slow',eq:[],eqL:'None',p:'Rotation and single-leg stability'},
+  mv_psoas:    {own:1,vid:'08-Psoas-Stretch-Hip-Flexor-Release.mp4',n:'Psoas Hip Flexor Stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:[],eqL:'Wall or bench',p:'Psoas and hip flexor release'},
+  mv_kbshift:  {own:1,vid:'09-Kettlebell-Weight-Shift-Squat-Mobility.mp4',n:'Kettlebell Weight Shift',a:['hip','ankle'],k:'mob',d:'2 × 10 shifts',eq:['kettlebell'],eqL:'Kettlebell or dumbbell',p:'Bottom-squat mobility'},
+  mv_slbridge: {own:1,vid:'10-Single-Leg-Bridge-With-Band.mp4',n:'Single Leg Bridge with Band',a:['knee','hip'],k:'str',d:'2 × 10 each side',eq:['band|mini_band'],eqL:'Resistance band',p:'Glute and hamstring strength for knee stability'},
+  mv_dnsstar:  {own:1,vid:'11-DNS-Star.mp4',n:'DNS Star',a:['knee','hip','back'],k:'act',d:'2 × 5 each side',eq:[],eqL:'None (bodyweight)',p:'Core and hip stability for knee alignment'},
+  mv_cossack:  {own:1,vid:'12-Cossack-Squat.mp4',n:'Cossack Squat',a:['knee','hip'],k:'mob',d:'2 × 6 each side',eq:[],eqL:'None',p:'Hip and knee mobility, adductor stretch'},
+  mv_touchdown:{own:1,vid:'13-Touchdown-Squat.mp4',n:'Touchdown Squat',a:['knee'],k:'str',d:'2 × 8 each side',eq:[],eqL:'None',p:'Single-leg knee control and strength'},
+  mv_slsquat:  {own:1,vid:'14-Single-Leg-Squat.mp4',n:'Single Leg Squat',a:['knee'],k:'str',d:'2 × 6-8 each side',eq:[],eqL:'None (chair optional)',p:'Knee and quad strength'},
+  mv_cac:      {own:1,vid:'15-CAC-Squat.mp4',n:'CAC Squat',a:['knee'],k:'str',d:'2 × 10',eq:[],eqL:'None',p:'Knee-friendly squat pattern'},
+  mv_curtsy:   {own:1,vid:'16-Curtsy-Squat.mp4',n:'Curtsy Squat',a:['knee','hip'],k:'str',d:'2 × 10 each side',eq:[],eqL:'None',p:'Knee and glute med strength'},
+  mv_spanish:  {own:1,vid:'17-Spanish-Squat.mp4',n:'Spanish Squat',a:['knee'],k:'str',v:'spanish',d:'3 × 30-45 s hold',eq:['band|bench'],eqL:'Resistance band (or bench)',p:'Quad and knee strength (patellar tendon)'},
+  mv_ankle:    {own:1,vid:'18-Ankle-Mobility.mp4',n:'Ankle Mobility (dorsiflexion)',a:['ankle','knee'],k:'mob',v:'ankledf',d:'2 × 10 each side',eq:[],eqL:'Resistance band (or wall)',p:'Ankle mobility for knee pain'},
+};
+// Ready-made days from your clips (loosen, wake up, strengthen, stretch order)
+const MOB_PRESETS=[
+  {id:'p_hip',name:'Hip reset',ex:['mv_capsule','mv_distract','mv_9090','mv_kbshift','mv_goblet','mv_airplane','mv_box','mv_psoas','mv_pigeon']},
+  {id:'p_knee',name:'Knee strength',ex:['mv_ankle','mv_dnsstar','mv_slbridge','mv_cac','mv_touchdown','mv_curtsy','mv_spanish','mv_slsquat']},
+  {id:'p_both',name:'Hip + knee',ex:['mv_capsule','mv_9090','mv_ankle','mv_airplane','mv_slbridge','mv_spanish','mv_cossack','mv_pigeon']},
+];
 const MOB_EX={
-  m_hip_9090:   {n:'90/90 hip switches',a:['hip'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Sit tall with both knees bent to one side, then rotate both knees to the other side slowly. Use your hands behind you if you need to.'},
+  m_hip_9090:   {v:'9090',n:'90/90 hip switches',a:['hip'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Sit tall with both knees bent to one side, then rotate both knees to the other side slowly. Use your hands behind you if you need to.'},
   m_hip_cars:   {n:'Hip circles (CARs)',a:['hip'],k:'mob',d:'5 slow circles each way, each leg',eq:[],c:'Hold a wall. Lift the knee and draw the biggest slow circle you can with it without your pelvis moving.'},
   m_adductor:   {n:'Adductor rock-back',a:['hip'],k:'mob',d:'2 × 10',eq:['mat'],c:'On hands and knees with one leg straight out to the side, sit your hips back slowly until you feel the inner thigh, then return.'},
-  m_squat_hold: {n:'Supported deep squat hold',a:['hip','knee'],k:'mob',d:'3 × 30 s',eq:[],c:'Hold a post or door frame and sink into a deep squat, heels down, chest up. Breathe and let the hips open.'},
+  m_squat_hold: {v:'deepsq',n:'Supported deep squat hold',a:['hip','knee'],k:'mob',d:'3 × 30 s',eq:[],c:'Hold a post or door frame and sink into a deep squat, heels down, chest up. Breathe and let the hips open.'},
   m_foam_glute: {n:'Foam roll glutes and outer hip',a:['hip'],k:'mob',d:'60 s each side',eq:['foam_roller'],c:'Sit on the roller tilted to one side and roll slowly; pause on tight spots for a few breaths.'},
   m_bridge:     {n:'Glute bridge',v:'bridge',a:['hip','back'],k:'act',d:'2 × 12, 2 s squeeze at the top',eq:['mat'],c:'Feet flat, push through the heels and squeeze your glutes to lift. Ribs down; don\'t arch the lower back.'},
   m_band_bridge:{n:'Banded glute bridge',v:'bridge',a:['hip'],k:'act',d:'2 × 12, knees pressing out',eq:['mat','mini_band'],c:'Band just above the knees. Keep pushing the knees out against the band the whole time.'},
@@ -10705,7 +10736,7 @@ const MOB_EX={
   m_monster:    {n:'Banded monster walk',a:['hip'],k:'str',d:'2 × 10 steps forward and back',eq:['mini_band'],c:'Half squat, feet wide, walk forward and back on a diagonal, never letting the band go slack.'},
   m_split_hold: {n:'Split squat hold',a:['hip','knee'],k:'str',d:'2 × 20 s each side',eq:[],c:'Hold the bottom of a split squat, front knee over the foot, back knee just off the floor. Hold a wall for balance.'},
   m_hip_flexor: {n:'Half-kneeling hip flexor stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Tuck your tailbone and squeeze the back glute, then shift forward a little. Feel it at the front of the back hip.'},
-  m_figure4:    {n:'Figure-4 glute stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Lying on your back, cross one ankle over the other knee and pull the bottom thigh towards you.'},
+  m_figure4:    {v:'glutestr',n:'Figure-4 glute stretch',a:['hip','back'],k:'stretch',d:'hold 45 s each side',eq:['mat'],c:'Lying on your back, cross one ankle over the other knee and pull the bottom thigh towards you.'},
   m_cat_cow:    {n:'Cat-cow',a:['back','upper'],k:'mob',d:'1 × 10 slow',eq:['mat'],c:'On hands and knees, round your back up slowly, then let it sag, moving one segment at a time.'},
   m_open_book:  {n:'Open book rotation',a:['back','shoulder','upper'],k:'mob',d:'2 × 8 each side',eq:['mat'],c:'Lie on your side, knees bent, arms together in front. Open the top arm across to the other side, following it with your eyes.'},
   m_bird_dog:   {n:'Bird dog',a:['back','hip'],k:'act',d:'2 × 8 each side, 3 s hold',eq:['mat'],c:'Reach one arm and the opposite leg out long, hips level, without arching. Pause, then switch.'},
@@ -10725,10 +10756,10 @@ const MOB_EX={
   m_heel_slide: {n:'Heel slides',a:['knee'],k:'mob',d:'2 × 10 each leg',eq:['mat'],c:'Lying on your back, slide the heel towards your bottom as far as is comfortable, then back out slowly.'},
   m_quad_set:   {n:'Quad sets',a:['knee'],k:'act',d:'2 × 10, 5 s squeeze',eq:['mat'],c:'Sitting with the leg straight, press the back of the knee down into the floor by tightening the front of the thigh. Hold, relax.'},
   m_short_arc:  {n:'Short-arc quad',a:['knee'],k:'act',d:'2 × 12 each leg',eq:['mat'],c:'Lying down with a rolled towel under the knee, straighten the knee fully and hold 2 s, lower slowly.'},
-  m_spanish_sq: {n:'Banded Spanish squat',a:['knee'],k:'str',d:'3 × 30 s hold',eq:['band'],c:'Band anchored to something solid and looped behind both knees. Lean back into it and sit into a shallow squat, shins upright.'},
+  m_spanish_sq: {v:'spanish',n:'Banded Spanish squat',a:['knee'],k:'str',d:'3 × 30 s hold',eq:['band'],c:'Band anchored to something solid and looped behind both knees. Lean back into it and sit into a shallow squat, shins upright.'},
   m_quad_stretch:{n:'Standing quad stretch',a:['knee','hip'],k:'stretch',d:'hold 30 s each leg',eq:[],c:'Hold a wall, bring your heel towards your bottom, knees together and hips tucked under.'},
   m_ankle_circ: {n:'Ankle circles and alphabet',a:['ankle'],k:'mob',d:'1 round each foot',eq:[],c:'Seated, draw slow circles both ways with your foot, then trace the alphabet with your big toe.'},
-  m_knee_wall:  {n:'Knee-to-wall ankle rocks',a:['ankle','knee'],k:'mob',d:'2 × 10 each side',eq:[],c:'Foot a few cm from the wall, push the knee forward to touch the wall with the heel down. Move the foot back as it gets easier.'},
+  m_knee_wall:  {v:'ankledf',n:'Knee-to-wall ankle rocks',a:['ankle','knee'],k:'mob',d:'2 × 10 each side',eq:[],c:'Foot a few cm from the wall, push the knee forward to touch the wall with the heel down. Move the foot back as it gets easier.'},
   m_balance:    {n:'Single-leg balance',a:['ankle','knee'],k:'act',d:'3 × 30 s each leg',eq:[],c:'Stand on one foot near a wall, knee soft. Too easy? Close your eyes or stand on a cushion.'},
   m_band_ankle: {n:'Banded ankle in and out',a:['ankle'],k:'str',d:'2 × 15 each way, each foot',eq:['band'],c:'Seated, band around the forefoot anchored to the side. Turn the sole in, then out, against the band without moving the knee.'},
   m_calf_raise: {n:'Slow calf raise',a:['ankle','knee'],k:'str',d:'2 × 12, 3 s down',eq:[],c:'Hold a wall, rise onto your toes, then lower over 3 seconds. Single leg once both legs are easy.'},
@@ -10750,6 +10781,9 @@ const MOB_EX={
   m_cobra_hold: {n:'Prone cobra hold',a:['upper','back'],k:'str',d:'3 × 15 s',eq:['mat'],c:'Face down, arms by your sides, palms down. Lift chest and hands a few cm, squeeze the shoulder blades back and down, chin tucked.'},
   m_bottle_curl:{n:'Wrist curls with a water bottle',a:['wrist'],k:'str',d:'2 × 15 each way, each hand',eq:[],c:'Forearm on your thigh, hold a full water bottle. Curl the wrist up and lower slowly, palm up, then palm down.'},
 };
+Object.assign(MOB_EX,MOB_OWN); // v4.13
+// a kit item 'a|b' is either; your gym kettlebell at home counts too
+function _mobHas(kit,e){return String(e).split('|').some(x=>kit.has(x)||(x==='kettlebell'&&typeof _homeEquip==='function'&&_homeEquip().has('kettlebell')));}
 function _rehab(){return DB.get('rehab',null);}
 function _mobOn(){const r=_rehab();return!!(r&&r.on!==false&&(r.areas||[]).length);}
 function _mobAreaTxt(){const r=_rehab()||{};return(r.areas||[]).map(a=>MOB_AREAS[a]).filter(Boolean).join(' & ')||'Mobility';}
@@ -10762,7 +10796,7 @@ function _exOrMob(id){
   return c?{n:c.n,m:'From your chiropractor'}:null;
 }
 function _mobInfo(id){
-  const m=MOB_EX[id];if(m)return{n:m.n,d:m.d,c:m.c,k:MOB_KIND[m.k],chiro:false};
+  const m=MOB_EX[id];if(m)return{n:m.n,d:m.d,c:m.own?m.p:m.c,k:MOB_KIND[m.k],chiro:false,own:!!m.own,eqL:m.eqL||''};
   const c=((_rehab()||{}).chiro||[]).find(x=>x.id===id);
   return c?{n:c.n,d:[c.dose,c.band?c.band+' band':''].filter(Boolean).join(' · '),c:c.note||'',k:'From your chiropractor',chiro:true}:null;
 }
@@ -10776,8 +10810,8 @@ function _mobPick(ds){
   const per=areas.length===1?{mob:2,act:2,str:1,stretch:1}:{mob:1,act:1,str:1,stretch:1};
   const K=['mob','act','str','stretch'],bk={mob:[],act:[],str:[],stretch:[]},vs=new Set(); // vs: one of each exercise (glute bridge or its banded version, not both)
   for(const k of K)for(const a of areas.slice().sort((x,y)=>_hash(ds+x)-_hash(ds+y))){
-    const cands=Object.keys(MOB_EX).filter(id=>{const m=MOB_EX[id];return m.k===k&&m.a.includes(a)&&m.eq.every(e=>kit.has(e))&&!bk[k].includes(id);})
-      .sort((x,y)=>_hash(ds+x)-_hash(ds+y));
+    const cands=Object.keys(MOB_EX).filter(id=>{const m=MOB_EX[id];return m.k===k&&m.a.includes(a)&&m.eq.every(e=>_mobHas(kit,e))&&!bk[k].includes(id);})
+      .sort((x,y)=>((MOB_EX[y].own?1:0)-(MOB_EX[x].own?1:0))||(_hash(ds+x)-_hash(ds+y))); // v4.13: your own clips first
     let n=0;for(const id of cands){if(n>=per[k])break;const v=MOB_EX[id].v||id;if(vs.has(v))continue;vs.add(v);bk[k].push(id);n++;}
   }
   // v4.04: with several areas, take one of each kind in turn so a long list doesn't lose
@@ -10840,11 +10874,13 @@ function _mobSheetHtml(ds){
   <div style="font-size:12px;font-weight:700;margin-top:2px">How does it feel right now? <span style="font-weight:400;color:var(--t2)">0 = no pain, 10 = worst</span></div>
   ${_painRow(ds,'p0',m.p0)}
   ${tr.length?`<div style="font-size:11px;color:var(--t2);margin-top:6px">Before your last sessions: ${tr.map(t=>t[1]).join(' → ')}</div>`:''}
-  <div style="margin-top:12px">${m.ex.map(id=>{const i=_mobInfo(id);if(!i)return'';const on=done.has(id);
+  <div style="display:flex;gap:6px;overflow-x:auto;margin-top:12px;padding-bottom:2px">${_mobTemplates().map(t=>`<button onclick="mobUseTemplate('${ds}','${t.id}')" style="flex:0 0 auto;border:1px solid ${m.tpl===t.id?'#14b8a6':'var(--bord)'};background:${m.tpl===t.id?'rgba(20,184,166,.18)':'var(--s2)'};color:${m.tpl===t.id?'#14b8a6':'var(--t2)'};border-radius:999px;font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer">${_esc(t.name)}</button>`).join('')}<button onclick="openMobLibrary('${ds}')" style="flex:0 0 auto;border:1px solid var(--bord);background:var(--s2);color:var(--al);border-radius:999px;font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer">📚 Library</button></div>
+  <div style="margin-top:8px">${m.ex.map(id=>{const i=_mobInfo(id);if(!i)return'';const on=done.has(id);
     return`<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--bord)">
       <button onclick="mobTick('${ds}','${id}')" style="flex-shrink:0;width:30px;height:30px;border-radius:50%;border:2px solid ${on?'#14b8a6':'var(--bord)'};background:${on?'#14b8a6':'none'};color:#fff;font-size:15px;font-weight:800;cursor:pointer">${on?'✓':''}</button>
       <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700;${on?'color:var(--t2)':''}">${_esc(i.n)}</div>
-        <div style="font-size:12px;color:#14b8a6;font-weight:700;margin-top:1px">${_esc(i.d)}<span style="color:var(--t2);font-weight:400"> · ${_esc(i.k)}</span></div>
+        <div style="font-size:12px;color:#14b8a6;font-weight:700;margin-top:1px">${_esc(i.d)}<span style="color:var(--t2);font-weight:400"> · ${_esc(i.k)}${i.own?' · 🎥 your clip':''}</span></div>
+        ${i.own&&i.eqL?`<div style="font-size:11px;color:var(--t2);margin-top:2px">Equipment: ${_esc(i.eqL)}</div>`:''}
         ${i.c?`<div style="font-size:12px;color:var(--t2);line-height:1.45;margin-top:3px">${_esc(i.c)}</div>`:''}</div>
       <button onclick="openVid('${id}')" style="flex-shrink:0;background:var(--s2);border:1px solid var(--bord);border-radius:8px;color:var(--al);font-size:12px;padding:5px 8px;cursor:pointer">▶</button>
     </div>`;}).join('')}</div>
@@ -10888,7 +10924,8 @@ function _mobSetupHtml(){
     ${inp('mob-c-note','Her cue or note (optional)')}
     <button class="add-set" style="margin-top:8px" onclick="mobChiroAdd()">＋ Add to my list</button>
   </div>
-  <button class="btn btn-p" style="margin-top:12px;background:#14b8a6" onclick="closeMobSetup()">${(r.areas||[]).length?'Save':'Save'}</button>
+  <div style="display:flex;gap:6px;margin-top:12px"><button class="add-set" style="flex:1" onclick="closeMobSetup();openMobLibrary()">📚 Library</button><button class="add-set" style="flex:1" onclick="openMediaUpload()">🎥 My clips</button></div>
+  <button class="btn btn-p" style="margin-top:10px;background:#14b8a6" onclick="closeMobSetup()">Save</button>
   ${r.on!==false&&(r.areas||[]).length?`<button onclick="mobSet('off')" style="width:100%;background:none;border:none;color:var(--t2);font-size:12px;margin-top:8px;cursor:pointer">Turn mobility routines off</button>`:''}`;
 }
 function openMobSetup(){
@@ -10920,6 +10957,137 @@ function mobChiroAdd(){
   _mobSetupRedraw();showToast('Added to your routine','#14b8a6');
 }
 function mobChiroDel(id){const r=_rehab();if(!r)return;r.chiro=(r.chiro||[]).filter(c=>c.id!==id);DB.set('rehab',r);_mobSetupRedraw();}
+
+/* v4.13 LIBRARY, ROUTINES AND YOUR CLIPS ─────────────────────────────────────────────── */
+function _mobTemplates(){return[...MOB_PRESETS,...((DB.get('mob_templates',[])||[]).filter(t=>t&&t.id&&Array.isArray(t.ex)))];}
+function mobUseTemplate(ds,tid){
+  const t=_mobTemplates().find(x=>x.id===tid);if(!t)return;
+  const m=_mobDay(ds,true)||{ex:[],done:[],p0:null,p1:null};
+  m.ex=t.ex.filter(id=>MOB_EX[id]||((_rehab()||{}).chiro||[]).some(c=>c.id===id));m.done=(m.done||[]).filter(id=>m.ex.includes(id));m.tpl=t.id;
+  DB.set('mob_'+ds,m);_mobRedraw(ds);showToast(`🧘 ${t.name}: ${m.ex.length} exercises`,'#14b8a6');
+}
+// Browse every mobility exercise, filter by area and equipment, and build a routine.
+function openMobLibrary(ds){
+  S.mobLib={ds:ds||fd(new Date()),area:'hip',eq:'any',own:true,build:(_mobDay(ds||fd(new Date()),false)||{}).ex?.slice()||[]};
+  document.getElementById('moblib-modal')?.remove();
+  const md=document.createElement('div');md.className='swap-modal';md.id='moblib-modal';
+  md.innerHTML=`<div class="swap-ov" onclick="closeMobLibrary()"></div><div class="swap-sheet">${_mobLibHtml()}</div>`;
+  document.body.appendChild(md);requestAnimationFrame(()=>md.classList.add('on'));
+}
+function _mobLibRedraw(){const sh=document.querySelector('#moblib-modal .swap-sheet');if(sh){const y=sh.scrollTop;sh.innerHTML=_mobLibHtml();sh.scrollTop=y;}}
+function closeMobLibrary(){const md=document.getElementById('moblib-modal');if(md){md.classList.remove('on');setTimeout(()=>md.remove(),300);}}
+function mobLibSet(k,v){S.mobLib[k]=v;_mobLibRedraw();}
+function mobLibToggle(id){const b=S.mobLib.build,i=b.indexOf(id);if(i>=0)b.splice(i,1);else b.push(id);_mobLibRedraw();}
+const _MOB_EQF={any:'Any equipment',none:'No equipment',band:'Band',kettlebell:'Kettlebell',bench:'Bench or box'};
+function _mobLibHtml(){
+  const L=S.mobLib,chip=(on,label,fn)=>`<button onclick="${fn}" style="flex:0 0 auto;border:1px solid ${on?'#14b8a6':'var(--bord)'};background:${on?'rgba(20,184,166,.18)':'var(--s2)'};color:${on?'#14b8a6':'var(--t2)'};border-radius:999px;font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer">${label}</button>`;
+  const ids=Object.keys(MOB_EX).filter(id=>{const m=MOB_EX[id];
+    if(L.own&&!m.own)return false;
+    if(L.area!=='all'&&!m.a.includes(L.area))return false;
+    if(L.eq==='none')return!m.eq.length;
+    if(L.eq!=='any')return m.eq.some(e=>String(e).split('|').some(x=>x===L.eq||(L.eq==='band'&&x==='mini_band')));
+    return true;}).sort((x,y)=>['mob','act','str','stretch'].indexOf(MOB_EX[x].k)-['mob','act','str','stretch'].indexOf(MOB_EX[y].k));
+  return`<div class="swap-title">📚 Mobility library</div>
+  <div style="display:flex;gap:6px;overflow-x:auto;padding-bottom:4px">${chip(L.area==='all','All areas',"mobLibSet('area','all')")}${Object.entries(MOB_AREAS).map(([k,l])=>chip(L.area===k,l,`mobLibSet('area','${k}')`)).join('')}</div>
+  <div style="display:flex;gap:6px;overflow-x:auto;padding:4px 0">${Object.entries(_MOB_EQF).map(([k,l])=>chip(L.eq===k,l,`mobLibSet('eq','${k}')`)).join('')}</div>
+  <div style="display:flex;gap:6px;padding:4px 0 6px">${chip(L.own,'🎥 My clips only',`mobLibSet('own',${!L.own})`)}</div>
+  <div style="font-size:11px;color:var(--t2);margin-bottom:4px">${ids.length} exercise${ids.length===1?'':'s'} · tap ＋ to add to the routine</div>
+  ${ids.map(id=>{const m=MOB_EX[id],on=L.build.includes(id);return`<div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-top:1px solid var(--bord)">
+    <button onclick="openVid('${id}')" style="flex-shrink:0;width:44px;height:44px;border-radius:10px;border:1px solid var(--bord);background:var(--s2);color:var(--al);font-size:16px;cursor:pointer">▶</button>
+    <div style="flex:1;min-width:0"><div style="font-size:14px;font-weight:700">${_esc(m.n)}${m.own?' <span style="font-size:10px;color:#14b8a6">🎥 YOURS</span>':''}</div>
+      <div style="font-size:12px;color:var(--t2);line-height:1.4;margin-top:2px">${_esc(m.own?m.p:m.c)}</div>
+      <div style="font-size:11px;color:#14b8a6;font-weight:700;margin-top:3px">${_esc(m.d)} · ${MOB_KIND[m.k]} · ${_esc(m.eqL||(m.eq.length?m.eq.map(e=>String(e).split('|').map(x=>MOB_KIT[x]||x).join(' or ')).join(', '):'No equipment'))}</div></div>
+    <button onclick="mobLibToggle('${id}')" style="flex-shrink:0;border:1px solid ${on?'#14b8a6':'var(--bord)'};background:${on?'#14b8a6':'var(--s2)'};color:${on?'#fff':'var(--al)'};border-radius:9px;font-size:13px;font-weight:800;padding:6px 10px;cursor:pointer">${on?'✓':'＋'}</button>
+  </div>`;}).join('')}
+  <div style="position:sticky;bottom:0;background:var(--s1);padding-top:10px;border-top:1px solid var(--bord)">
+    <div style="font-size:12px;font-weight:700;margin-bottom:6px">Your routine: ${L.build.length} exercise${L.build.length===1?'':'s'}${L.build.length?' · '+L.build.map(id=>_esc((MOB_EX[id]||{}).n||'')).join(', '):''}</div>
+    <div style="display:flex;gap:6px"><button class="add-set" style="flex:1" ${L.build.length?'':'disabled'} onclick="mobLibSave()">💾 Save as…</button><button class="btn btn-p" style="flex:2;margin:0;background:#14b8a6" ${L.build.length?'':'disabled'} onclick="mobLibUse()">Use for ${L.ds===fd(new Date())?'today':_dayLbl(L.ds)}</button></div>
+  </div>`;
+}
+function mobLibUse(){
+  const L=S.mobLib;if(!L.build.length)return;
+  const m=_mobDay(L.ds,true)||{ex:[],done:[],p0:null,p1:null};m.ex=L.build.slice();m.done=(m.done||[]).filter(id=>m.ex.includes(id));delete m.tpl;
+  DB.set('mob_'+L.ds,m);closeMobLibrary();if(document.getElementById('mob-modal'))_mobRedraw(L.ds);else openMob(L.ds);
+}
+function mobLibSave(){
+  const L=S.mobLib;if(!L.build.length)return;
+  const name=(prompt('Name this routine (e.g. Morning hip reset):','')||'').trim().slice(0,40);if(!name)return;
+  const t=DB.get('mob_templates',[])||[];t.push({id:'t_'+Date.now().toString(36),name,ex:L.build.slice()});DB.set('mob_templates',t);debouncedSync();
+  showToast(`💾 Saved "${name}" to your routines`,'#14b8a6');
+}
+// Play one of your clips. Fetched with your sign-in (never a public link), then kept on this
+// device (Cache Storage 'tb-media') so it plays instantly and offline the next time.
+async function _mediaBlobUrl(name){
+  const key='https://tb-media.local/'+encodeURIComponent(name);
+  let c=null;try{c=await caches.open('tb-media');const hit=await c.match(key);if(hit)return URL.createObjectURL(await hit.blob());}catch(_){}
+  const u=_fbAuth&&_fbAuth.currentUser;if(!u)throw new Error('Sign in to play your clips');
+  const r=await fetch(GEMINI_PROXY+'/media/'+encodeURIComponent(name),{headers:{Authorization:'Bearer '+await u.getIdToken()}});
+  if(r.status===404)throw new Error('This clip hasn\'t been uploaded yet');
+  if(!r.ok)throw new Error('Couldn\'t load the clip ('+r.status+')');
+  const blob=await r.blob();
+  try{if(c)await c.put(key,new Response(blob,{headers:{'Content-Type':'video/mp4'}}));}catch(_){}
+  return URL.createObjectURL(blob);
+}
+async function _openOwnClip(id){
+  const m=MOB_EX[id];if(!m)return;
+  document.getElementById('vid-modal')?.remove();
+  const modal=document.createElement('div');modal.id='vid-modal';
+  modal.style.cssText='position:fixed;inset:0;z-index:400;display:flex;flex-direction:column;align-items:center;justify-content:flex-end';
+  modal.innerHTML=`<div onclick="closeVid()" style="position:absolute;inset:0;background:rgba(0,0,0,.72);backdrop-filter:blur(6px)"></div>
+<div style="position:relative;background:var(--s1);border-radius:24px 24px 0 0;width:100%;max-width:430px;max-height:92vh;overflow-y:auto;padding:18px 16px calc(var(--sb,0px) + 18px);z-index:1">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px"><div style="font-size:16px;font-weight:800">${_esc(m.n)}</div>
+  <button onclick="closeVid()" style="background:var(--s2);border:none;border-radius:8px;color:var(--t2);font-size:18px;line-height:1;padding:6px 10px;cursor:pointer">✕</button></div>
+  <div style="font-size:12px;color:var(--t2);margin-bottom:4px">${_esc(m.p||'')}</div>
+  <div style="font-size:12px;color:#14b8a6;font-weight:700;margin-bottom:12px">${_esc(m.d)} · Equipment: ${_esc(m.eqL||'None')}</div>
+  <div id="vid-body"><div style="text-align:center;padding:48px 0;color:var(--t2);font-size:13px">⏳ Loading your clip…</div></div>
+</div>`;
+  document.body.appendChild(modal);
+  try{
+    const src=await _mediaBlobUrl(m.vid);
+    const b=document.getElementById('vid-body');if(!b){URL.revokeObjectURL(src);return;}
+    b.innerHTML=`<video src="${src}" controls playsinline autoplay style="width:100%;max-height:60vh;border-radius:14px;background:#000"></video>`;
+    modal._src=src;
+  }catch(e){const b=document.getElementById('vid-body');if(b)b.innerHTML=`<div style="text-align:center;padding:30px 10px;color:var(--t2);font-size:13px">${_esc(e.message||String(e))}</div>`;}
+}
+// Upload your clips (Settings → mobility set-up). Files are stored under their own names.
+function openMediaUpload(){
+  document.getElementById('media-modal')?.remove();
+  const md=document.createElement('div');md.className='swap-modal';md.id='media-modal';
+  md.innerHTML=`<div class="swap-ov" onclick="document.getElementById('media-modal').remove()"></div><div class="swap-sheet">
+  <div class="swap-title">🎥 My exercise clips</div>
+  <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-bottom:10px">Pick your clip files (up to 25 MB each). They're kept private: only you, signed in, can play them.</div>
+  <input id="media-files" type="file" accept="video/mp4" multiple style="width:100%;margin-bottom:10px">
+  <button class="btn btn-p" style="margin:0 0 10px;background:#14b8a6" onclick="mediaUploadGo()">Upload</button>
+  <div id="media-status" style="font-size:12px;line-height:1.6"></div>
+  <button class="add-set" style="margin-top:8px" onclick="mediaListShow()">Which clips are uploaded?</button></div>`;
+  document.body.appendChild(md);requestAnimationFrame(()=>md.classList.add('on'));
+}
+async function _mediaAuth(){const u=_fbAuth&&_fbAuth.currentUser;if(!u)throw new Error('Sign in first');return{Authorization:'Bearer '+await u.getIdToken()};}
+async function mediaUploadGo(){
+  const files=[...(document.getElementById('media-files')?.files||[])],st=document.getElementById('media-status');if(!files.length||!st)return;
+  st.innerHTML='';let ok=0;
+  for(const f of files){
+    const line=document.createElement('div');line.textContent=`⏳ ${f.name}`;st.appendChild(line);
+    try{
+      if(f.size>25*1024*1024)throw new Error('over 25 MB');
+      const name=f.name.replace(/[^A-Za-z0-9._-]/g,'-');
+      const r=await fetch(GEMINI_PROXY+'/media/'+encodeURIComponent(name),{method:'PUT',headers:{...(await _mediaAuth()),'Content-Type':f.type||'video/mp4'},body:f});
+      if(!r.ok)throw new Error('error '+r.status);
+      line.textContent=`✅ ${f.name} (${(f.size/1048576).toFixed(1)} MB)`;ok++;
+      try{const c=await caches.open('tb-media');await c.delete('https://tb-media.local/'+encodeURIComponent(name));}catch(_){}
+    }catch(e){line.textContent=`⚠️ ${f.name}: ${e.message||e}`;}
+  }
+  showToast(`🎥 ${ok} of ${files.length} clips uploaded`,ok===files.length?'var(--grn)':'var(--amb)');
+}
+async function mediaListShow(){
+  const st=document.getElementById('media-status');if(!st)return;st.textContent='Checking…';
+  try{
+    const r=await fetch(GEMINI_PROXY+'/media',{headers:await _mediaAuth()});const j=await r.json();
+    const have=new Set((j.files||[]).map(f=>f.name));
+    const own=Object.values(MOB_OWN);
+    st.innerHTML=own.map(m=>`${have.has(m.vid)?'✅':'⬜'} ${_esc(m.n)}`).join('<br>')+`<br><span style="color:var(--t2)">${own.filter(m=>have.has(m.vid)).length} of ${own.length} uploaded</span>`;
+  }catch(e){st.textContent='Couldn\'t check: '+(e.message||e);}
+}
 
 function rRestCard(){
   return`<div class="rest-card">
