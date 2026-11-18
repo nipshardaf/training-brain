@@ -1423,10 +1423,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.14';
+const APP_VERSION='4.15';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.15',d:'Intervals no longer tell you to push when your watts are right',det:'In an interval the watts are the target, and heart rate is now only an upper limit (for example "heart rate under 156"). Heart rate takes 4 to 5 minutes to catch up with a hard effort, so the old range made the app say "push a bit" for most of a 7-minute interval even when you were riding exactly the right watts. You still get "ease off" if your heart rate goes over the limit. Easy steady parts led by heart rate keep their full range.'},
   {v:"4.14",d:"Heart rate and time stay on screen while you ride",det:"During a ride, a small box in the top-right corner always shows your heart rate (green in the zone, amber low, red high), the time left in the current step and the ride time, so you never have to scroll down to check them."},
   {v:'4.13',d:'Your own hip and knee clips are in the app, with ready-made routines',det:'Your 18 exercise videos (9 for the hips, 9 for the knees) are now mobility exercises in the app, each with what it is for, the equipment it needs, a suggested dose and your clip on the ▶ button. They are private: only you, signed in, can play them, and each clip stays on your phone after the first play. In today\'s mobility routine, tap Hip reset, Knee strength or Hip + knee to load a ready-made day built from your clips, or open the Library to filter by area (hips, knees and more) and by equipment (none, band, kettlebell, bench), add exercises with ＋, use them for today or any day, and save your own routines. Your clips are picked first in the daily routine. Set up mobility now also knows about a box or bench and a kettlebell.'},
   {v:'4.12',d:'The coaches now see your sleep, and the gym eases you back in after a break',det:'Your watch sleep, HRV and resting heart rate now come in from intervals.icu every day. The AI Coach, Ask the Coach and the daily notes see last night and your week, and plan an easier day after a short night or a poor recovery reading. The morning check-in shows how long you slept and suggests Tired after a short night. And a break from the gym now counts even if you kept riding: after 2 or more weeks without lifting the app offers a comeback (weights eased about 15 to 20%), and the coaches treat your first sessions back as a return, at about 80% of your old weights with fewer sets, so the first day back doesn\'t wreck you.'},
@@ -9579,8 +9580,12 @@ function _rideLthr(){
 function _rideStepTargets(x){
   if(x.w)return{wLo:x.w,wHi:x.w,hLo:0,hHi:0}; // FTP test steps are in plain watts
   const ftp=_rideFtp(),L=_rideLthr();
+  // v4.15: when watts set the step (an interval, or any step under 5 min), heart rate is only
+  // a ceiling. It lags 4-5 min behind the effort, so a floor said "push a bit" for most of a
+  // 7-min interval ridden at exactly the right watts. Steps led by heart rate keep the band.
+  const capOnly=!!ftp&&(x.lo>=0.76||x.sec<300);
   return{wLo:ftp?Math.round(ftp*x.lo):0,wHi:ftp?Math.round(ftp*x.hi):0,
-    hLo:L&&x.z?Math.round(L*x.z[0]):x.h1,hHi:L&&x.z?Math.round(L*x.z[1]):x.h2};
+    hLo:capOnly?0:(L&&x.z?Math.round(L*x.z[0]):x.h1),hHi:L&&x.z?Math.round(L*x.z[1]):x.h2};
 }
 // What you're riding: today's workout, any library workout, or a free ride with an
 // optional goal (time, calories, or a heart-rate zone).
