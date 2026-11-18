@@ -8,6 +8,7 @@ path: a space breaks ComfyUI custom nodes). Copy at `H:\AI\Training Brain\docs\T
 
 
 ## Current state — READ FIRST (updated 2026-10-02)
+- v4.14: ride HUD #rd-hud (body-level, position:fixed top-right; HR coloured by zone, step left, ride time), filled in _rideDraw, hidden in _renderInner off the ride screen; body.rd-riding pads the header (portrait) or .rd-side (landscape) so it covers nothing at scroll 0.
 
 Two Claude chats work on this repo, and this section is how they stay in sync:
 - **Local PC chat** ("Training Brain — Apple Watch app", runs on the user's Windows PC,

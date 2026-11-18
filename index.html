@@ -62,6 +62,11 @@ body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!i
 .set-adv>summary::-webkit-details-marker{display:none}
 .set-adv-sub{font-size:11px;font-weight:600;color:var(--t2)}
 .set-adv[open]{padding-bottom:6px}
+#rd-hud{position:fixed;top:calc(var(--st) + 8px);right:calc(env(safe-area-inset-right,0px) + 10px);z-index:900;display:none;gap:12px;align-items:center;background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:5px 12px;box-shadow:0 4px 18px rgba(0,0,0,.3);font-variant-numeric:tabular-nums;pointer-events:none}
+#rd-hud .h{text-align:center;line-height:1.05}
+#rd-hud b{font-size:26px;font-weight:800;display:block}
+#rd-hud i{font-style:normal;font-size:9px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+body.rd-riding .ride-screen .day-hdr{padding-right:200px}
 .rd-a{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .rd-b{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .rd-t{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
@@ -78,6 +83,8 @@ body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!i
   .rd-v{font-size:min(42px,4.4vw)}
   .rd-b .rd-v{font-size:20px}
   .rd-extra{display:none}
+  body.rd-riding .rd-side{padding-top:22px}
+  body.rd-riding .ride-screen .day-hdr{padding-right:0}
 }
 
 /* reusable card surface — extracted from a style string repeated 21× */
@@ -1416,10 +1423,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.13';
+const APP_VERSION='4.14';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:"4.14",d:"Heart rate and time stay on screen while you ride",det:"During a ride, a small box in the top-right corner always shows your heart rate (green in the zone, amber low, red high), the time left in the current step and the ride time, so you never have to scroll down to check them."},
   {v:'4.13',d:'Your own hip and knee clips are in the app, with ready-made routines',det:'Your 18 exercise videos (9 for the hips, 9 for the knees) are now mobility exercises in the app, each with what it is for, the equipment it needs, a suggested dose and your clip on the ▶ button. They are private: only you, signed in, can play them, and each clip stays on your phone after the first play. In today\'s mobility routine, tap Hip reset, Knee strength or Hip + knee to load a ready-made day built from your clips, or open the Library to filter by area (hips, knees and more) and by equipment (none, band, kettlebell, bench), add exercises with ＋, use them for today or any day, and save your own routines. Your clips are picked first in the daily routine. Set up mobility now also knows about a box or bench and a kettlebell.'},
   {v:'4.12',d:'The coaches now see your sleep, and the gym eases you back in after a break',det:'Your watch sleep, HRV and resting heart rate now come in from intervals.icu every day. The AI Coach, Ask the Coach and the daily notes see last night and your week, and plan an easier day after a short night or a poor recovery reading. The morning check-in shows how long you slept and suggests Tired after a short night. And a break from the gym now counts even if you kept riding: after 2 or more weeks without lifting the app offers a comeback (weights eased about 15 to 20%), and the coaches treat your first sessions back as a return, at about 80% of your old weights with fewer sets, so the first day back doesn\'t wreck you.'},
   {v:'4.11',d:'The FTP test no longer says it takes 45 minutes',det:'The test showed 42 steps and 45 minutes, its longest possible length if you could keep going to about 470 W. It actually ends when you can\'t hold the watts, usually after 15 to 20 minutes, so that is what it says now, and the ride screen no longer counts down a 45-minute workout during the test.'},
@@ -8794,6 +8802,7 @@ function _renderInner(){
   else if(S.screen==='prs')el.innerHTML=rPRs();
   else if(S.screen==='review')el.innerHTML=rReview();
   else if(S.screen==='ride'){el.innerHTML=rRide();_rideDraw();}
+  if(S.screen!=='ride'){const h=document.getElementById('rd-hud');if(h)h.style.display='none';document.body.classList.remove("rd-riding");}
   else if(S.screen==='settings')el.innerHTML=rSettings();
   bindEnergy();
   loadAllGifs();
@@ -10064,6 +10073,14 @@ function _rideDraw(){
   set('rd-avg',Ride.samples.length?st.avgW:'–');
   set('rd-kcal',Math.round(Ride.kcal));
   set('rd-kcal-l',Ride.kcalSrc==='hr'?'Calories · HR':'Calories');
+  // v4.14: heart rate and time pinned top-right while riding, so nothing needs scrolling
+  {const live=Ride.state!=='idle'&&Ride.state!=='done';let hud=$('rd-hud');
+   if(!hud&&live){hud=document.createElement('div');hud.id='rd-hud';document.body.appendChild(hud);}
+   document.body.classList.toggle("rd-riding",live);
+   if(hud){hud.style.display=live?'flex':'none';
+     if(live){const hc=he?he.style.color:'',stp=sn&&sn.step&&!sn.done&&!(Ride.prog&&Ride.prog.test)?_mmss(sn.left):null;
+       const k=[hr,hc,Ride.elapsed|0,stp,Ride.state].join('|');
+       if(hud._k!==k){hud._k=k;hud.innerHTML=`<div class="h"><b style="color:${hc||'var(--txt)'}">${hr||'–'}</b><i>❤️ bpm</i></div>${stp?`<div class="h"><b>${stp}</b><i>Step left</i></div>`:''}<div class="h"><b>${_mmss(Ride.elapsed)}</b><i>${Ride.state==='paused'?'⏸ Paused':'⏱ Time'}</i></div>`;}}}}
   const chip=(on,txt,act,btn)=>`<div style="flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--s2);border:1px solid ${on==='on'?'var(--grn)':on==='lost'?'var(--amb)':'var(--bord)'};border-radius:12px;padding:8px 10px">
     <span style="flex:1;min-width:0;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${txt}</span>
     ${on==='on'?'':`<button onclick="${act}" style="background:var(--acc);border:none;border-radius:8px;color:#fff;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;flex-shrink:0">${btn}</button>`}</div>`;
