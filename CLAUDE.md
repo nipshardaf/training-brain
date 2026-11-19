@@ -8,6 +8,7 @@ path: a space breaks ComfyUI custom nodes). Copy at `H:\AI\Training Brain\docs\T
 
 
 ## Current state — READ FIRST (updated 2026-10-02)
+- v4.16 (handoff 18 Nov): rest bar (#rest-bar, z 390, fixed bottom) covered the bottom of Log sets sheets (z 200): last set row, Add/Remove set, Done. Most visible on the last exercise, opened right after the previous one started a rest. body:has(#rest-bar) pads .swap-sheet (sb+104px) and .screen (sb+170px). Rest buttons now say "−15 sec" / "+15 sec" (tighter padding, fits 320px).
 - v4.15: _rideStepTargets returns hLo 0 (HR is a ceiling only) when an FTP is set and the step is watt-led (lo>=0.76 or under 5 min); HR-led easy steps (_rideHrLed: lo<0.76, 5+ min) keep the band. Fixes "push a bit" through 7-min Brisk intervals ridden on target (17 Nov ride).
 - v4.14: ride HUD #rd-hud (body-level, position:fixed top-right; HR coloured by zone, step left, ride time), filled in _rideDraw, hidden in _renderInner off the ride screen; body.rd-riding pads the header (portrait) or .rd-side (landscape) so it covers nothing at scroll 0.
 

@@ -54,6 +54,10 @@ body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSys
 .screen{max-width:430px;margin:0 auto;padding:calc(var(--st) + 18px) calc(16px + var(--sr)) calc(var(--sb) + 88px) calc(16px + var(--sl));background:var(--bg)}
 /* v3.51 Ride screen: big tiles in portrait; on a phone on its side the numbers go across the top and the controls into a column on the right */
 /* v3.93: a toast over an open bottom sheet covered its buttons; move it to the top */
+/* v4.16: the rest bar sits above bottom sheets and the page; leave room under it so the last
+   set rows, Add/Remove set and Done (and the last exercise card) can always scroll clear of it */
+body:has(#rest-bar) .swap-modal .swap-sheet{padding-bottom:calc(var(--sb) + 104px)}
+body:has(#rest-bar) .screen{padding-bottom:calc(var(--sb) + 170px)}
 body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!important;bottom:auto!important}
 .set-grp{font-size:15px;font-weight:800;color:var(--txt);margin:28px 4px 0;padding-top:16px;border-top:1px solid var(--bord)}
 .set-grp.first{margin-top:14px;padding-top:0;border-top:none}
@@ -1423,10 +1427,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.15';
+const APP_VERSION='4.16';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.16',d:'Rest timer buttons say "sec", and the rest bar no longer hides your sets',det:'The rest timer buttons now read −15 sec and +15 sec, so they don\'t look like weight. And while the rest timer was running, the bar at the bottom sat on top of the Log sets panel and covered its last set, Add/Remove set and Done. That hit the last exercise most, since its panel opens right after the previous exercise\'s rest starts. The panel and the day page now leave room under the bar, so everything scrolls clear of it.'},
   {v:'4.15',d:'Intervals no longer tell you to push when your watts are right',det:'In an interval the watts are the target, and heart rate is now only an upper limit (for example "heart rate under 156"). Heart rate takes 4 to 5 minutes to catch up with a hard effort, so the old range made the app say "push a bit" for most of a 7-minute interval even when you were riding exactly the right watts. You still get "ease off" if your heart rate goes over the limit. Easy steady parts led by heart rate keep their full range.'},
   {v:"4.14",d:"Heart rate and time stay on screen while you ride",det:"During a ride, a small box in the top-right corner always shows your heart rate (green in the zone, amber low, red high), the time left in the current step and the ride time, so you never have to scroll down to check them."},
   {v:'4.13',d:'Your own hip and knee clips are in the app, with ready-made routines',det:'Your 18 exercise videos (9 for the hips, 9 for the knees) are now mobility exercises in the app, each with what it is for, the equipment it needs, a suggested dose and your clip on the ▶ button. They are private: only you, signed in, can play them, and each clip stays on your phone after the first play. In today\'s mobility routine, tap Hip reset, Knee strength or Hip + knee to load a ready-made day built from your clips, or open the Library to filter by area (hips, knees and more) and by equipment (none, band, kettlebell, bench), add exercises with ＋, use them for today or any day, and save your own routines. Your clips are picked first in the daily routine. Set up mobility now also knows about a box or bench and a kettlebell.'},
@@ -13594,12 +13599,12 @@ function _restShow(){
   let b=document.getElementById('rest-bar');
   if(!b){
     b=document.createElement('div');b.id='rest-bar';
-    b.style.cssText='position:fixed;left:12px;right:12px;z-index:390;background:var(--s1);border:1px solid var(--bord);border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.35);padding:10px 10px 12px 14px;display:flex;align-items:center;gap:8px;overflow:hidden';
-    const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;font-weight:800;padding:8px 9px;cursor:pointer;flex-shrink:0;font-family:inherit';
-    b.innerHTML=`<div id="rest-t" style="font-size:24px;font-weight:900;font-variant-numeric:tabular-nums;min-width:58px">0:00</div>
+    b.style.cssText='position:fixed;left:12px;right:12px;z-index:390;background:var(--s1);border:1px solid var(--bord);border-radius:16px;box-shadow:0 6px 24px rgba(0,0,0,.35);padding:10px 8px 12px 12px;display:flex;align-items:center;gap:6px;overflow:hidden';
+    const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:13px;font-weight:800;padding:8px 7px;cursor:pointer;flex-shrink:0;font-family:inherit;white-space:nowrap';
+    b.innerHTML=`<div id="rest-t" style="font-size:22px;font-weight:900;font-variant-numeric:tabular-nums;min-width:50px">0:00</div>
       <div style="flex:1;min-width:0"><div id="rest-h" style="font-size:10px;font-weight:800;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">Rest</div>
       <div id="rest-l" style="font-size:12px;color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis"></div></div>
-      <button onclick="restAdjust(-15)" style="${sb}">−15</button><button onclick="restAdjust(15)" style="${sb}">+15</button>
+      <button onclick="restAdjust(-15)" aria-label="15 seconds less rest" style="${sb}">−15 sec</button><button onclick="restAdjust(15)" aria-label="15 seconds more rest" style="${sb}">+15 sec</button>
       <button onclick="restStop()" aria-label="Skip rest" style="${sb}">Skip</button>
       <div id="rest-p" style="position:absolute;left:0;bottom:0;height:3px;background:var(--acc);width:0"></div>`;
     document.body.appendChild(b);
