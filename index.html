@@ -1436,10 +1436,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.18';
+const APP_VERSION='4.19';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.19',d:'One tap for an easy fat-burn ride',det:'The Ride screen now has a 🔥 Easy fat burn ride at the top. It keeps your heart rate low in Zone 2 (about 72 to 80% of your threshold heart rate) and auto resistance sets the bike for you, so it stays low effort however long you ride: you just pedal and stop when you like. It eases in gently over the first 5 minutes.'},
   {v:'4.18',d:'Back at the gym: the sets are pre-filled with the eased weights the coach gives',det:'After 2 or more weeks without lifting, the coach said an eased weight (for example Face Pull 40 lb) but the Log sets panel still filled in the next step up from your last session (60 lb). Now the panel, the target line and the coach all use the same eased weight until you have lifted again, and the target line says why.'},
   {v:'4.17',d:'Nothing at the bottom of the screen hides what you need',det:'A check of everything pinned to the screen after the rest bar fix. While the rest timer runs, the Ask the Coach typing box now sits above the rest bar, and the Undo after removing a set appears above it instead of on top of it. The New version banner moves to the top while a panel is open, so it can\'t cover Done. And the panels for editing a PR, your body weight, bike set-up, goals and gym picker now move up above the iPhone keyboard (like Log sets already did), so you can see what you are typing. The page also leaves room at the bottom for the coach chat bubble.'},
   {v:'4.16',d:'Rest timer buttons say "sec", and the rest bar no longer hides your sets',det:'The rest timer buttons now read −15 sec and +15 sec, so they don\'t look like weight. And while the rest timer was running, the bar at the bottom sat on top of the Log sets panel and covered its last set, Add/Remove set and Done. That hit the last exercise most, since its panel opens right after the previous exercise\'s rest starts. The panel and the day page now leave room under the bar, so everything scrolls clear of it.'},
@@ -9616,7 +9617,7 @@ function ridePick(kind,arg,auto){
   if(mid&&!Ride.changeOpen)return;
   if(mid)return _rideSwitch(kind,arg);
   if(kind==='free'){
-    Ride.prog=null;Ride.goal=arg||null;Ride.name='Free ride';
+    Ride.prog=null;Ride.goal=arg||null;Ride.name=(arg&&arg.name)||'Free ride';
     Ride.auto=!!(arg&&arg.type==='hr');
   }else{
     // v3.62: today's planned workout as is, or any category at your current level.
@@ -9997,6 +9998,11 @@ function _rideGoalHtml(d,hr){
       ${chg?`<button onclick="ridePick('free',{type:'hr',lo:${ez.lo},hi:${ez.hi}});rideChangeOpen(false)" style="width:100%;text-align:left;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.45);border-radius:11px;color:var(--txt);padding:9px 11px;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:700">😌 Make it easy</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Free ride · auto resistance keeps your heart rate ${ez.lo}–${ez.hi}, so you can focus on something else</div></button>
       <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
       ${!chg&&(noFtp||stale)?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
+      ${chg?'':(()=>{ // v4.19: one tap for a low-effort fat-burn ride (bottom of Zone 2, auto resistance)
+        const fb=(L=>L?{lo:Math.round(L*.72),hi:Math.round(L*.80)}:{lo:115,hi:130})(_rideLthr()),on=free&&g&&g.name==='Easy fat burn';
+        return`<button onclick="ridePick('free',{type:'hr',lo:${fb.lo},hi:${fb.hi},name:'Easy fat burn'})" style="width:100%;text-align:left;background:${on?'rgba(249,115,22,.16)':'rgba(249,115,22,.08)'};border:1px solid ${on?'#f97316':'rgba(249,115,22,.4)'};border-radius:11px;color:var(--txt);padding:10px 11px;cursor:pointer;margin-bottom:8px;display:block">
+          <div style="font-size:14px;font-weight:800">${on?'✓ ':''}🔥 Easy fat burn</div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.45;margin-top:2px">Low effort, as long as you like · heart rate ${fb.lo}–${fb.hi} · auto resistance does the work, so you can just pedal (you should be able to talk in full sentences)</div></button>`;})()}
       ${!Ride.plan?(()=>{const P=_bikeTodayPicks();return`<div style="margin-bottom:8px">${P.map((p,i)=>{
         const k=BIKE_CATS[p.cat],on=!!(Ride.prog&&Ride.prog.sug===i),top=i===0;
         return`<button onclick="ridePick('sug',${i})" style="width:100%;text-align:left;background:${on?'rgba(124,58,237,.14)':top?'var(--s2)':'transparent'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:11px;color:var(--txt);padding:${top?'10px 11px':'7px 10px'};cursor:pointer;margin-bottom:6px;display:block">
