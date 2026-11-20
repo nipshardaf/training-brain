@@ -1436,10 +1436,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.19';
+const APP_VERSION='4.20';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.20',d:'Desk ride: cardio you can do while working',det:'A new 💻 Desk ride at the top of the Ride screen (and in Change workout). It holds one light, steady resistance the whole time (about half your FTP, around 70 W), with no steps, no spin-ups and no time limit, so it feels the same minute to minute while you type. Heart rate is only a ceiling: if it goes over about 125 the bike eases off a little and gives it back when you settle. Stop pedalling to type and it goes to its lightest setting, so starting again is easy. The coach doesn\'t interrupt (Ask now still works), and − / + make it lighter or heavier.'},
   {v:'4.19',d:'One tap for an easy fat-burn ride',det:'The Ride screen now has a 🔥 Easy fat burn ride at the top. It keeps your heart rate low in Zone 2 (about 72 to 80% of your threshold heart rate) and auto resistance sets the bike for you, so it stays low effort however long you ride: you just pedal and stop when you like. It eases in gently over the first 5 minutes.'},
   {v:'4.18',d:'Back at the gym: the sets are pre-filled with the eased weights the coach gives',det:'After 2 or more weeks without lifting, the coach said an eased weight (for example Face Pull 40 lb) but the Log sets panel still filled in the next step up from your last session (60 lb). Now the panel, the target line and the coach all use the same eased weight until you have lifted again, and the target line says why.'},
   {v:'4.17',d:'Nothing at the bottom of the screen hides what you need',det:'A check of everything pinned to the screen after the rest bar fix. While the rest timer runs, the Ask the Coach typing box now sits above the rest bar, and the Undo after removing a set appears above it instead of on top of it. The New version banner moves to the top while a panel is open, so it can\'t cover Done. And the panels for editing a PR, your body weight, bike set-up, goals and gym picker now move up above the iPhone keyboard (like Log sets already did), so you can see what you are typing. The page also leaves room at the bottom for the coach chat bubble.'},
@@ -9485,6 +9486,7 @@ async function _rideCoachNow(manual){
 // From _rideTick, once a second while riding.
 function _rideCoachTick(){
   if(!DB.get('ride_coach',true)||S.guest)return;
+  if(!Ride.prog&&Ride.goal&&Ride.goal.type==='desk')return; // v4.20: quiet while you work (Ask now still works)
   const e=Ride.elapsed;
   if(e>=600&&e%600===0)_rideCoachNow(false);
 }
@@ -9618,7 +9620,7 @@ function ridePick(kind,arg,auto){
   if(mid)return _rideSwitch(kind,arg);
   if(kind==='free'){
     Ride.prog=null;Ride.goal=arg||null;Ride.name=(arg&&arg.name)||'Free ride';
-    Ride.auto=!!(arg&&arg.type==='hr');
+    Ride.auto=!!(arg&&(arg.type==='hr'||arg.type==='desk'));
   }else{
     // v3.62: today's planned workout as is, or any category at your current level.
     const w=_rideWorkoutFor(kind,arg);
@@ -9641,7 +9643,7 @@ function _rideSwitch(kind,arg){
     // From a workout with no goal picked, keep auto resistance on at Zone 2.
     if(!arg&&!wasFree&&Ride.auto){const L=_rideLthr();arg=L?{type:'hr',lo:Math.round(L*.75),hi:Math.round(L*.85)}:{type:'hr',lo:120,hi:138};}
     Ride.prog=null;Ride.goal=arg||null;Ride.goalAt=now;Ride.goalKcal=Ride.kcal;
-    Ride.auto=!!(arg&&arg.type==='hr');
+    Ride.auto=!!(arg&&(arg.type==='hr'||arg.type==='desk'));
     if(!wasFree)Ride.name=(Ride.name0||Ride.name)+' → Free ride';
   }else{
     const w=_rideWorkoutFor(kind,arg);
@@ -9694,7 +9696,29 @@ function _rideBeep(n=2){
 // Each second while riding: step changes (beep + new target) and auto resistance.
 // With watts known (an FTP) it holds each step's power; with only a heart-rate
 // goal it nudges the power every 15 s to keep you in the zone.
+// v4.20 Desk ride (20 Nov: a "Steady Ride + quick spins" while working on the laptop was too
+// much: spin-ups and 100-115 W pushed heart rate to 145, and typing stopped the pedals 3 times).
+// One light, steady resistance the whole time; heart rate is only a ceiling (eases 5 W every
+// 30 s over it, gives it back 4 bpm under); stopping to type drops to the lightest setting so
+// starting again is easy. No steps, no nags, the coach stays quiet.
+function _rideDeskTick(d){
+  const g=Ride.goal,hr=_rideHr(d),now=Date.now(),c=d&&d.cad||0;
+  const base=Math.max(40,g.w+(Ride.bias||0));
+  if(hr&&now-(Ride.hrAdjAt||0)>=30000){
+    Ride.hrAdjAt=now;
+    if(hr>g.cap)Ride.hrCut=Math.min(Math.round(base*.4/5)*5,(Ride.hrCut||0)+5);
+    else if(hr<g.cap-4&&Ride.hrCut>0)Ride.hrCut=Math.max(0,Ride.hrCut-5);
+  }
+  if(c<45&&Ride.elapsed>5)Ride.deskIdle=true;else if(c>=55)Ride.deskIdle=false;
+  Ride.targetW=Ride.deskIdle?40:Math.max(40,Math.round((base-(Ride.hrCut||0))/5)*5);
+  if(c>30)Ride.targetW=Math.min(Ride.targetW,Math.max(40,Math.round(40*Math.max(60,c)/9.56/5)*5));
+  if(Ride.auto&&Bike.status==='on')Ride.erg=true;
+  Ride.steadyFrom=Ride.steadyFrom||now;
+}
+function _rideDeskGoal(){const ftp=_rideFtp(),L=_rideLthr();
+  return{type:'desk',w:ftp?Math.max(50,Math.round(ftp*.5/5)*5):70,cap:L?Math.round(L*.75):125,name:'Desk ride'};}
 function _rideAutoTick(d){
+  if(!Ride.prog&&Ride.goal&&Ride.goal.type==='desk')return _rideDeskTick(d);
   const sn=_rideStepNow();
   if(sn&&(sn.i!==Ride.stepIdx||Ride.retarget)){
     const changed=sn.i!==Ride.stepIdx,first=Ride.stepIdx===-1&&Ride.elapsed-(Ride.progAt||0)<=1;
@@ -9998,6 +10022,10 @@ function _rideGoalHtml(d,hr){
       ${chg?`<button onclick="ridePick('free',{type:'hr',lo:${ez.lo},hi:${ez.hi}});rideChangeOpen(false)" style="width:100%;text-align:left;background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.45);border-radius:11px;color:var(--txt);padding:9px 11px;cursor:pointer;margin-bottom:8px"><div style="font-size:13px;font-weight:700">😌 Make it easy</div><div style="font-size:11px;color:var(--t2);margin-top:1px">Free ride · auto resistance keeps your heart rate ${ez.lo}–${ez.hi}, so you can focus on something else</div></button>
       <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
       ${!chg&&(noFtp||stale)?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
+      ${(()=>{const dg=_rideDeskGoal(),on=free&&g&&g.type==='desk'; // v4.20
+        return`<button onclick="ridePick('free',${_esc(JSON.stringify(dg)).replace(/"/g,"'")});${chg?'rideChangeOpen(false)':''}" style="width:100%;text-align:left;background:${on?'rgba(59,130,246,.16)':'rgba(59,130,246,.08)'};border:1px solid ${on?'#3b82f6':'rgba(59,130,246,.4)'};border-radius:11px;color:var(--txt);padding:10px 11px;cursor:pointer;margin-bottom:8px;display:block">
+          <div style="font-size:14px;font-weight:800">${on?'✓ ':''}💻 Desk ride</div>
+          <div style="font-size:11px;color:var(--t2);line-height:1.45;margin-top:2px">For working while you pedal · light, steady ${dg.w} W the whole time · no steps, no time limit · heart rate kept under ${dg.cap} · stop to type and it goes light until you pedal again · coach stays quiet</div></button>`;})()}
       ${chg?'':(()=>{ // v4.19: one tap for a low-effort fat-burn ride (bottom of Zone 2, auto resistance)
         const fb=(L=>L?{lo:Math.round(L*.72),hi:Math.round(L*.80)}:{lo:115,hi:130})(_rideLthr()),on=free&&g&&g.name==='Easy fat burn';
         return`<button onclick="ridePick('free',{type:'hr',lo:${fb.lo},hi:${fb.hi},name:'Easy fat burn'})" style="width:100%;text-align:left;background:${on?'rgba(249,115,22,.16)':'rgba(249,115,22,.08)'};border:1px solid ${on?'#f97316':'rgba(249,115,22,.4)'};border-radius:11px;color:var(--txt);padding:10px 11px;cursor:pointer;margin-bottom:8px;display:block">
@@ -10065,6 +10093,11 @@ function _rideGoalHtml(d,hr){
   if(!g)return'';
   if(g.type==='time')return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${Math.round(g.val/60)} min ride</b><span style="font-size:13px;font-weight:700">${(Ride.elapsed-(Ride.goalAt||0))>=g.val?'✅ done!':`${_mmss(g.val-(Ride.elapsed-(Ride.goalAt||0)))} to go`}</span></div>${bar((Ride.elapsed-(Ride.goalAt||0))/g.val,(Ride.elapsed-(Ride.goalAt||0))>=g.val?'var(--grn)':'var(--acc)')}`);
   if(g.type==='kcal'){const k=Math.round(Ride.kcal-(Ride.goalKcal||0));return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🔥 ${g.val} kcal</b><span style="font-size:13px;font-weight:700">${k>=g.val?'✅ done!':`${g.val-k} to go`}</span></div>${bar(k/g.val,k>=g.val?'var(--grn)':'#f97316')}`);}
+  if(g.type==='desk'){
+    const over=hr&&hr>g.cap,idle=Ride.deskIdle;
+    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:14px">💻 Desk ride · ${Math.max(40,g.w+(Ride.bias||0))} W steady</b><span style="font-size:12px;font-weight:700;color:${over?'var(--amb)':'var(--grn)'}">${idle?'⏸ light until you pedal':over?'easing off a little':'✓ easy'}</span></div>
+      <div style="font-size:11px;color:var(--t2);margin-top:3px">Just pedal and work. Heart rate stays under ${g.cap}${Ride.hrCut>0?` (eased ${Ride.hrCut} W)`:''}. − / + if you want it lighter or heavier.</div>`,over?'var(--amb)':'');
+  }
   if(g.type==='hr'){
     const st=!hr?'waiting for heart rate':hr>g.hi?'↓ ease off':hr<g.lo?'↑ push a bit':'✓ in the zone';
     const ok=hr&&hr>=g.lo&&hr<=g.hi;
