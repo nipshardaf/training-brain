@@ -1436,10 +1436,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.17';
+const APP_VERSION='4.18';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.18',d:'Back at the gym: the sets are pre-filled with the eased weights the coach gives',det:'After 2 or more weeks without lifting, the coach said an eased weight (for example Face Pull 40 lb) but the Log sets panel still filled in the next step up from your last session (60 lb). Now the panel, the target line and the coach all use the same eased weight until you have lifted again, and the target line says why.'},
   {v:'4.17',d:'Nothing at the bottom of the screen hides what you need',det:'A check of everything pinned to the screen after the rest bar fix. While the rest timer runs, the Ask the Coach typing box now sits above the rest bar, and the Undo after removing a set appears above it instead of on top of it. The New version banner moves to the top while a panel is open, so it can\'t cover Done. And the panels for editing a PR, your body weight, bike set-up, goals and gym picker now move up above the iPhone keyboard (like Log sets already did), so you can see what you are typing. The page also leaves room at the bottom for the coach chat bubble.'},
   {v:'4.16',d:'Rest timer buttons say "sec", and the rest bar no longer hides your sets',det:'The rest timer buttons now read −15 sec and +15 sec, so they don\'t look like weight. And while the rest timer was running, the bar at the bottom sat on top of the Log sets panel and covered its last set, Add/Remove set and Done. That hit the last exercise most, since its panel opens right after the previous exercise\'s rest starts. The panel and the day page now leave room under the bar, so everything scrolls clear of it.'},
   {v:'4.15',d:'Intervals no longer tell you to push when your watts are right',det:'In an interval the watts are the target, and heart rate is now only an upper limit (for example "heart rate under 156"). Heart rate takes 4 to 5 minutes to catch up with a hard effort, so the old range made the app say "push a bit" for most of a 7-minute interval even when you were riding exactly the right watts. You still get "ease off" if your heart rate goes over the limit. Easy steady parts led by heart rate keep their full range.'},
@@ -13291,7 +13292,41 @@ function _saveLog(){
 //
 // Returns {w, r, change, reason} or null. `change` is a short pill label
 // ("↑ +2.5kg", "→ +1 rep", "hold"). `reason` is human-readable context.
-function computeProgressionTarget(exId,lastSets,mach){
+// v4.18: coming back to the gym. The coach card and AI notes use energyTargets (PR x energy x
+// comeback factor, e.g. Face Pull 40), but the prefill came from computeProgressionTarget, which
+// steps up from the last session as if nothing happened (60). Return mode = comeback block active,
+// or 14+ days since the last gym session (rides don't count). Counted before today so the weights
+// stay eased for every exercise of the first session back, not only until the first tick.
+let _gymLayPreCache={date:'',days:null};
+function _gymLayoffBeforeToday(){
+  const today=fd(new Date());if(_gymLayPreCache.date===today)return _gymLayPreCache.days;
+  let days=null;
+  for(let i=1;i<=120&&days==null;i++){const ds=fd(addDays(new Date(),-i));
+    for(const k of['log_'+ds,'extralog_'+ds]){const lg=DB.get(k,null);if(lg&&(lg.exercises||[]).some(e=>(e.sets||[]).some(x=>x&&x.done))){days=i;break;}}}
+  _gymLayPreCache={date:today,days};return days;
+}
+function _returnFactor(){
+  const cb=_comebackState();if(cb&&cb.factor)return cb.factor;
+  const gd=_gymLayoffBeforeToday();
+  return(gd!=null&&gd>=14)?0.8:1;
+}
+function _returnEase(exId,t,energy){
+  if(!t||t.w===''||t.w==null)return t;
+  const f=_returnFactor();if(f>=1)return t;
+  const w=parseFloat(t.w);if(!(w>0))return t;
+  const assist=!!(EX[exId]&&EX[exId].assist);
+  let cap=null;try{cap=energyTargets(exId,energy||S.energy||'okay').sugW;}catch(_){}
+  let nw;
+  if(cap>0)nw=assist?Math.max(w,cap):Math.min(w,cap); // same number the coach shows
+  else nw=Math.round(w*(assist?2-f:f)/2.5)*2.5;
+  if(nw===w)return t;
+  const gd=_gymLayoffBeforeToday();
+  return{...t,w:nw,change:'eased',reason:`back after ${gd!=null?gd+' days':'a break'} off the gym: eased from ${w} to ${nw}${unit()}, build back over about 2 weeks`};
+}
+function computeProgressionTarget(exId,lastSets,mach,energy){
+  return _returnEase(exId,_progTargetRaw(exId,lastSets,mach),energy);
+}
+function _progTargetRaw(exId,lastSets,mach){
   const goalProfile=getActiveGoalProfile();
   if(!EX[exId])return null;
   const u=unit();
@@ -13355,7 +13390,7 @@ function makeSets(exId,energy,last,mach){
   // v2.66: Use progression target as primary prefill source (replaces the
   // previous "copy last session's values" behavior). AI suggestion still used
   // as a fallback when no last-session data exists.
-  const tgt=computeProgressionTarget(exId,last,mach);
+  const tgt=computeProgressionTarget(exId,last,mach,energy);
   const hasTgt=tgt&&tgt.w!==''&&tgt.w!=null;
   const hasLastData=last&&last.some(s=>s.w);
   const aiSugg=hasLastData?null:(DB.get('ai_week_sugg_'+fd(S.weekStart),null)?.suggestions||{})[exId]||null;
