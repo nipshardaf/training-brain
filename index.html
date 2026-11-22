@@ -107,7 +107,17 @@ body.rd-riding .ride-screen .day-hdr{padding-right:200px}
   .ride-screen .day-hdr{margin-bottom:10px}
   .rd-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
   .rd-main{display:flex;flex-direction:column}
-  body.rd-riding #rd-live{order:-1}
+  body.rd-riding #rd-live{order:-2}
+  #rd-goal{order:-1}
+  #rd-conn{order:5;margin-top:6px}
+  #rd-coach{order:4}
+  /* crucial while riding: this step's target, status and countdown read from across the room */
+  .rd-box{padding:14px 18px;border-width:2px}
+  .rd-sl{font-size:26px!important}
+  .rd-cd{font-size:64px!important;line-height:1}
+  .rd-tg{font-size:26px!important;margin-top:8px!important}
+  .rd-tg b{font-size:30px}
+  .rd-box .rd-tg+div{height:10px!important}
   .rd-a{grid-template-columns:1fr 1.5fr 1fr 1fr;gap:12px;margin-bottom:12px}
   .rd-b{gap:12px;margin-bottom:16px}
   .rd-t{padding:16px 8px;border-radius:18px}
@@ -1454,10 +1464,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.21';
+const APP_VERSION='4.22';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.22',d:'Tablet ride screen: the step and its target first',det:'On a tablet in landscape the current step now sits right under the live numbers, with a big countdown, big target watts and heart rate, and the on-target message. Bike and heart-rate connection moves to the bottom.'},
   {v:'4.21',d:'Tablet bike mode: wide landscape ride screen',det:'On a tablet held in landscape, the Ride screen now uses the whole width: big live numbers (heart rate, time, calories, watts, cadence) at the top while you ride, with the resistance and controls in a side panel. Phones and portrait screens look the same as before.'},
   {v:'4.20',d:'Desk ride: cardio you can do while working',det:'A new 💻 Desk ride at the top of the Ride screen (and in Change workout). It holds one light, steady resistance the whole time (about half your FTP, around 70 W), with no steps, no spin-ups and no time limit, so it feels the same minute to minute while you type. Heart rate is only a ceiling: if it goes over about 125 the bike eases off a little and gives it back when you settle. Stop pedalling to type and it goes to its lightest setting, so starting again is easy. The coach doesn\'t interrupt (Ask now still works), and − / + make it lighter or heavier.'},
   {v:'4.19',d:'One tap for an easy fat-burn ride',det:'The Ride screen now has a 🔥 Easy fat burn ride at the top. It keeps your heart rate low in Zone 2 (about 72 to 80% of your threshold heart rate) and auto resistance sets the bike for you, so it stays low effort however long you ride: you just pedal and stop when you like. It eases in gently over the first 5 minutes.'},
@@ -10027,7 +10038,7 @@ ${navigator.bluetooth?'':`<div style="background:rgba(245,158,11,.1);border:1px 
 const _mmss=t=>`${Math.floor(Math.max(0,t)/60)}:${String(Math.max(0,Math.round(t))%60).padStart(2,'0')}`;
 // Before the ride: what to ride. During it: how you're doing against the goal.
 function _rideGoalHtml(d,hr){
-  const box=(inner,border)=>`<div style="background:var(--s1);border:1px solid ${border||'var(--bord)'};border-radius:14px;padding:10px 12px;margin-bottom:8px">${inner}</div>`;
+  const box=(inner,border)=>`<div class="rd-box" style="background:var(--s1);border:1px solid ${border||'var(--bord)'};border-radius:14px;padding:10px 12px;margin-bottom:8px">${inner}</div>`;
   const bar=(frac,color)=>`<div style="height:6px;background:var(--s2);border-radius:4px;overflow:hidden;margin-top:6px"><div style="height:100%;width:${Math.round(Math.min(1,Math.max(0,frac))*100)}%;background:${color||'var(--acc)'}"></div></div>`;
   if(Ride.state==='idle'||Ride.state==='done'||Ride.changeOpen){
     const chip=(on,label,act)=>`<button onclick="${act}" style="background:${on?'var(--acc)':'var(--s2)'};border:1px solid ${on?'var(--acc)':'var(--bord)'};border-radius:999px;color:${on?'#fff':'var(--txt)'};font-size:12px;font-weight:700;padding:6px 11px;cursor:pointer;margin:0 6px 6px 0">${label}</button>`;
@@ -10096,13 +10107,13 @@ function _rideGoalHtml(d,hr){
     const elapsedAll=sn.total-(sn.total-Ride.elapsed);
     return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
         <div style="min-width:0"><div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">${Ride.prog.test?'FTP test · keep going until you can\'t hold it':`Step ${sn.i+1} of ${Ride.prog.steps.length}`}</div>
-          <div style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(x.label)}</div></div>
-        <div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div></div>
+          <div class="rd-sl" style="font-size:16px;font-weight:800;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${_esc(x.label)}</div></div>
+        <div class="rd-cd" style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div></div>
       ${Ride.hrCut>0?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">❤️ Heart rate high — eased off ${Ride.hrCut} W</div>`:''}
       ${Ride.cadEase>0?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">🔄 Cadence low — eased ${Math.round(Ride.cadEase*100)}% so you don't stall. Spin up and it comes back.</div>`:''}
       ${x.lo>=1.3?`<div style="font-size:12px;font-weight:700;color:var(--grn);margin-top:3px">⚡ Sprint — resistance is fixed, give it everything</div>`
         :tg.wLo&&d&&d.cad>30&&(tg.wLo+Ride.bias-Ride.hrCut)>40*d.cad/9.56*0.97?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">⚙️ At ${Math.round(d.cad)} rpm the bike tops out near ${Math.round(40*d.cad/9.56)} W — spin a little faster</div>`:''}
-      <div style="font-size:12px;margin-top:3px">🎯 ${tg.wLo?`<b>${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W</b> · `:''}❤️ <b>${tg.hLo?`${tg.hLo}–${tg.hHi}`:`under ${tg.hHi}`}</b>${x.cad?` · ${x.cad} rpm`:''}
+      <div class="rd-tg" style="font-size:12px;margin-top:3px">🎯 ${tg.wLo?`<b>${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W</b> · `:''}❤️ <b>${tg.hLo?`${tg.hLo}–${tg.hHi}`:`under ${tg.hHi}`}</b>${x.cad?` · ${x.cad} rpm`:''}
         ${d||hr?` <span style="color:${ok?'var(--grn)':'var(--amb)'};font-weight:700">${ok?'✓ on target':!inH?(hr>tg.hHi?'↓ ease off':'↑ push a bit'):(pw<tg.wLo?'↑ push a bit':'↓ ease off')}</span>`:''}</div>
       ${bar(1-sn.left/x.sec,'var(--acc)')}
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-top:5px"><span>${sn.next?`Next: ${_esc(sn.next.label)} (${Math.round(sn.next.sec/60)} min)`:'Last step'}</span>${Ride.prog.test?'':`<span>${_mmss(sn.total-Ride.elapsed)} left in workout</span>`}</div>
