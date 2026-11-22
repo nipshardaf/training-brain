@@ -100,6 +100,24 @@ body.rd-riding .ride-screen .day-hdr{padding-right:200px}
   body.rd-riding .ride-screen .day-hdr{padding-right:0}
 }
 
+/* v4.21 tablet landscape (bike mode): wide two-column ride screen with big numbers.
+   Phones in landscape keep the rule above (max-height:600px); portrait is unchanged. */
+@media (orientation:landscape) and (min-width:900px) and (min-height:601px){
+  .ride-screen{max-width:none;padding-left:calc(28px + var(--sl));padding-right:calc(28px + var(--sr))}
+  .ride-screen .day-hdr{margin-bottom:10px}
+  .rd-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
+  .rd-main{display:flex;flex-direction:column}
+  body.rd-riding #rd-live{order:-1}
+  .rd-a{grid-template-columns:1fr 1.5fr 1fr 1fr;gap:12px;margin-bottom:12px}
+  .rd-b{gap:12px;margin-bottom:16px}
+  .rd-t{padding:16px 8px;border-radius:18px}
+  .rd-v{font-size:min(60px,4.7vw)}
+  .rd-b .rd-v{font-size:min(46px,3.8vw)}
+  .rd-l{font-size:13px;margin-top:5px}
+  body.rd-riding .ride-screen .day-hdr{padding-right:0}
+  #rd-hud{display:none!important}
+}
+
 /* reusable card surface — extracted from a style string repeated 21× */
 .card{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:14px 15px;margin-bottom:10px}
 
@@ -1436,10 +1454,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.20';
+const APP_VERSION='4.21';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.21',d:'Tablet bike mode: wide landscape ride screen',det:'On a tablet held in landscape, the Ride screen now uses the whole width: big live numbers (heart rate, time, calories, watts, cadence) at the top while you ride, with the resistance and controls in a side panel. Phones and portrait screens look the same as before.'},
   {v:'4.20',d:'Desk ride: cardio you can do while working',det:'A new 💻 Desk ride at the top of the Ride screen (and in Change workout). It holds one light, steady resistance the whole time (about half your FTP, around 70 W), with no steps, no spin-ups and no time limit, so it feels the same minute to minute while you type. Heart rate is only a ceiling: if it goes over about 125 the bike eases off a little and gives it back when you settle. Stop pedalling to type and it goes to its lightest setting, so starting again is easy. The coach doesn\'t interrupt (Ask now still works), and − / + make it lighter or heavier.'},
   {v:'4.19',d:'One tap for an easy fat-burn ride',det:'The Ride screen now has a 🔥 Easy fat burn ride at the top. It keeps your heart rate low in Zone 2 (about 72 to 80% of your threshold heart rate) and auto resistance sets the bike for you, so it stays low effort however long you ride: you just pedal and stop when you like. It eases in gently over the first 5 minutes.'},
   {v:'4.18',d:'Back at the gym: the sets are pre-filled with the eased weights the coach gives',det:'After 2 or more weeks without lifting, the coach said an eased weight (for example Face Pull 40 lb) but the Log sets panel still filled in the next step up from your last session (60 lb). Now the panel, the target line and the coach all use the same eased weight until you have lifted again, and the target line says why.'},
