@@ -60,7 +60,10 @@ body:has(#rest-bar) .swap-modal .swap-sheet{padding-bottom:calc(var(--sb) + 104p
 body:has(#ask-dock>button) .screen{padding-bottom:calc(var(--sb) + 140px)}
 body:has(#rest-bar) .screen{padding-bottom:calc(var(--sb) + 170px)!important}
 /* v4.17: everything else that lives at the bottom of the screen, checked against the rest bar */
+body:has(#rest-bar) #ask-dock>button{bottom:calc(var(--sb) + 92px)!important}
+body:has(.bnav):has(#rest-bar) #ask-dock>button{bottom:calc(var(--sb) + 150px)!important}
 body:has(#rest-bar) #ask-dock>div{padding-bottom:calc(var(--sb) + 96px)!important}
+html.kb-open body:has(.bnav):has(#rest-bar) #ask-dock>div{padding-bottom:calc(var(--sb) + 10px)!important}
 body:has(#rest-bar) #_undo{bottom:calc(var(--sb) + var(--kb,0px) + 96px)!important}
 body:has(.swap-modal.on) #tb-update-toast,body:has(.tb-ov) #tb-update-toast{top:calc(var(--st) + 14px)!important;bottom:auto!important}
 /* v4.17: the other bottom sheets (edit PR, body weight, bike set-up, goals, gym picker...) sit
@@ -79,7 +82,9 @@ body:has(.swap-modal.on) #_toast{top:calc(env(safe-area-inset-top,0px) + 14px)!i
 #rd-hud .h{text-align:center;line-height:1.05}
 #rd-hud b{font-size:26px;font-weight:800;display:block}
 #rd-hud i{font-style:normal;font-size:9px;color:var(--t2);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-body.rd-riding .ride-screen .day-hdr{padding-right:200px}
+.ride-screen #rd-title{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:869px){body.rd-riding .ride-screen .day-hdr{padding-right:185px}}
+@media (max-width:480px){#rd-hud{gap:8px;padding:4px 9px}#rd-hud b{font-size:20px}}
 .rd-a{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px}
 .rd-b{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
 .rd-t{background:var(--s1);border:1px solid var(--bord);border-radius:14px;padding:12px 6px;text-align:center;min-width:0}
@@ -108,22 +113,23 @@ body.rd-riding .ride-screen .day-hdr{padding-right:200px}
   .rd-grid{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:20px;align-items:start}
   .rd-main{display:flex;flex-direction:column}
   body.rd-riding #rd-live{order:-2}
-  #rd-goal{order:-1}
-  #rd-conn{order:5;margin-top:6px}
-  #rd-coach{order:4}
+  body.rd-riding #rd-goal{order:-1}
+  body.rd-riding #rd-coach{order:4}
+  body.rd-riding #rd-conn{order:5;margin-top:6px}
   /* crucial while riding: this step's target, status and countdown read from across the room */
-  .rd-box{padding:14px 18px;border-width:2px}
+  .rd-box{padding:14px 18px!important;border-width:2px!important}
   .rd-sl{font-size:26px!important}
   .rd-cd{font-size:64px!important;line-height:1}
   .rd-tg{font-size:26px!important;margin-top:8px!important}
   .rd-tg b{font-size:30px}
+  .rd-sub{font-size:17px!important;line-height:1.45;margin-top:6px!important}
   .rd-box .rd-tg+div{height:10px!important}
   .rd-a{grid-template-columns:1fr 1.5fr 1fr 1fr;gap:12px;margin-bottom:12px}
   .rd-b{gap:12px;margin-bottom:16px}
   .rd-t{padding:16px 8px;border-radius:18px}
   .rd-v{font-size:min(60px,4.7vw)}
   .rd-b .rd-v{font-size:min(46px,3.8vw)}
-  .rd-l{font-size:13px;margin-top:5px}
+  .rd-l{font-size:12px;margin-top:5px}
   body.rd-riding .ride-screen .day-hdr{padding-right:0}
   #rd-hud{display:none!important}
 }
@@ -1464,10 +1470,11 @@ function coachMsg(e,ct){
 }
 
 /* ── VERSION & CHANGELOG ── */
-const APP_VERSION='4.22';
+const APP_VERSION='4.23';
 // Feature flags — flip to true once the backend setup is finished
 const FEATURE_WEEKLY_REVIEW=true;
 const CHANGELOG=[
+  {v:'4.23',d:'Settings opens again, Desk ride goes truly light when you stop, and phone/tablet ride screens sit cleanly',det:'A review of v4.14 to v4.22 caught and fixed several bugs. (1) Tapping Settings in the bottom bar had stopped opening Settings since v4.14; it works again. (2) On a Desk ride, stopping to type now actually drops the bike to a very light setting (and pauses under 30 rpm, resuming at 45+ rpm instead of 45/55), the Auto resistance button shows up properly and can be turned off cleanly, heart rate turns red if it goes over the ceiling, and switching to Desk ride mid-ride keeps its name. (3) On an iPhone in portrait, the top-right heart rate and time box no longer overlaps the ride title. (4) On a tablet in landscape, step 1 (Connect your bike) now sits above step 2 before you start, the step card gets its larger tablet padding and border, and Desk ride / Easy fat burn / FTP test also show big text. (5) The 💬 Ask the Coach button moves clear of the rest timer bar, closing Exercise Tips no longer sticks banners at the top, and iPhone Safari sheet close buttons and keyboard sizing are more reliable.'},
   {v:'4.22',d:'Tablet ride screen: the step and its target first',det:'On a tablet in landscape the current step now sits right under the live numbers, with a big countdown, big target watts and heart rate, and the on-target message. Bike and heart-rate connection moves to the bottom.'},
   {v:'4.21',d:'Tablet bike mode: wide landscape ride screen',det:'On a tablet held in landscape, the Ride screen now uses the whole width: big live numbers (heart rate, time, calories, watts, cadence) at the top while you ride, with the resistance and controls in a side panel. Phones and portrait screens look the same as before.'},
   {v:'4.20',d:'Desk ride: cardio you can do while working',det:'A new 💻 Desk ride at the top of the Ride screen (and in Change workout). It holds one light, steady resistance the whole time (about half your FTP, around 70 W), with no steps, no spin-ups and no time limit, so it feels the same minute to minute while you type. Heart rate is only a ceiling: if it goes over about 125 the bike eases off a little and gives it back when you settle. Stop pedalling to type and it goes to its lightest setting, so starting again is easy. The coach doesn\'t interrupt (Ask now still works), and − / + make it lighter or heavier.'},
@@ -2145,10 +2152,10 @@ async function openExCoach(id){
 
   let ov=document.getElementById('ex-coach-ov');
   if(!ov){ov=document.createElement('div');ov.id='ex-coach-ov';
-    ov.classList.add('tb-ov');ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:799';
-    ov.onclick=()=>{sheet.style.transform='translateY(100%)';ov.style.display='none';};
+    ov.style.cssText='position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:799';
+    ov.onclick=()=>{sheet.style.transform='translateY(100%)';ov.style.display='none';ov.classList.remove('tb-ov');};
     document.body.appendChild(ov);}
-  ov.style.display='block';
+  ov.classList.add('tb-ov');ov.style.display='block';
 
   function renderSections(text){
     const defs=[
@@ -5722,7 +5729,7 @@ const DB = {
   },
   set:(k,v)=>{
     // Any workout-log write invalidates the memoized gym-set scan (see _scanGymSets)
-    if(k.startsWith('log_')||k.startsWith('extralog_'))_gymScanCache=null;
+    if(k.startsWith('log_')||k.startsWith('extralog_')){_gymScanCache=null;_gymLayCache={date:'',days:null};if(typeof _gymLayPreCache!=='undefined')_gymLayPreCache={date:'',days:null};}
     // ...and the layoff scan, which also reads Strava. Without this the comeback
     // banner keeps the value computed on the FIRST render of the session, before
     // the Strava auto-sync or cloud pull lands — so a ride done during a break
@@ -8851,8 +8858,8 @@ function _renderInner(){
   else if(S.screen==='prs')el.innerHTML=rPRs();
   else if(S.screen==='review')el.innerHTML=rReview();
   else if(S.screen==='ride'){el.innerHTML=rRide();_rideDraw();}
-  if(S.screen!=='ride'){const h=document.getElementById('rd-hud');if(h)h.style.display='none';document.body.classList.remove("rd-riding");}
   else if(S.screen==='settings')el.innerHTML=rSettings();
+  if(S.screen!=='ride'){const h=document.getElementById('rd-hud');if(h)h.style.display='none';document.body.classList.remove("rd-riding");}
   bindEnergy();
   loadAllGifs();
   // Bind scroll observers on dynamic regions that may have just been rendered.
@@ -9132,6 +9139,11 @@ function _rideTick(){
 // Hold a target power: torque = watts × 9.56 ÷ cadence (the bike app's formula),
 // moved by at most 1 N·m a second so the resistance never jumps.
 function _rideErg(d){
+  // v4.23: Desk ride pause (stopped or slow to type) drops straight to light torque (2 N·m),
+  // even at 0 rpm — holding 40 W at <=40 rpm still sent ~9.5 N·m and skipped 0 rpm completely.
+  if(Ride.auto&&Ride.deskIdle&&!Ride.prog&&Ride.goal&&Ride.goal.type==='desk'){
+    const lt=2;Ride.lastTq=lt;_bikeSend(0,0x44,[Math.round(lt*2)]);return;
+  }
   if(!d.cad||!Ride.targetW)return;
   // v3.63 Renpho: the bike's resistance moves one torque step per second while
   // following your cadence — smooth within a step, but too slow for the start of an
@@ -9244,7 +9256,7 @@ function rideStart(){
     // a 50 W cool-down, so the next ride held 50 W and the knob did nothing (test steps hold watts).
     if(Ride.prog&&Ride.prog.test&&Ride.testResult){Ride.prog=null;Ride.goal=null;Ride.name='Free ride';Ride.auto=false;Ride.erg=false;}
     Ride.testResult=null;
-    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;Ride.hrShift=0;Ride.testLowAt=null;
+    Ride.start=Date.now();Ride.elapsed=0;Ride.dist=0;Ride.kj=0;Ride.samples=[];Ride.note='';Ride.stepIdx=-1;Ride.bias=0;Ride.hrCut=0;Ride.kcal=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.levelNote=null;Ride.cadEase=0;Ride.lowCadAt=0;Ride.ergStep=null;Ride.hrShift=0;Ride.testLowAt=null;Ride.deskIdle=false;
     // v3.67: AI Gym's order — display, take control, (R-Q002 N: zero torque), then
     // start — and control is always re-sent, never assumed from an old flag.
     Ride.ctlBad=0;Ride.ctlTries=0;Ride.ctlLost=false;Ride.ctlAt=0;Ride.modeSwapped=false;Bike.sent=[];
@@ -9445,6 +9457,7 @@ function _rideSpeechUnlock(){
 }
 // The heart-rate band this ride is aiming for: the step's or goal's zone, else Zone 2.
 function _rideCoachZone(){
+  if(!Ride.prog&&Ride.goal&&Ride.goal.type==='desk')return{lo:0,hi:Ride.goal.cap,name:'desk ride ceiling'};
   let z=null;try{z=_rideHrZone(_rideStepNow());}catch(_){}
   if(z&&z.hi)return{lo:z.lo||0,hi:z.hi,name:Ride.goal&&Ride.goal.type==='hr'?'your goal zone':'this step\'s zone'};
   const L=_rideLthr();
@@ -9471,7 +9484,7 @@ function _rideCoachCtx(){
     step={label:sn.step.label,left:Math.round(sn.left/60),w:tg.wLo?`${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W`:'',
       hr:tg.hHi?`${tg.hLo?tg.hLo+'–':'under '}${tg.hHi} bpm`:'',hard:sn.step.lo>=0.88};}}catch(_){}
   const g=Ride.goal;
-  const goal=g?g.type==='time'?`${Math.round(g.val/60)} min ride`:g.type==='kcal'?`${g.val} kcal`:g.type==='hr'?`keep ${g.lo}–${g.hi} bpm`:'':'';
+  const goal=g?g.type==='time'?`${Math.round(g.val/60)} min ride`:g.type==='kcal'?`${g.val} kcal`:g.type==='hr'?`keep ${g.lo}–${g.hi} bpm`:g.type==='desk'?`desk ride (${Math.max(40,g.w+(Ride.bias||0))} W, keep heart rate under ${g.cap} bpm)`:'':'';
   const mins=Math.round(win.length/60);
   const line=`Last ${mins} min: ${w.w} W · ${w.hr?w.hr+' bpm':'no heart rate'}${w.inZ!=null&&z?` · ${w.inZ}% in ${z.lo}–${z.hi}`:''}${w.cad?` · ${w.cad} rpm`:''}`;
   return{x,z,w,early,step,goal,mins,line,elapsed:Ride.elapsed,kcal:Math.round(Ride.kcal),name:Ride.name,auto:!!Ride.auto,prev:Ride.coach&&Ride.coach.text||''};
@@ -9549,7 +9562,7 @@ function _rideCoachHtml(){
 function rideDiscard(){
   _bikeSend(0,0x40,[0,0]);
   if(Ride.deposit)rideKnob();
-  Object.assign(Ride,{state:'idle',elapsed:0,dist:0,kj:0,kcal:0,samples:[],note:'',coach:null,coachLog:[]});
+  Object.assign(Ride,{state:'idle',elapsed:0,dist:0,kj:0,kcal:0,samples:[],note:'',coach:null,coachLog:[],deskIdle:false});
   try{localStorage.removeItem('ride_progress');}catch(_){}
   _rideDraw();
 }
@@ -9674,7 +9687,9 @@ function _rideSwitch(kind,arg){
     if(!arg&&!wasFree&&Ride.auto){const L=_rideLthr();arg=L?{type:'hr',lo:Math.round(L*.75),hi:Math.round(L*.85)}:{type:'hr',lo:120,hi:138};}
     Ride.prog=null;Ride.goal=arg||null;Ride.goalAt=now;Ride.goalKcal=Ride.kcal;
     Ride.auto=!!(arg&&(arg.type==='hr'||arg.type==='desk'));
-    if(!wasFree)Ride.name=(Ride.name0||Ride.name)+' → Free ride';
+    const nm=(arg&&arg.name)||'Free ride';
+    if(!wasFree)Ride.name=(Ride.name0||Ride.name)+' → '+nm;
+    else if(arg&&arg.name)Ride.name=nm;
   }else{
     const w=_rideWorkoutFor(kind,arg);
     if(!w)return;
@@ -9688,17 +9703,17 @@ function _rideSwitch(kind,arg){
     Ride.name=w.name===Ride.name0?w.name:(Ride.name0||Ride.name)+' → '+w.name;
   }
   Ride.progAt=now;Ride.stepIdx=-1;Ride.ergStep=null;Ride.sprintSent=false;Ride.retarget=true;
-  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.levelTq=null;Ride.wuW=0;Ride.steadyFrom=0;
+  Ride.bias=0;Ride.hrCut=0;Ride.hrShift=0;Ride.cutPeak=0;Ride.upPeak=0;Ride.hrAdjAt=0;Ride.lvlAt=0;Ride.lvlDir=0;Ride.levelTq=null;Ride.wuW=0;Ride.steadyFrom=0;Ride.deskIdle=false;
   if(Ride.auto&&Bike.status==='on'){Ride.erg=true;_rideTakeControl();}
   else if(!Ride.auto)Ride.erg=false; // free ride without a heart-rate goal: − / + set the resistance yourself
   if(kind!=='free')Ride.changeOpen=false;
-  Ride.note=kind==='free'?'Switched to a free ride.':'Switched to '+Ride.prog.name+'.';
+  Ride.note=kind==='free'?'Switched to '+(arg&&arg.name?arg.name:'a free ride')+'.':'Switched to '+Ride.prog.name+'.';
   const e=document.getElementById('rd-goal');if(e)e._h='';
   _rideDraw();
 }
 function rideAutoToggle(){
   if(!Ride.auto&&Bike.status!=='on'){showToast('Connect the bike first','var(--amb)');return;}
-  Ride.auto=!Ride.auto;Ride.erg=Ride.auto;Ride.steadyFrom=0;
+  Ride.auto=!Ride.auto;Ride.erg=Ride.auto;Ride.steadyFrom=0;if(!Ride.auto)Ride.deskIdle=false;
   if(Ride.auto){
     // v3.86 (21 Oct: manual for the first minutes, then auto): switched on mid-ride, auto
     // starts from the watts you're riding now (last 30 s) and steers from there. Before,
@@ -9732,6 +9747,7 @@ function _rideBeep(n=2){
 // 30 s over it, gives it back 4 bpm under); stopping to type drops to the lightest setting so
 // starting again is easy. No steps, no nags, the coach stays quiet.
 function _rideDeskTick(d){
+  if(!Ride.auto){Ride.deskIdle=false;return;}
   const g=Ride.goal,hr=_rideHr(d),now=Date.now(),c=d&&d.cad||0;
   const base=Math.max(40,g.w+(Ride.bias||0));
   if(hr&&now-(Ride.hrAdjAt||0)>=30000){
@@ -9739,10 +9755,10 @@ function _rideDeskTick(d){
     if(hr>g.cap)Ride.hrCut=Math.min(Math.round(base*.4/5)*5,(Ride.hrCut||0)+5);
     else if(hr<g.cap-4&&Ride.hrCut>0)Ride.hrCut=Math.max(0,Ride.hrCut-5);
   }
-  if(c<45&&Ride.elapsed>5)Ride.deskIdle=true;else if(c>=55)Ride.deskIdle=false;
+  if(c<30&&Ride.elapsed>5)Ride.deskIdle=true;else if(c>=45)Ride.deskIdle=false;
   Ride.targetW=Ride.deskIdle?40:Math.max(40,Math.round((base-(Ride.hrCut||0))/5)*5);
   if(c>30)Ride.targetW=Math.min(Ride.targetW,Math.max(40,Math.round(40*Math.max(60,c)/9.56/5)*5));
-  if(Ride.auto&&Bike.status==='on')Ride.erg=true;
+  if(Bike.status==='on')Ride.erg=true;
   Ride.steadyFrom=Ride.steadyFrom||now;
 }
 function _rideDeskGoal(){const ftp=_rideFtp(),L=_rideLthr();
@@ -10053,7 +10069,7 @@ function _rideGoalHtml(d,hr){
       <div style="font-size:11px;color:var(--t2);margin:0 0 6px">The ride keeps going: time, calories and heart rate carry on.</div>`:''}
       ${!chg&&(noFtp||stale)?`<div style="background:rgba(124,58,237,.1);border:1px solid rgba(124,58,237,.35);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12px;line-height:1.5">${noFtp?'📏 <b>No FTP yet</b> — take the test once and every workout gets real watt targets.':'📏 Your FTP is over 8 weeks old — worth retesting.'}</div>`:''}
       ${(()=>{const dg=_rideDeskGoal(),on=free&&g&&g.type==='desk'; // v4.20
-        return`<button onclick="ridePick('free',${_esc(JSON.stringify(dg)).replace(/"/g,"'")});${chg?'rideChangeOpen(false)':''}" style="width:100%;text-align:left;background:${on?'rgba(59,130,246,.16)':'rgba(59,130,246,.08)'};border:1px solid ${on?'#3b82f6':'rgba(59,130,246,.4)'};border-radius:11px;color:var(--txt);padding:10px 11px;cursor:pointer;margin-bottom:8px;display:block">
+        return`<button onclick="ridePick('free',_rideDeskGoal());${chg?'rideChangeOpen(false)':''}" style="width:100%;text-align:left;background:${on?'rgba(59,130,246,.16)':'rgba(59,130,246,.08)'};border:1px solid ${on?'#3b82f6':'rgba(59,130,246,.4)'};border-radius:11px;color:var(--txt);padding:10px 11px;cursor:pointer;margin-bottom:8px;display:block">
           <div style="font-size:14px;font-weight:800">${on?'✓ ':''}💻 Desk ride</div>
           <div style="font-size:11px;color:var(--t2);line-height:1.45;margin-top:2px">For working while you pedal · light, steady ${dg.w} W the whole time · no steps, no time limit · heart rate kept under ${dg.cap} · stop to type and it goes light until you pedal again · coach stays quiet</div></button>`;})()}
       ${chg?'':(()=>{ // v4.19: one tap for a low-effort fat-burn ride (bottom of Zone 2, auto resistance)
@@ -10090,10 +10106,10 @@ function _rideGoalHtml(d,hr){
     const ramp=/^Ramp/.test(x.label),low=Ride.testLowAt!=null?Math.max(0,15-(Ride.elapsed-Ride.testLowAt)):null;
     return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
         <div><div style="font-size:10px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.6px">📏 FTP test${ramp?'':' · warm-up'}</div>
-          <div style="font-size:22px;font-weight:800">${x.w} W</div></div>
-        <div style="text-align:right"><div style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div>
+          <div class="rd-sl" style="font-size:22px;font-weight:800">${x.w} W</div></div>
+        <div style="text-align:right"><div class="rd-cd" style="font-size:26px;font-weight:800;font-variant-numeric:tabular-nums">${_mmss(sn.left)}</div>
           <div style="font-size:10px;color:var(--t2)">${ramp?`then ${x.w+Ride.prog.test.step} W`:'until the ramp'}</div></div></div>
-      <div style="font-size:12px;color:var(--t2);line-height:1.5;margin-top:4px">${ramp?'Keep your cadence up (80–95 rpm) and hold on as long as you can. It ends when you can\'t hold the power for 15 seconds.':'Easy now — the ramp starts after the warm-up and gets harder every minute.'}</div>
+      <div class="rd-sub" style="font-size:12px;color:var(--t2);line-height:1.5;margin-top:4px">${ramp?'Keep your cadence up (80–95 rpm) and hold on as long as you can. It ends when you can\'t hold the power for 15 seconds.':'Easy now — the ramp starts after the warm-up and gets harder every minute.'}</div>
       ${low!=null?`<div style="font-size:13px;font-weight:800;color:var(--amb);margin-top:5px">⚠️ Power dropping — ${low} s to recover</div>`:''}
       ${ramp?`<button class="btn btn-s" style="margin:8px 0 0;width:100%;font-size:13px;padding:9px" onclick="_rideTestEnd(true)">I'm done — stop the ramp</button>`:''}`,
       low!=null?'var(--amb)':'var(--acc)');
@@ -10114,25 +10130,25 @@ function _rideGoalHtml(d,hr){
       ${x.lo>=1.3?`<div style="font-size:12px;font-weight:700;color:var(--grn);margin-top:3px">⚡ Sprint — resistance is fixed, give it everything</div>`
         :tg.wLo&&d&&d.cad>30&&(tg.wLo+Ride.bias-Ride.hrCut)>40*d.cad/9.56*0.97?`<div style="font-size:12px;font-weight:700;color:var(--amb);margin-top:3px">⚙️ At ${Math.round(d.cad)} rpm the bike tops out near ${Math.round(40*d.cad/9.56)} W — spin a little faster</div>`:''}
       <div class="rd-tg" style="font-size:12px;margin-top:3px">🎯 ${tg.wLo?`<b>${tg.wLo+Ride.bias-Ride.hrCut}–${tg.wHi+Ride.bias-Ride.hrCut} W</b> · `:''}❤️ <b>${tg.hLo?`${tg.hLo}–${tg.hHi}`:`under ${tg.hHi}`}</b>${x.cad?` · ${x.cad} rpm`:''}
-        ${d||hr?` <span style="color:${ok?'var(--grn)':'var(--amb)'};font-weight:700">${ok?'✓ on target':!inH?(hr>tg.hHi?'↓ ease off':'↑ push a bit'):(pw<tg.wLo?'↑ push a bit':'↓ ease off')}</span>`:''}</div>
+        ${d||hr?` <span style="color:${ok?'var(--grn)':'var(--amb)'};font-weight:700">${ok?'✓ on target':!inH?(hr>tg.hHi?'↓ ease off':'↑ push a bit'):(pw<tg.wLo+off?'↑ push a bit':'↓ ease off')}</span>`:''}</div>
       ${bar(1-sn.left/x.sec,'var(--acc)')}
       <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--t2);margin-top:5px"><span>${sn.next?`Next: ${_esc(sn.next.label)} (${Math.round(sn.next.sec/60)} min)`:'Last step'}</span>${Ride.prog.test?'':`<span>${_mmss(sn.total-Ride.elapsed)} left in workout</span>`}</div>
       ${Ride.prog.test?'':bar(elapsedAll/sn.total,'var(--grn)')}`,border); // v4.11: a ramp test has no fixed length
   }
   const g=Ride.goal;
   if(!g)return'';
-  if(g.type==='time')return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🎯 ${Math.round(g.val/60)} min ride</b><span style="font-size:13px;font-weight:700">${(Ride.elapsed-(Ride.goalAt||0))>=g.val?'✅ done!':`${_mmss(g.val-(Ride.elapsed-(Ride.goalAt||0)))} to go`}</span></div>${bar((Ride.elapsed-(Ride.goalAt||0))/g.val,(Ride.elapsed-(Ride.goalAt||0))>=g.val?'var(--grn)':'var(--acc)')}`);
-  if(g.type==='kcal'){const k=Math.round(Ride.kcal-(Ride.goalKcal||0));return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">🔥 ${g.val} kcal</b><span style="font-size:13px;font-weight:700">${k>=g.val?'✅ done!':`${g.val-k} to go`}</span></div>${bar(k/g.val,k>=g.val?'var(--grn)':'#f97316')}`);}
+  if(g.type==='time')return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b class="rd-sl" style="font-size:14px">🎯 ${Math.round(g.val/60)} min ride</b><span class="rd-cd" style="font-size:13px;font-weight:700">${(Ride.elapsed-(Ride.goalAt||0))>=g.val?'✅ done!':`${_mmss(g.val-(Ride.elapsed-(Ride.goalAt||0)))} to go`}</span></div>${bar((Ride.elapsed-(Ride.goalAt||0))/g.val,(Ride.elapsed-(Ride.goalAt||0))>=g.val?'var(--grn)':'var(--acc)')}`);
+  if(g.type==='kcal'){const k=Math.round(Ride.kcal-(Ride.goalKcal||0));return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b class="rd-sl" style="font-size:14px">🔥 ${g.val} kcal</b><span class="rd-cd" style="font-size:13px;font-weight:700">${k>=g.val?'✅ done!':`${g.val-k} to go`}</span></div>${bar(k/g.val,k>=g.val?'var(--grn)':'#f97316')}`);}
   if(g.type==='desk'){
     const over=hr&&hr>g.cap,idle=Ride.deskIdle;
-    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b style="font-size:14px">💻 Desk ride · ${Math.max(40,g.w+(Ride.bias||0))} W steady</b><span style="font-size:12px;font-weight:700;color:${over?'var(--amb)':'var(--grn)'}">${idle?'⏸ light until you pedal':over?'easing off a little':'✓ easy'}</span></div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">Just pedal and work. Heart rate stays under ${g.cap}${Ride.hrCut>0?` (eased ${Ride.hrCut} W)`:''}. − / + if you want it lighter or heavier.</div>`,over?'var(--amb)':'');
+    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b class="rd-sl" style="font-size:14px">💻 Desk ride · ${Math.max(40,g.w+(Ride.bias||0))} W steady</b><span class="rd-tg" style="font-size:12px;font-weight:700;color:${over?'var(--amb)':'var(--grn)'}">${idle?'⏸ light until you pedal':over?'easing off a little':'✓ easy'}</span></div>
+      <div class="rd-sub" style="font-size:11px;color:var(--t2);margin-top:3px">Just pedal and work. Heart rate stays under ${g.cap}${Ride.hrCut>0?` (eased ${Ride.hrCut} W)`:''}. − / + if you want it lighter or heavier.</div>`,over?'var(--amb)':'');
   }
   if(g.type==='hr'){
     const st=!hr?'waiting for heart rate':hr>g.hi?'↓ ease off':hr<g.lo?'↑ push a bit':'✓ in the zone';
     const ok=hr&&hr>=g.lo&&hr<=g.hi;
-    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline"><b style="font-size:14px">❤️ Keep ${g.lo}–${g.hi} bpm</b><span style="font-size:13px;font-weight:700;color:${ok?'var(--grn)':'var(--amb)'}">${st}</span></div>
-      <div style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?(Ride.wuW&&Ride.state!=='idle'&&Ride.elapsed-(Ride.goalAt||0)<300?`🌱 Warm-up: easing in gently · ${_mmss(300-(Ride.elapsed-(Ride.goalAt||0)))} left (now ${Ride.targetW} W).`:`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`)+(Ride.zoneInfo&&Ride.zoneInfo.src?` Your usual watts here: about ${Ride.zoneInfo.w} W (${Ride.zoneInfo.src}).`:''):'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
+    return box(`<div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px"><b class="rd-sl" style="font-size:14px">❤️ Keep ${g.lo}–${g.hi} bpm</b><span class="rd-tg" style="font-size:13px;font-weight:700;color:${ok?'var(--grn)':'var(--amb)'}">${st}</span></div>
+      <div class="rd-sub" style="font-size:11px;color:var(--t2);margin-top:3px">${Ride.auto?(Ride.wuW&&Ride.state!=='idle'&&Ride.elapsed-(Ride.goalAt||0)<300?`🌱 Warm-up: easing in gently · ${_mmss(300-(Ride.elapsed-(Ride.goalAt||0)))} left (now ${Ride.targetW} W).`:`Auto resistance is adjusting to keep you there${Ride.targetW?` (now ${Ride.targetW} W)`:''}.`)+(Ride.zoneInfo&&Ride.zoneInfo.src?` Your usual watts here: about ${Ride.zoneInfo.w} W (${Ride.zoneInfo.src}).`:''):'Turn on auto resistance to have the bike keep you there.'}</div>`,hr?(ok?'var(--grn)':'var(--amb)'):'');
   }
   return'';
 }
@@ -10155,7 +10171,7 @@ function _rideDraw(){
   if(pe)pe.style.color=pw!=null&&range?(pw<range[0]-5?'var(--amb)':pw>range[1]+5?'var(--red)':'var(--grn)'):'';
   set('rd-pw-l',range?`Watts · ${range[0]}–${range[1]}`:'Watts');
   set('rd-hr',hr||'–');
-  const he=$('rd-hr'),hz=tg?{lo:tg.hLo,hi:tg.hHi}:(Ride.goal&&Ride.goal.type==='hr'?_rideHrZone(null):null);
+  const he=$('rd-hr'),hz=tg?{lo:tg.hLo,hi:tg.hHi}:(Ride.goal&&Ride.goal.type==='hr'?_rideHrZone(null):Ride.goal&&Ride.goal.type==='desk'?{lo:0,hi:Ride.goal.cap}:null);
   if(he)he.style.color=hr&&hz?(hr>hz.hi?'var(--red)':hz.lo&&hr<hz.lo?'var(--amb)':'var(--grn)'):'';
   set('rd-cad',d?d.cad:'–');
   set('rd-time',_mmss(Ride.elapsed));
@@ -10183,7 +10199,7 @@ function _rideDraw(){
     ${chip(Bike.hrStatus,Bike.hrStatus==='on'?`❤️ ${_esc(Bike.hrName)}`:Bike.hrStatus==='connecting'?'❤️ Connecting…':Bike.hrStatus==='lost'?'❤️ Reconnecting…':'❤️ Heart rate','bikeConnectHR()','Connect')}
   </div>${Bike.err?`<div style="font-size:11px;color:var(--red);margin:-4px 0 8px;word-break:break-word">${_esc(Bike.err)}</div>`:''}`;
   const sb='background:var(--s2);border:1px solid var(--bord);border-radius:10px;color:var(--txt);font-size:18px;font-weight:800;width:46px;height:42px;cursor:pointer;flex-shrink:0';
-  const autoAvail=!!(Ride.prog||(Ride.goal&&Ride.goal.type==='hr'));
+  const autoAvail=!!(Ride.prog||(Ride.goal&&(Ride.goal.type==='hr'||Ride.goal.type==='desk')));
   // v3.67: the big number is what the bike is giving; the label says the target and
   // which way it last moved, so you can see it working.
   const adj=Ride.auto&&Ride.adjAt&&Date.now()-Ride.adjAt<20000&&Ride.adjDir?(Ride.adjDir>0?' · ↑ adding':' · ↓ easing'):'';
@@ -13389,8 +13405,9 @@ function _returnEase(exId,t,energy){
   if(cap>0)nw=assist?Math.max(w,cap):Math.min(w,cap); // same number the coach shows
   else nw=Math.round(w*(assist?2-f:f)/2.5)*2.5;
   if(nw===w)return t;
-  const gd=_gymLayoffBeforeToday();
-  return{...t,w:nw,change:'eased',reason:`back after ${gd!=null?gd+' days':'a break'} off the gym: eased from ${w} to ${nw}${unit()}, build back over about 2 weeks`};
+  const cb=_comebackState(),gd=_gymLayoffBeforeToday();
+  const why=cb&&!(gd!=null&&gd>=14)?`comeback week ${cb.weekNum} of ${cb.weeks}`:`back after ${gd!=null?gd+' days':'a break'} off the gym`;
+  return{...t,w:nw,change:'eased',reason:`${why}: eased from ${w} to ${nw}${unit()}, build back over about 2 weeks`};
 }
 function computeProgressionTarget(exId,lastSets,mach,energy){
   return _returnEase(exId,_progTargetRaw(exId,lastSets,mach),energy);
@@ -13892,8 +13909,8 @@ function deletePR(id){
   <div style="width:36px;height:4px;background:var(--s3);border-radius:2px;margin:0 auto 18px"></div>
   <div style="font-size:18px;font-weight:800;margin-bottom:6px">Delete PR?</div>
   <div style="font-size:14px;color:var(--t2);margin-bottom:20px">${ex?.n||id} — 🏆 ${_wToCurrentUnit(pr.w,pr.u)}${u} × ${pr.r} on ${pr.date}</div>
-  <button onclick="(()=>{const p=DB.get('prs',{});delete p['${id}'];DB.set('prs',p);this.closest('[style*=inset]').remove();render();})()" style="width:100%;background:var(--red);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Yes, delete it</button>
-  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
+  <button onclick="(()=>{const p=DB.get('prs',{});delete p['${id}'];DB.set('prs',p);this.closest('.tb-ov').remove();render();})()" style="width:100%;background:var(--red);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Yes, delete it</button>
+  <button onclick="this.closest('.tb-ov').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
 </div>`;
   document.body.appendChild(sheet);
 }
@@ -13941,10 +13958,10 @@ function editPR(id){
     const p=DB.get('prs',{});
     p['${id}']={w,r,date:fd(new Date()),u:unit()}; // v3.25
     DB.set('prs',p);
-    this.closest('[style*=inset]').remove();
+    this.closest('.tb-ov').remove();
     render();
   })()" style="width:100%;background:var(--acc);border:none;border-radius:13px;color:#fff;font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-bottom:10px">Save changes</button>
-  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
+  <button onclick="this.closest('.tb-ov').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Cancel</button>
 </div>`;
   document.body.appendChild(sheet);
   setTimeout(()=>document.getElementById('pr-edit-w')?.focus(),300);
@@ -14290,7 +14307,7 @@ function showFitnessInfo(){
     <div style="font-size:11px;color:var(--t2);line-height:1.5">"Fitness" = how strong your engine is overall. "Fatigue" = how cooked your legs are right now. "Form" tells you if you're fresh enough to perform or too tired and need a break.</div>
   </div>
 
-  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Got it</button>
+  <button onclick="this.closest('.tb-ov').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer">Got it</button>
 </div>`;
   document.body.appendChild(sheet);
 }
@@ -14324,7 +14341,7 @@ function showWkgInfo(){
     </div>`;
   }).join('')}
   <div style="font-size:11px;color:var(--t2);margin-top:14px;line-height:1.5;padding:10px 12px;background:var(--s2);border-radius:10px">💡 W/kg matters most on climbs. Flat-road performance also depends on absolute power (CdA, drafting, etc.) — a heavier rider with high absolute watts can still drop a lighter rider on the flats.</div>
-  <button onclick="this.closest('[style*=inset]').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-top:14px">Close</button>
+  <button onclick="this.closest('.tb-ov').remove()" style="width:100%;background:var(--s2);border:1px solid var(--bord);border-radius:13px;color:var(--t2);font-size:15px;font-weight:700;padding:15px;cursor:pointer;margin-top:14px">Close</button>
 </div>`;
   document.body.appendChild(sheet);
 }
@@ -16742,7 +16759,7 @@ function closeExSwap(){const m=document.getElementById('ex-swap-modal');if(m)m.r
 // move up with it. The visible viewport says how much the keyboard takes; the sheets sit
 // above it, and the field you tap scrolls to the middle of the sheet.
 (()=>{const vv=window.visualViewport;if(!vv)return;const st=document.documentElement.style;
-  const upd=()=>{const kb=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);st.setProperty('--kb',(kb>60?Math.round(kb):0)+'px');document.documentElement.classList.toggle('kb-open',kb>60);if(vv.height>200)st.setProperty('--vvh',Math.round(vv.height)+'px');};
+  const upd=()=>{const kbOpen=window.innerHeight-vv.height>60,kb=Math.max(0,window.innerHeight-vv.height-vv.offsetTop);st.setProperty('--kb',(kb>60?Math.round(kb):0)+'px');document.documentElement.classList.toggle('kb-open',kbOpen);if(vv.height>200)st.setProperty('--vvh',Math.round(vv.height)+'px');};
   vv.addEventListener('resize',upd);vv.addEventListener('scroll',upd);upd();
   document.addEventListener('focusin',e=>{const t=e.target;if(t&&t.matches&&t.matches('input,textarea')&&t.closest('.swap-sheet,#ask-dock,.tb-ov'))setTimeout(()=>{try{t.scrollIntoView({block:'center',behavior:'smooth'});}catch(_){}},350);});
 })();
